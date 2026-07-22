@@ -9,7 +9,7 @@ function baseIntent() {
     created_utc: "2026-07-21T12:00:00Z",
     instrument: "MNQ",
     account: "TEST_ACCOUNT",
-    operator_profile: "glitch-toptrader",
+    operator_profile: "glitch-topstep",
     action: "NOTHING",
     confidence: 0.5,
     snapshot_hash: "snapshot",
@@ -49,8 +49,12 @@ describe("Glitch intent contract", () => {
     assert.equal(parseTradeIntent(entry).quantity, 1);
   });
 
-  it("rejects unknown fields and choice mismatches", () => {
+  it("rejects unknown fields, profile mismatches, and choice mismatches", () => {
     assert.throws(() => parseTradeIntent({ ...baseIntent(), surprise: true }), /unknown_intent_field/);
+    assert.throws(
+      () => parseTradeIntent({ ...baseIntent(), operator_profile: "glitch-toptrader" }),
+      /operator_profile_mismatch/,
+    );
     const mismatch = baseIntent();
     mismatch.decision_audit.final_choice = "HOLD";
     assert.throws(() => parseTradeIntent(mismatch), /final_choice must equal action/);
