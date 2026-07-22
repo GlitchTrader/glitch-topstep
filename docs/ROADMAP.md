@@ -55,15 +55,23 @@ Progress is evidence-gated, not calendar-gated.
 
 ## R4 — Hermes operator profile
 
-- [ ] installable `glitch-toptrader` profile
-- [ ] no terminal, browser, MCP, or venue credentials
-- [ ] five-minute flat cadence
-- [ ] one-minute positioned cadence
-- [ ] bounded current packet and ledger
-- [ ] isolated scheduled sessions
-- [ ] strict JSON output
-- [ ] separate learning worker
-- [ ] evidence-gated cognitive overlays
+Companion repository: `GlitchTrader/glitch-topstep-hermes-profile`.
+
+- [x] installable `glitch-topstep` profile scaffold
+- [x] no venue credentials in the profile or model packet
+- [x] memory-only scheduled model toolset
+- [x] five-minute flat cadence
+- [x] one-minute positioned cadence
+- [x] bounded current packet and five-frame path
+- [x] isolated scheduled sessions
+- [x] strict single-object JSON output
+- [x] separate learning worker
+- [x] proposed-by-default evidence-gated cognitive overlays
+- [x] deterministic operator controls and strict-contract flatten
+- [ ] installed Windows/Hermes acceptance
+- [ ] canonical completed-outcome feed from this gateway
+- [ ] real shadow-session packet/receipt verification
+- [ ] amendment actions after protection ownership is proven
 
 ## R5 — one-account acceptance
 
