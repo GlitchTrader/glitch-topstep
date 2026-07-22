@@ -1,0 +1,24 @@
+{
+  "name": "glitch-toptrader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Venue-neutral Glitch direct trading gateway with a ProjectX/TopstepX adapter.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "node --test dist/tests/*.test.js",
+    "check": "npm run build && npm test",
+    "dev": "npm run build && npm start",
+    "start": "node --enable-source-maps dist/src/index.js"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^8.0.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.3"
+  }
+}
