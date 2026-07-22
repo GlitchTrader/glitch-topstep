@@ -1,4 +1,5 @@
 import { TradeActions, type DecisionAudit, type TradeAction, type TradeIntent } from "./models.js";
+import { GLITCH_TOPSTEP_OPERATOR_PROFILE } from "./operator.js";
 
 const CORE_FIELDS = new Set([
   "schema_version",
@@ -112,6 +113,10 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(createdUtc) || !Number.isFinite(Date.parse(createdUtc))) {
     throw new Error("created_utc_invalid");
   }
+  const operatorProfile = stringField(input, "operator_profile", 128);
+  if (operatorProfile !== GLITCH_TOPSTEP_OPERATOR_PROFILE) {
+    throw new Error("operator_profile_mismatch");
+  }
   const action = parseAction(input.action);
   const confidence = input.confidence;
   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
@@ -149,7 +154,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     createdUtc,
     instrument: stringField(input, "instrument", 32),
     account: stringField(input, "account", 128),
-    operatorProfile: stringField(input, "operator_profile", 128),
+    operatorProfile,
     action,
     confidence,
     snapshotHash: stringField(input, "snapshot_hash", 256),

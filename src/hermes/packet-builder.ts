@@ -4,6 +4,10 @@ import type {
   RiskSettings,
   TopstepPolicyState,
 } from "../domain/models.js";
+import {
+  GLITCH_TOPSTEP_OPERATOR_PROFILE,
+  GLITCH_TOPSTEP_PROMPT_VERSION,
+} from "../domain/operator.js";
 import { calculateRiskBudget } from "../risk/mll.js";
 
 export interface DirectDecisionPacket {
@@ -180,12 +184,12 @@ export function buildDecisionPacket(
       created_utc: createdUtc,
       instrument,
       account: snapshot.account.name,
-      operator_profile: "glitch-toptrader",
+      operator_profile: GLITCH_TOPSTEP_OPERATOR_PROFILE,
       action: defaultAction,
       confidence: 0.5,
       snapshot_hash: snapshotHash,
       model_version: "CONFIGURED_MODEL",
-      prompt_version: "glitch-toptrader-v1",
+      prompt_version: GLITCH_TOPSTEP_PROMPT_VERSION,
       reason: "Replace with a compact evidence-based reason.",
       decision_audit: {
         bull_case: "Replace",

@@ -97,6 +97,9 @@ describe("decision packet lease", () => {
     const current = snapshot();
     const service = new DecisionPacketService(config(), () => current, () => now);
     const first = service.current();
+    assert.equal(first.required_output_template.operator_profile, "glitch-topstep");
+    assert.equal(first.required_output_template.prompt_version, "glitch-topstep-v1");
+
     current.quote = { ...current.quote!, bestAsk: 20_001.25, timestamp: "2026-07-21T12:00:01Z" };
     const second = service.current();
     assert.equal(second.packet_id, first.packet_id);

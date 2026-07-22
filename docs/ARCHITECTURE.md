@@ -2,7 +2,7 @@
 
 ## Objective
 
-Glitch TopTrader is the venue-neutral direct execution version of Glitch. ProjectX/TopstepX is the first adapter, not the domain model.
+Glitch Topstep is the venue-neutral direct execution version of Glitch. ProjectX/TopstepX is the first adapter, not the domain model.
 
 The system should eventually support:
 
@@ -14,6 +14,13 @@ Glitch.Core
 ```
 
 This scaffold is a single TypeScript package, but its modules already follow those boundaries so they can be split into packages after the contract stabilizes.
+
+The persistent cognition package is a separate repository and Hermes profile:
+
+```text
+GlitchTrader/glitch-topstep-hermes-profile
+profile identity: glitch-topstep
+```
 
 ## Authority order
 
@@ -51,7 +58,8 @@ DecisionPacketService    Risk engine
   strict template         stop-aware loss
             │               capacity
             ▼               │
-Hermes                    │
+Hermes profile            │
+  glitch-topstep          │
   judgment only           │
             │               │
             └────intent─────┘
@@ -59,7 +67,8 @@ Hermes                    │
                     ▼
 ExecutionCoordinator
   schema
-  identity
+  operator-profile identity
+  account/contract identity
   freshness
   session gate
   simulated-account gate
@@ -94,7 +103,7 @@ Event-driven and deterministic:
 
 ### Cognition plane
 
-Scheduled or event-triggered:
+Scheduled or event-triggered by the companion profile:
 
 - five-minute flat-book decisions
 - one-minute positioned decisions
@@ -114,12 +123,13 @@ The model supplies:
 
 - account name, not numeric provider account ID
 - instrument root, not provider contract ID
+- canonical `operator_profile: glitch-topstep`
 - action
 - confidence
 - absolute structural stop and target prices
 - compact evidence audit
 
-Trusted configuration resolves the numeric account and exact active contract. This prevents the model from changing venues, accounts, or expiries.
+Trusted configuration resolves the numeric account and exact active contract. The parser rejects any other operator-profile identity. This prevents a different profile or stale renamed client from reaching execution.
 
 The first scaffold executes only:
 
@@ -129,7 +139,7 @@ The first scaffold executes only:
 - `HOLD`
 - `NOTHING`
 
-`MOVE_STOP` and `MOVE_TP` are parsed but rejected until protective-order ownership can be reconstructed and verified.
+`MOVE_STOP` and `MOVE_TP` are parsed as known actions but rejected until protective-order ownership can be reconstructed and verified.
 
 ## Absolute geometry over provider transport
 
@@ -160,6 +170,8 @@ The next storage layer should be SQLite with:
 - EOD balance and MLL history
 - payout lifecycle state
 - migration discipline
+
+The companion profile maintains its own cognition-side attempts, outbox, receipts, frame history, episodes, guidance, and plans. Provider truth remains exclusively in this gateway.
 
 ## Transport facts used by this scaffold
 

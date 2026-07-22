@@ -85,7 +85,7 @@ function intent(quantity = 1): TradeIntent {
     createdUtc: "2026-07-21T12:00:04Z",
     instrument: "MNQ",
     account: "TEST_ACCOUNT",
-    operatorProfile: "glitch-toptrader",
+    operatorProfile: "glitch-topstep",
     action: "ENTER_LONG",
     confidence: 0.6,
     snapshotHash: "hash",
