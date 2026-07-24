@@ -21,6 +21,14 @@ export interface StoredExecutionMutation {
   lastError: string | null;
 }
 
+export interface RecoveredExecutionResolution {
+  intentId: string;
+  operation: ExecutionOperation;
+  outcome: "submitted" | "confirmed_not_submitted";
+  code: string;
+  providerOrderId: number | null;
+}
+
 export interface ExecutionRecoveryStatus {
   blockingAmbiguity: boolean;
   unresolvedMutations: number;
