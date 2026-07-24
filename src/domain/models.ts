@@ -112,6 +112,33 @@ export interface BarInfo {
   volume: number;
 }
 
+export type VenueStreamKind = "user" | "market";
+export type VenueStreamState = "disconnected" | "connecting" | "connected" | "reconnecting" | "degraded";
+export type ReconciliationState = "idle" | "running" | "succeeded" | "failed";
+
+export interface VenueStreamStatus {
+  state: VenueStreamState;
+  generation: number;
+  lastChangedAt: string;
+  lastEventAt: string | null;
+  lastError: string | null;
+}
+
+export interface VenueReconciliationStatus {
+  state: ReconciliationState;
+  generation: number;
+  lastStartedAt: string | null;
+  lastSucceededAt: string | null;
+  lastError: string | null;
+}
+
+export interface VenueOperationalStatus {
+  generation: number;
+  userStream: VenueStreamStatus;
+  marketStream: VenueStreamStatus;
+  reconciliation: VenueReconciliationStatus;
+}
+
 export interface AccountVenueSnapshot {
   capturedAt: string;
   account: AccountInfo;
@@ -123,26 +150,29 @@ export interface AccountVenueSnapshot {
   instrumentOpenContracts: number;
   unrealizedPnl: number;
   conservativeEquity: number;
+  operational: VenueOperationalStatus;
+  stateIssues: string[];
   stateComplete: boolean;
 }
 
-export type TopstepProgram = "combine" | "xfa";
+export type TopstepLossModel = "trading_combine_eod" | "express_funded_eod" | "operator_provided_floor";
+export type TopstepPolicyAuthority = "operator_configured" | "provider_reconciled";
 
 export interface TopstepPolicyState {
-  program: TopstepProgram;
-  accountSize: number;
-  initialMaxLoss: number;
+  accountStage: string;
+  lossModel: TopstepLossModel;
+  authority: TopstepPolicyAuthority;
+  verifiedAtUtc: string | null;
+  startingBalance: number;
+  initialMaximumLoss: number;
   highestEndOfDayBalance: number;
-  mllLockedAtZero: boolean;
+  lossFloorLockedAtZero: boolean;
   payoutProcessed: boolean;
+  operatorProvidedLossFloorUsd: number | null;
   maxContracts: number;
-  maxDailyRiskUsd: number;
-  dailyRealizedPnlUsd: number;
-  entryWindowOpen: boolean;
 }
 
 export interface RiskSettings {
-  maxRiskFractionOfBuffer: number;
   estimatedRoundTurnFeesUsd: number;
   slippageReserveTicks: number;
   maxQuoteAgeMs: number;
@@ -153,9 +183,6 @@ export interface RiskSettings {
 export interface RiskBudget {
   liquidationFloor: number;
   currentBuffer: number;
-  riskFractionBudget: number;
-  dailyRiskRemaining: number;
-  allowedRiskUsd: number;
 }
 
 export interface DecisionAudit {
