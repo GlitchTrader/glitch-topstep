@@ -2,136 +2,145 @@
 
 ## Objective
 
-Glitch Topstep is the venue-neutral direct execution version of Glitch. ProjectX/TopstepX is the first adapter, not the domain model.
+Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. It is not a port of NinjaTrader, Apex rules, replication, or a generic prop-firm compliance engine.
 
-The system should eventually support:
-
-```text
-Glitch.Core
-  ├─ ProjectX / TopstepX
-  ├─ Tradovate
-  └─ NinjaTrader Glitch bridge
-```
-
-This scaffold is a single TypeScript package, but its modules already follow those boundaries so they can be split into packages after the contract stabilizes.
-
-The persistent cognition package is a separate repository and Hermes profile:
+The first product boundary is:
 
 ```text
-GlitchTrader/glitch-topstep-hermes-profile
-profile identity: glitch-topstep
+ProjectX / TopstepX
+        │
+        ▼
+Glitch Topstep gateway
+  provider truth · calculations · execution · recovery · evidence
+        │ sanitized packet / strict intent
+        ▼
+Hermes profile: glitch-topstep
+  observation · judgment · decision · review · learning
 ```
 
-## Authority order
+Venue-neutral contracts may be extracted later from proven Topstep behaviour. Premature abstraction must not weaken the tailored Topstep implementation.
 
-1. Current provider account, position, order, fill, and quote state
-2. Deterministic Glitch policy and risk calculations
-3. Immutable decision packets, intents, receipts, and event ledger
-4. Operator-confirmed facts
-5. Hermes memory and learning artifacts
-6. Inference
+## Authority
 
-No lower layer may override a higher one.
+```text
+Alan   = human operator; judgment authority
+Hermes = AI operator; cognition and trading-decision authority
+Glitch = builder-owned factual execution system
+ProjectX = venue account, order, position, fill, and market transport truth
+Topstep = final account-program and rule authority
+```
+
+Hermes may make a bad trade. Alan may make a bad trade. Glitch may not cause either operator to act on false identity, false state, incorrect calculations, duplicate execution, wrong-order mutation, or missing protection.
+
+See [`AUTHORITY.md`](AUTHORITY.md).
 
 ## Runtime topology
 
 ```text
 ProjectX REST
-  auth, account discovery, contracts, bars, reconciliation, mutations
+  authentication · discovery · bars · reconciliation · mutations
 
 ProjectX User SignalR Hub
-  accounts, positions, orders, trades
+  account · position · order · trade events
 
 ProjectX Market SignalR Hub
-  quotes, prints, depth
+  quote · print · depth events
             │
             ▼
 VenueStateStore
-  canonical in-memory account and market state
-  conservative bid/ask PnL marking
+  parsed provider evidence
+  connection generation
+  stream health and payload faults
+  reconciliation state
+  conservative bid/ask marking
             │
-            ├───────────────┐
-            ▼               ▼
-DecisionPacketService    Risk engine
-  bounded packet          MLL floor
-  stable snapshot hash    buffer
-  strict template         stop-aware loss
-            │               capacity
-            ▼               │
-Hermes profile            │
-  glitch-topstep          │
-  judgment only           │
-            │               │
-            └────intent─────┘
-                    │
-                    ▼
+            ├──────────────────────┐
+            ▼                      ▼
+DecisionPacketService       Hard execution calculations
+  current packet             tick and point value
+  issued snapshot lease      stop-aware protected loss
+  sanitized identity         hard contract ceiling
+  explicit data quality      hard loss-floor headroom
+            │                      │
+            ▼                      │
+Hermes Topstep operator             │
+  chooses the trade                 │
+            │ strict intent         │
+            └──────────────┬────────┘
+                           ▼
 ExecutionCoordinator
-  schema
-  operator-profile identity
-  account/contract identity
-  freshness
-  session gate
-  simulated-account gate
-  stop/target geometry
-  quantity and monetary risk
-  idempotency
-                    │
-                    ▼
-ProjectX Order/place
-  market entry
-  provider-side stop bracket
-  provider-side target bracket
+  issued-packet identity
+  account/instrument/profile identity
+  current venue freshness and reconciliation
+  schema and finite values
+  structural geometry
+  current hard account boundaries
+  idempotency and ownership milestones
+                           │
+                           ▼
+ProjectX order mutation
+  entry · close · provider-side protection
 ```
 
-## Safety plane and cognition plane
+## Cognition and factual execution
 
-The system must keep these separate.
+These planes are separate, but not because cognition is untrusted.
 
-### Safety plane
+### Hermes cognition
 
-Event-driven and deterministic:
+Hermes owns:
 
-- token/session health
-- stream health and gap detection
-- account and quote freshness
-- MLL and daily-risk budget
-- order state machine
-- native protection verification
-- session-close flattening
-- restart reconciliation
-- kill switches
+- whether an edge exists;
+- direction and timing;
+- quantity and structural stop/target intent;
+- interpretation of data quality, uncertainty, regime, structure, flow, and policy evidence;
+- trade review and learning.
 
-### Cognition plane
+Glitch must not encode an indicator trigger, setup score, risk percentage, daily quota, preferred regime, or implicit no-trade policy.
 
-Scheduled or event-triggered by the companion profile:
+### Glitch factual execution
 
-- five-minute flat-book decisions
-- one-minute positioned decisions
-- trade debriefs
-- hourly supervision
-- planning
-- daily learning
-- evidence-gated cognitive changes
+Glitch owns:
 
-The safety plane must continue to function when Hermes is unavailable.
+- credentials and provider transport;
+- exact provider identities;
+- parsing and normalization;
+- tick, point-value, fee, slippage, and bracket calculations;
+- stream health, reconnect generation, and REST reconciliation;
+- hard contract capacity and hard loss-floor survival;
+- order identity, idempotency, ownership, protection, restart recovery, and receipts.
+
+The factual plane must continue to protect existing exposure when Hermes is unavailable. It must also expose every rejection so cognition and learning can review what happened.
+
+## Truthful packets
+
+`DecisionPacketService` publishes current evidence on every request. Issued snapshot hashes remain valid only for a bounded lease, allowing model latency without serving a frozen packet as current truth.
+
+Packets contain:
+
+- sanitized account alias and contract description;
+- current quote and account state;
+- explicit `data_quality` issues and connection generations;
+- policy authority and hard loss-floor headroom;
+- current technical execution capabilities;
+- a strict output template.
+
+An incomplete packet may still reach Hermes. The gateway independently rejects order mutation when current execution truth is incomplete or stale.
 
 ## Intent contract
 
-The scaffold reuses `glitch.intent.v2` rather than inventing a provider-specific model contract.
+The current wire contract is `glitch.intent.v2`.
 
-The model supplies:
+Hermes supplies:
 
-- account name, not numeric provider account ID
-- instrument root, not provider contract ID
-- canonical `operator_profile: glitch-topstep`
-- action
-- confidence
-- absolute structural stop and target prices
-- compact evidence audit
+- account alias, not numeric provider account ID;
+- instrument identity, not provider contract ID;
+- `operator_profile: glitch-topstep`;
+- action and confidence;
+- absolute structural stop and target prices for entries;
+- compact adversarial evidence audit.
 
-Trusted configuration resolves the numeric account and exact active contract. The parser rejects any other operator-profile identity. This prevents a different profile or stale renamed client from reaching execution.
-
-The first scaffold executes only:
+Trusted local configuration resolves numeric provider identities. The gateway currently supports:
 
 - `ENTER_LONG`
 - `ENTER_SHORT`
@@ -139,7 +148,7 @@ The first scaffold executes only:
 - `HOLD`
 - `NOTHING`
 
-`MOVE_STOP` and `MOVE_TP` are parsed as known actions but rejected until protective-order ownership can be reconstructed and verified.
+`MOVE_STOP` and `MOVE_TP` remain known but non-executable until durable protective-order ownership is implemented.
 
 ## Absolute geometry over provider transport
 
@@ -148,54 +157,29 @@ Hermes reasons in absolute prices. ProjectX initial brackets use tick distances.
 For a long entry:
 
 ```text
-stopTicks   = ceil((referenceAsk - absoluteStop) / tickSize)
-targetTicks = floor((absoluteTarget - referenceAsk) / tickSize)
+stopTicks   = ceil((currentAsk - absoluteStop) / tickSize)
+targetTicks = floor((absoluteTarget - currentAsk) / tickSize)
 ```
 
-For a short entry, the direction reverses and the reference is the executable bid.
+For a short entry, the direction reverses and the executable reference is current bid.
 
-The next execution milestone must reconcile actual fill and provider-created protective orders, then modify them to the exact intended absolute levels when required and still valid.
+The gateway recalculates geometry from current venue truth at execution time. The next milestone must prove the actual fill and provider-created stop/target identities, then correct them to exact intended absolute prices when required.
 
-## State persistence
+## Persistence and recovery
 
-The current event ledger is append-only JSONL. It is enough for scaffold receipts, not production recovery.
+The current JSONL ledger is evidence for the scaffold, not production recovery. P0 requires SQLite with:
 
-The next storage layer should be SQLite with:
+- WAL mode and migrations;
+- monotonic event sequence;
+- unique durable intent identity;
+- atomic outbox persisted before provider mutation;
+- packets, intents, provider orders, fills, order groups, and reconciliations;
+- restart reconstruction;
+- ambiguous transport recovery by provider tag;
+- EOD balance, hard loss-floor, account-stage, and payout history.
 
-- WAL mode
-- monotonic event sequence
-- intent uniqueness constraint
-- packet, intent, order, trade, and reconciliation tables
-- durable order-group state machine
-- EOD balance and MLL history
-- payout lifecycle state
-- migration discipline
+The companion profile independently persists cognition attempts, outbox, decisions, receipts, frame history, episodes, guidance, and plans. Provider truth remains exclusively in this gateway.
 
-The companion profile maintains its own cognition-side attempts, outbox, receipts, frame history, episodes, guidance, and plans. Provider truth remains exclusively in this gateway.
+## Current transport sources
 
-## Transport facts used by this scaffold
-
-Official connection endpoints checked July 21, 2026:
-
-```text
-REST:       https://api.topstepx.com
-User hub:   https://rtc.topstepx.com/hubs/user
-Market hub: https://rtc.topstepx.com/hubs/market
-```
-
-Official subscriptions:
-
-```text
-SubscribeAccounts
-SubscribeOrders(accountId)
-SubscribePositions(accountId)
-SubscribeTrades(accountId)
-SubscribeContractQuotes(contractId)
-SubscribeContractTrades(contractId)
-SubscribeContractMarketDepth(contractId)
-```
-
-Sources:
-
-- https://gateway.docs.projectx.com/docs/getting-started/connection-urls/
-- https://gateway.docs.projectx.com/docs/realtime/
+ProjectX connection URLs, realtime subscription names, and payload contracts must come from current official documentation and observed sanitized runtime evidence. When official documentation and observed payloads disagree, Glitch records the discrepancy and fails visibly rather than making fields optional to suppress errors.
