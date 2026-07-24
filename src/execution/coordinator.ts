@@ -2,10 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../config.js";
 import { parseTradeIntent } from "../domain/intents.js";
 import type { AccountVenueSnapshot, TradeIntent } from "../domain/models.js";
-import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+import {
+  type PlaceOrderRequest,
+  ProjectXApiClient,
+  ProjectXApiError,
+} from "../projectx/client.js";
+import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
-import { ProjectXApiClient } from "../projectx/client.js";
+import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
 export interface ExecutionReceipt {
   schema_version: "glitch.direct.execution_receipt.v1";
@@ -13,19 +18,18 @@ export interface ExecutionReceipt {
   recorded_utc: string;
   intent_id: string | null;
   mode: "disabled" | "shadow" | "armed";
-  status: "rejected" | "shadowed" | "submitted" | "closed" | "ignored";
+  status: "rejected" | "shadowed" | "submitted" | "closed" | "ignored" | "ambiguous";
   code: string;
   order_id?: number;
   detail?: string;
 }
 
 export class ExecutionCoordinator {
-  private readonly seenIntentIds = new Set<string>();
-
   public constructor(
     private readonly config: AppConfig,
     private readonly api: ProjectXApiClient,
     private readonly ledger: JsonlEventStore,
+    private readonly store: SqliteExecutionStore,
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
   ) {}
@@ -43,14 +47,15 @@ export class ExecutionCoordinator {
       });
     }
 
-    if (this.seenIntentIds.has(intent.intentId)) {
-      return this.record({
+    const receivedUtc = new Date().toISOString();
+    if (!this.store.registerIntent(intent, receivedUtc)) {
+      const existing = this.store.receiptForIntent<ExecutionReceipt>(intent.intentId);
+      return existing ?? this.ephemeral({
         intentId: intent.intentId,
-        status: "rejected",
-        code: "intent_duplicate",
+        status: "ambiguous",
+        code: "intent_already_processing_or_recovery_required",
       });
     }
-    this.seenIntentIds.add(intent.intentId);
 
     const issuedPacket = this.resolveIssuedPacket(intent.snapshotHash);
     if (!issuedPacket) {
@@ -90,6 +95,15 @@ export class ExecutionCoordinator {
       });
     }
 
+    if (this.store.recoveryStatus().blockingAmbiguity) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "execution_recovery_required",
+        detail: "A prior ProjectX mutation remains ambiguous; new exposure is blocked until provider reconciliation proves its outcome.",
+      });
+    }
+
     try {
       const currentSnapshot = this.snapshot();
       const validated = validateEntryRisk(
@@ -114,7 +128,7 @@ export class ExecutionCoordinator {
         });
       }
 
-      const orderId = await this.api.placeOrder({
+      const request: PlaceOrderRequest = {
         accountId: validated.account.id,
         contractId: validated.contract.id,
         type: 2,
@@ -123,16 +137,32 @@ export class ExecutionCoordinator {
         customTag: validated.customTag,
         stopLossBracket: { ticks: validated.stopTicks, type: 4 },
         takeProfitBracket: { ticks: validated.targetTicks, type: 1 },
-      });
-      return this.record({
-        intentId: intent.intentId,
-        status: "submitted",
-        code: "entry_submitted_with_provider_brackets",
-        orderId,
-        detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)}`,
-      });
+      };
+      const preparedUtc = new Date().toISOString();
+      this.store.prepareMutation(
+        intent.intentId,
+        "place_order",
+        request as unknown as Record<string, unknown>,
+        validated.customTag,
+        preparedUtc,
+      );
+      this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+
+      try {
+        const orderId = await this.api.placeOrder(request);
+        this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        return this.record({
+          intentId: intent.intentId,
+          status: "submitted",
+          code: "entry_submitted_with_provider_brackets",
+          orderId,
+          detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)}`,
+        });
+      } catch (error) {
+        return this.recordMutationFailure(intent.intentId, error);
+      }
     } catch (error) {
-      const code = error instanceof RiskRejectedError ? error.code : "execution_failed";
+      const code = error instanceof RiskRejectedError ? error.code : "execution_preparation_failed";
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -175,12 +205,77 @@ export class ExecutionCoordinator {
         code: "exit_verified_not_submitted",
       });
     }
-    await this.api.closePosition(this.config.scope.accountId, this.config.scope.contractId);
+
+    const request = {
+      accountId: this.config.scope.accountId,
+      contractId: this.config.scope.contractId,
+    };
+    this.store.prepareMutation(
+      intent.intentId,
+      "close_position",
+      request,
+      null,
+      new Date().toISOString(),
+    );
+    this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+    try {
+      await this.api.closePosition(request.accountId, request.contractId);
+      this.store.markMutationSubmitted(intent.intentId, null, new Date().toISOString());
+      return this.record({
+        intentId: intent.intentId,
+        status: "closed",
+        code: "close_contract_submitted",
+      });
+    } catch (error) {
+      return this.recordMutationFailure(intent.intentId, error);
+    }
+  }
+
+  private async recordMutationFailure(
+    intentId: string,
+    error: unknown,
+  ): Promise<ExecutionReceipt> {
+    const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
+    if (this.isAuthoritativeRejection(error)) {
+      this.store.markMutationRejected(intentId, detail, new Date().toISOString());
+      return this.record({
+        intentId,
+        status: "rejected",
+        code: "projectx_mutation_rejected",
+        detail,
+      });
+    }
+
+    this.store.markMutationAmbiguous(intentId, detail, new Date().toISOString());
     return this.record({
-      intentId: intent.intentId,
-      status: "closed",
-      code: "close_contract_submitted",
+      intentId,
+      status: "ambiguous",
+      code: "projectx_mutation_outcome_ambiguous",
+      detail,
     });
+  }
+
+  private isAuthoritativeRejection(error: unknown): boolean {
+    return error instanceof ProjectXApiError
+      && (error.code.startsWith("projectx_") || error.code === "not_authenticated");
+  }
+
+  private ephemeral(input: {
+    intentId: string | null;
+    status: ExecutionReceipt["status"];
+    code: string;
+    detail?: string;
+  }): ExecutionReceipt {
+    return {
+      schema_version: "glitch.direct.execution_receipt.v1",
+      receipt_id: randomUUID(),
+      recorded_utc: new Date().toISOString(),
+      intent_id: input.intentId,
+      mode: this.config.tradingMode,
+      status: input.status,
+      code: input.code,
+      ...(input.detail === undefined ? {} : { detail: input.detail }),
+    };
   }
 
   private async record(input: {
@@ -201,13 +296,18 @@ export class ExecutionCoordinator {
       ...(input.orderId === undefined ? {} : { order_id: input.orderId }),
       ...(input.detail === undefined ? {} : { detail: input.detail }),
     };
-    await this.ledger.append({
-      schema_version: "glitch.direct.event.v1",
-      event_id: receipt.receipt_id,
-      recorded_utc: receipt.recorded_utc,
-      event: "execution_receipt",
-      payload: receipt,
-    });
+    this.store.recordReceipt({ ...receipt });
+    try {
+      await this.ledger.append({
+        schema_version: "glitch.direct.event.v1",
+        event_id: receipt.receipt_id,
+        recorded_utc: receipt.recorded_utc,
+        event: "execution_receipt",
+        payload: receipt,
+      });
+    } catch (error) {
+      console.error("SQLite receipt committed but JSONL evidence mirror failed", error);
+    }
     return receipt;
   }
 }
