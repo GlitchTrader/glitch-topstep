@@ -11,7 +11,7 @@ import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 
 interface SqlRow {
-  [key: string]: unknown;
+  [key: string]: string | number | bigint | Uint8Array | null;
 }
 
 export class SqliteExecutionStore {
