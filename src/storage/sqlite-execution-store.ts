@@ -6,6 +6,7 @@ import type {
   ExecutionOperation,
   ExecutionRecoveryStatus,
   StoredExecutionMutation,
+  StoredIntentWithoutExecution,
 } from "../domain/execution-state.js";
 import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
@@ -227,6 +228,25 @@ export class SqliteExecutionStore {
       ORDER BY outbox.created_utc ASC
     `).all() as SqlRow[];
     return rows.map((row) => this.mutationFromRow(row));
+  }
+
+  public intentsWithoutReceiptsOrMutations(): StoredIntentWithoutExecution[] {
+    const rows = this.database.prepare(`
+      SELECT intent.intent_id, intent.action, intent.received_utc
+      FROM intents AS intent
+      LEFT JOIN execution_outbox AS outbox
+        ON outbox.intent_id = intent.intent_id
+      LEFT JOIN execution_receipts AS receipt
+        ON receipt.intent_id = intent.intent_id
+      WHERE outbox.intent_id IS NULL
+        AND receipt.intent_id IS NULL
+      ORDER BY intent.received_utc ASC
+    `).all() as SqlRow[];
+    return rows.map((row) => ({
+      intentId: String(row.intent_id),
+      action: String(row.action),
+      receivedUtc: String(row.received_utc),
+    }));
   }
 
   public recoveryStatus(): ExecutionRecoveryStatus {
