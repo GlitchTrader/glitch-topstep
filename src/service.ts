@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
+import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
@@ -60,13 +62,14 @@ export class GlitchTopstepService {
     this.state.replaceAccounts(accounts);
     this.state.replacePositions(positions);
     this.state.replaceOrders(orders);
-    await recoverExecutionMutations(
+    const initialRecovery = await recoverExecutionMutations(
       this.executionStore,
       this.api,
       this.config.scope.accountId,
       this.config.scope.contractId,
       positions,
     );
+    await this.persistRecoveryResolutions(initialRecovery.resolutions);
 
     const snapshot = () => this.state.buildSnapshot(
       this.config.scope.accountId,
@@ -155,7 +158,7 @@ export class GlitchTopstepService {
 
     await this.ledger.append({
       schema_version: "glitch.direct.event.v1",
-      event_id: crypto.randomUUID(),
+      event_id: randomUUID(),
       recorded_utc: new Date().toISOString(),
       event: "service_started",
       payload: {
@@ -217,13 +220,14 @@ export class GlitchTopstepService {
 
       if (this.executionStore.recoveryStatus().unresolvedMutations > 0) {
         const before = JSON.stringify(this.executionStore.recoveryStatus());
-        await recoverExecutionMutations(
+        const recovery = await recoverExecutionMutations(
           this.executionStore,
           this.api,
           this.config.scope.accountId,
           this.config.scope.contractId,
           positions,
         );
+        await this.persistRecoveryResolutions(recovery.resolutions);
         if (JSON.stringify(this.executionStore.recoveryStatus()) !== before) {
           this.packets?.invalidateAll();
         }
@@ -233,6 +237,44 @@ export class GlitchTopstepService {
       throw error;
     } finally {
       this.reconciliationInFlight = false;
+    }
+  }
+
+  private async persistRecoveryResolutions(
+    resolutions: RecoveredExecutionResolution[],
+  ): Promise<void> {
+    for (const resolution of resolutions) {
+      const recordedUtc = new Date().toISOString();
+      const status = resolution.outcome === "confirmed_not_submitted"
+        ? "rejected"
+        : resolution.operation === "close_position"
+          ? "closed"
+          : "submitted";
+      const receipt = {
+        schema_version: "glitch.direct.execution_receipt.v1",
+        receipt_id: randomUUID(),
+        recorded_utc: recordedUtc,
+        intent_id: resolution.intentId,
+        mode: "armed",
+        status,
+        code: resolution.code,
+        ...(resolution.providerOrderId === null
+          ? {}
+          : { order_id: resolution.providerOrderId }),
+        detail: "Recovered from durable outbox and current ProjectX evidence.",
+      };
+      this.executionStore.recordReceipt(receipt);
+      try {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: receipt.receipt_id,
+          recorded_utc: recordedUtc,
+          event: "execution_recovery_receipt",
+          payload: receipt,
+        });
+      } catch (error) {
+        console.error("SQLite recovery receipt committed but JSONL evidence mirror failed", error);
+      }
     }
   }
 }
