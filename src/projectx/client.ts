@@ -142,6 +142,18 @@ export class ProjectXApiClient {
     return this.parseArray(response.orders, "orders", parseOrder);
   }
 
+  public async searchOrders(
+    accountId: number,
+    startTimestamp: string,
+    endTimestamp?: string,
+  ): Promise<OrderInfo[]> {
+    const response = this.asEnvelope(
+      await this.post("/api/Order/search", { accountId, startTimestamp, endTimestamp }),
+    );
+    this.assertSuccess(response);
+    return this.parseArray(response.orders, "orders", parseOrder);
+  }
+
   public async searchTrades(
     accountId: number,
     startTimestamp: string,
