@@ -30,7 +30,8 @@ export async function recoverExecutionMutations(
   now = new Date(),
 ): Promise<ExecutionRecoveryResult> {
   const unresolved = store.unresolvedMutations();
-  if (unresolved.length === 0) {
+  const terminalWithoutReceipts = store.terminalMutationsWithoutReceipts();
+  if (unresolved.length === 0 && terminalWithoutReceipts.length === 0) {
     store.recordRecoveryResult(now.toISOString(), null);
     return { changed: false, resolved: 0, ambiguous: 0, resolutions: [] };
   }
@@ -38,7 +39,7 @@ export async function recoverExecutionMutations(
   let changed = false;
   let resolved = 0;
   let ambiguous = 0;
-  const resolutions: RecoveredExecutionResolution[] = [];
+  const resolutions = terminalWithoutReceipts.map(reconstructTerminalResolution);
   try {
     for (const mutation of unresolved.filter((candidate) => candidate.state === "prepared")) {
       store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
@@ -50,6 +51,7 @@ export async function recoverExecutionMutations(
         outcome: "confirmed_not_submitted",
         code: "mutation_confirmed_not_submitted_after_restart",
         providerOrderId: null,
+        detail: "The durable outbox never reached submitting state; no ProjectX mutation was called.",
       });
     }
 
@@ -82,11 +84,21 @@ export async function recoverExecutionMutations(
           outcome: "submitted",
           code: "entry_recovered_from_projectx_custom_tag",
           providerOrderId: outcome.orderId,
+          detail: "A unique historical ProjectX order matched custom tag and complete order identity.",
         });
         continue;
       }
       store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+      changed = changed || mutation.state === "submitting";
       ambiguous += 1;
+      resolutions.push({
+        intentId: mutation.intentId,
+        operation: mutation.operation,
+        outcome: "ambiguous",
+        code: "projectx_mutation_outcome_ambiguous",
+        providerOrderId: null,
+        detail: outcome.error,
+      });
     }
 
     const contractStillOpen = positions.some(
@@ -108,15 +120,22 @@ export async function recoverExecutionMutations(
           outcome: "submitted",
           code: "close_recovered_from_flat_provider_state",
           providerOrderId: null,
+          detail: "Current ProjectX position state proves the configured contract is flat.",
         });
         continue;
       }
-      store.markMutationAmbiguous(
-        mutation.intentId,
-        "close_position_outcome_ambiguous:configured_contract_still_open",
-        now.toISOString(),
-      );
+      const detail = "close_position_outcome_ambiguous:configured_contract_still_open";
+      store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+      changed = changed || mutation.state === "submitting";
       ambiguous += 1;
+      resolutions.push({
+        intentId: mutation.intentId,
+        operation: mutation.operation,
+        outcome: "ambiguous",
+        code: "projectx_mutation_outcome_ambiguous",
+        providerOrderId: null,
+        detail,
+      });
     }
 
     store.recordRecoveryResult(now.toISOString(), null);
@@ -126,6 +145,44 @@ export async function recoverExecutionMutations(
     store.recordRecoveryResult(now.toISOString(), detail);
     throw error;
   }
+}
+
+function reconstructTerminalResolution(
+  mutation: StoredExecutionMutation,
+): RecoveredExecutionResolution {
+  if (mutation.state === "submitted") {
+    return {
+      intentId: mutation.intentId,
+      operation: mutation.operation,
+      outcome: "submitted",
+      code: mutation.operation === "close_position"
+        ? "close_receipt_reconstructed_from_durable_state"
+        : "entry_receipt_reconstructed_from_durable_state",
+      providerOrderId: mutation.providerOrderId,
+      detail: "The mutation reached durable submitted state before the prior process wrote its receipt.",
+    };
+  }
+  if (mutation.state === "confirmed_not_submitted") {
+    return {
+      intentId: mutation.intentId,
+      operation: mutation.operation,
+      outcome: "confirmed_not_submitted",
+      code: "not_submitted_receipt_reconstructed_from_durable_state",
+      providerOrderId: null,
+      detail: "The mutation was durably proven not submitted before the prior process wrote its receipt.",
+    };
+  }
+  if (mutation.state === "rejected") {
+    return {
+      intentId: mutation.intentId,
+      operation: mutation.operation,
+      outcome: "rejected",
+      code: "projectx_rejection_receipt_reconstructed_from_durable_state",
+      providerOrderId: null,
+      detail: mutation.lastError,
+    };
+  }
+  throw new Error(`terminal_recovery_state_invalid:${mutation.state}`);
 }
 
 function reconcileEntryMutation(
