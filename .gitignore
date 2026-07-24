@@ -1,10 +1,5 @@
 node_modules/
-dist/
 .env
-.env.*
-!.env.example
-data/
-coverage/
 *.log
-.DS_Store
-Thumbs.db
+data/
+gateway-service/Glitch_Topstep_Gateway.vbs

@@ -2,23 +2,16 @@
   "name": "glitch-topstep",
   "version": "0.1.0",
   "private": true,
+  "description": "Local Glitch Topstep gateway (shadow) for Hermes glitch-topstep profile",
   "type": "module",
-  "description": "Venue-neutral Glitch direct trading gateway with a ProjectX/TopstepX adapter.",
-  "engines": {
-    "node": ">=22"
-  },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
-    "test": "node --test dist/tests/*.test.js",
-    "check": "npm run build && npm test",
-    "dev": "npm run build && npm start",
-    "start": "node --enable-source-maps dist/src/index.js"
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "auth:test": "node scripts/test-auth.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
-    "@microsoft/signalr": "^8.0.7"
-  },
-  "devDependencies": {
-    "@types/node": "^22.15.0",
-    "typescript": "^5.8.3"
+    "@microsoft/signalr": "^8.0.17",
+    "dotenv": "^16.4.7"
   }
 }
