@@ -12,6 +12,11 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 
 interface SqlRow {
   [key: string]: string | number | bigint | Uint8Array | null;
+  state: string;
+  submitting_utc: string | null;
+  resolved_utc: string | null;
+  provider_order_id: number | bigint | null;
+  last_error: string | null;
 }
 
 export class SqliteExecutionStore {
