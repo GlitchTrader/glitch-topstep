@@ -155,7 +155,7 @@ function reconcileEntryMutation(
     };
   }
 
-  const order = tagged[0];
+  const order = tagged[0]!;
   const request = mutation.request;
   const expectedSide = requiredInteger(request.side, "side");
   const expectedSize = requiredInteger(request.size, "size");
