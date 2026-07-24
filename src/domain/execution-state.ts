@@ -21,6 +21,12 @@ export interface StoredExecutionMutation {
   lastError: string | null;
 }
 
+export interface StoredIntentWithoutExecution {
+  intentId: string;
+  action: string;
+  receivedUtc: string;
+}
+
 export interface RecoveredExecutionResolution {
   intentId: string;
   operation: ExecutionOperation;
