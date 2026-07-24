@@ -27,7 +27,7 @@ export class ExecutionCoordinator {
     private readonly api: ProjectXApiClient,
     private readonly ledger: JsonlEventStore,
     private readonly snapshot: () => AccountVenueSnapshot,
-    private readonly decisionPacket: () => DirectDecisionPacket,
+    private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
   ) {}
 
   public async handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
@@ -52,11 +52,20 @@ export class ExecutionCoordinator {
     }
     this.seenIntentIds.add(intent.intentId);
 
+    const issuedPacket = this.resolveIssuedPacket(intent.snapshotHash);
+    if (!issuedPacket) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "decision_packet_unknown_or_expired",
+      });
+    }
+
     if (this.config.tradingMode === "disabled") {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
-        code: "trading_disabled",
+        code: "trading_disabled_by_operator",
       });
     }
 
@@ -69,7 +78,7 @@ export class ExecutionCoordinator {
     }
 
     if (intent.action === "EXIT") {
-      return this.handleExit(intent);
+      return this.handleExit(intent, issuedPacket);
     }
 
     if (intent.action !== "ENTER_LONG" && intent.action !== "ENTER_SHORT") {
@@ -77,14 +86,12 @@ export class ExecutionCoordinator {
         intentId: intent.intentId,
         status: "rejected",
         code: "action_not_implemented",
-        detail: "MOVE_STOP and MOVE_TP require protective-order ownership reconciliation before activation.",
+        detail: "MOVE_STOP and MOVE_TP require durable protective-order ownership before activation.",
       });
     }
 
     try {
-      const packet = this.decisionPacket();
       const currentSnapshot = this.snapshot();
-      this.rejectAdverseDrift(intent, packet, currentSnapshot);
       const validated = validateEntryRisk(
         intent,
         currentSnapshot,
@@ -94,8 +101,7 @@ export class ExecutionCoordinator {
           expectedAccountId: this.config.scope.accountId,
           expectedAccountName: this.config.scope.accountName,
           expectedInstrument: this.config.scope.instrument,
-          expectedSnapshotHash: packet.market.snapshot_hash,
-          requireSimulatedAccount: this.config.requireSimulatedAccount,
+          expectedSnapshotHash: issuedPacket.market.snapshot_hash,
         },
       );
 
@@ -103,8 +109,8 @@ export class ExecutionCoordinator {
         return this.record({
           intentId: intent.intentId,
           status: "shadowed",
-          code: "entry_validated_not_submitted",
-          detail: `risk_usd=${validated.riskUsd.toFixed(2)};stop_ticks=${validated.stopTicks};target_ticks=${validated.targetTicks}`,
+          code: "entry_verified_not_submitted",
+          detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)};stop_ticks=${validated.stopTicks};target_ticks=${validated.targetTicks}`,
         });
       }
 
@@ -121,9 +127,9 @@ export class ExecutionCoordinator {
       return this.record({
         intentId: intent.intentId,
         status: "submitted",
-        code: "entry_submitted_with_brackets",
+        code: "entry_submitted_with_provider_brackets",
         orderId,
-        detail: `risk_usd=${validated.riskUsd.toFixed(2)}`,
+        detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)}`,
       });
     } catch (error) {
       const code = error instanceof RiskRejectedError ? error.code : "execution_failed";
@@ -136,7 +142,10 @@ export class ExecutionCoordinator {
     }
   }
 
-  private async handleExit(intent: TradeIntent): Promise<ExecutionReceipt> {
+  private async handleExit(
+    intent: TradeIntent,
+    issuedPacket: DirectDecisionPacket,
+  ): Promise<ExecutionReceipt> {
     const snapshot = this.snapshot();
     if (intent.account !== this.config.scope.accountName) {
       return this.record({
@@ -145,7 +154,7 @@ export class ExecutionCoordinator {
         code: "account_name_mismatch",
       });
     }
-    if (intent.snapshotHash !== this.decisionPacket().market.snapshot_hash) {
+    if (intent.snapshotHash !== issuedPacket.market.snapshot_hash) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -163,7 +172,7 @@ export class ExecutionCoordinator {
       return this.record({
         intentId: intent.intentId,
         status: "shadowed",
-        code: "exit_validated_not_submitted",
+        code: "exit_verified_not_submitted",
       });
     }
     await this.api.closePosition(this.config.scope.accountId, this.config.scope.contractId);
@@ -172,40 +181,6 @@ export class ExecutionCoordinator {
       status: "closed",
       code: "close_contract_submitted",
     });
-  }
-
-  private rejectAdverseDrift(
-    intent: TradeIntent,
-    packet: DirectDecisionPacket,
-    snapshot: AccountVenueSnapshot,
-  ): void {
-    if (!snapshot.quote) {
-      throw new RiskRejectedError("quote_missing");
-    }
-    if (intent.action === "ENTER_LONG") {
-      const assessedAsk = packet.market.ask;
-      if (assessedAsk === null) {
-        throw new RiskRejectedError("packet_reference_price_missing");
-      }
-      if (snapshot.quote.bestAsk > assessedAsk + 1e-8) {
-        throw new RiskRejectedError(
-          "entry_geometry_worsened_reassess",
-          `assessed_ask=${assessedAsk};current_ask=${snapshot.quote.bestAsk}`,
-        );
-      }
-    }
-    if (intent.action === "ENTER_SHORT") {
-      const assessedBid = packet.market.bid;
-      if (assessedBid === null) {
-        throw new RiskRejectedError("packet_reference_price_missing");
-      }
-      if (snapshot.quote.bestBid < assessedBid - 1e-8) {
-        throw new RiskRejectedError(
-          "entry_geometry_worsened_reassess",
-          `assessed_bid=${assessedBid};current_bid=${snapshot.quote.bestBid}`,
-        );
-      }
-    }
   }
 
   private async record(input: {
