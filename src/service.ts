@@ -7,12 +7,13 @@ import { LocalGatewayServer } from "./server/local-gateway.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 
-export class GlitchTopTraderService {
+export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
+  private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
@@ -52,6 +53,12 @@ export class GlitchTopTraderService {
     this.state.replacePositions(positions);
     this.state.replaceOrders(orders);
 
+    const snapshot = () => this.state.buildSnapshot(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    this.packets = new DecisionPacketService(this.config, snapshot);
+
     this.realtime = new ProjectXRealtimeClient(
       {
         userHubUrl: this.config.projectX.userHubUrl,
@@ -59,10 +66,19 @@ export class GlitchTopTraderService {
         token: () => this.api.sessionToken,
         accountId: this.config.scope.accountId,
         contractId: this.config.scope.contractId,
+        onReconnected: async () => {
+          this.packets?.invalidateAll();
+          await this.reconcile();
+        },
+        onStateInvalidated: async () => {
+          this.packets?.invalidateAll();
+          await this.reconcile();
+        },
       },
       this.state,
     );
     await this.realtime.start();
+    await this.reconcile();
 
     this.reconciliationTimer = setInterval(() => {
       void this.reconcile().catch((error: unknown) => {
@@ -71,25 +87,36 @@ export class GlitchTopTraderService {
     }, this.config.reconcileIntervalMs);
     this.reconciliationTimer.unref();
 
-    const snapshot = () => this.state.buildSnapshot(
-      this.config.scope.accountId,
-      this.config.scope.contractId,
-    );
-    const packets = new DecisionPacketService(this.config, snapshot);
     const coordinator = new ExecutionCoordinator(
       this.config,
       this.api,
       this.ledger,
       snapshot,
-      () => packets.current(),
+      (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
     );
     this.gateway = new LocalGatewayServer(
-      {
-        ...this.config.localGateway,
-        tradingMode: this.config.tradingMode,
+      this.config.localGateway,
+      () => {
+        const current = snapshot();
+        return {
+          schema_version: "glitch.direct.health.v2",
+          status: current.stateComplete ? "ok" : "degraded",
+          trading_mode: this.config.tradingMode,
+          recorded_utc: new Date().toISOString(),
+          data_quality: {
+            state_complete: current.stateComplete,
+            issues: current.stateIssues,
+            operational: current.operational,
+          },
+        };
       },
       snapshot,
-      () => packets.current(),
+      () => {
+        if (!this.packets) {
+          throw new Error("packet_service_unavailable");
+        }
+        return this.packets.current();
+      },
       coordinator,
     );
     await this.gateway.start();
@@ -111,7 +138,9 @@ export class GlitchTopTraderService {
         account_name: account.name,
         simulated: account.simulated ?? null,
         contract_id: contract.id,
+        instrument: this.config.scope.instrument,
         trading_mode: this.config.tradingMode,
+        policy_authority: this.config.policy.authority,
       },
     });
   }
@@ -131,6 +160,7 @@ export class GlitchTopTraderService {
     ]);
     this.gateway = null;
     this.realtime = null;
+    this.packets = null;
   }
 
   private async reconcile(): Promise<void> {
@@ -138,6 +168,7 @@ export class GlitchTopTraderService {
       return;
     }
     this.reconciliationInFlight = true;
+    this.state.markReconciliationStarted();
     try {
       const [accounts, positions, orders] = await Promise.all([
         this.api.searchAccounts(true),
@@ -152,6 +183,10 @@ export class GlitchTopTraderService {
       this.state.replaceAccounts(accounts, receivedAt);
       this.state.replacePositions(positions, receivedAt);
       this.state.replaceOrders(orders, receivedAt);
+      this.state.markReconciliationSucceeded(receivedAt);
+    } catch (error) {
+      this.state.markReconciliationFailed(error);
+      throw error;
     } finally {
       this.reconciliationInFlight = false;
     }
