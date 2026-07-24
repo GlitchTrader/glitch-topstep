@@ -69,7 +69,11 @@ export class LocalGatewayServer {
       if (request.method === "POST" && url.pathname === "/intent") {
         const body = await this.readJsonBody(request);
         const receipt: ExecutionReceipt = await this.coordinator.handleWireIntent(body);
-        const status = receipt.status === "rejected" ? 422 : 202;
+        const status = receipt.status === "rejected"
+          ? 422
+          : receipt.status === "ambiguous"
+            ? 503
+            : 202;
         this.json(response, status, receipt);
         return;
       }
