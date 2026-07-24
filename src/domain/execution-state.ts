@@ -1,4 +1,4 @@
-export type ExecutionOperation = "place_order" | "close_position";
+export type ExecutionOperation = "place_order" | "close_position" | "no_mutation";
 
 export type ExecutionMutationState =
   | "prepared"
@@ -10,7 +10,7 @@ export type ExecutionMutationState =
 
 export interface StoredExecutionMutation {
   intentId: string;
-  operation: ExecutionOperation;
+  operation: Exclude<ExecutionOperation, "no_mutation">;
   state: ExecutionMutationState;
   customTag: string | null;
   request: Record<string, unknown>;
