@@ -1,4 +1,7 @@
-import type { StoredExecutionMutation } from "../domain/execution-state.js";
+import type {
+  RecoveredExecutionResolution,
+  StoredExecutionMutation,
+} from "../domain/execution-state.js";
 import type { OrderInfo, PositionInfo } from "../domain/models.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -15,6 +18,7 @@ export interface ExecutionRecoveryResult {
   changed: boolean;
   resolved: number;
   ambiguous: number;
+  resolutions: RecoveredExecutionResolution[];
 }
 
 export async function recoverExecutionMutations(
@@ -28,17 +32,25 @@ export async function recoverExecutionMutations(
   const unresolved = store.unresolvedMutations();
   if (unresolved.length === 0) {
     store.recordRecoveryResult(now.toISOString(), null);
-    return { changed: false, resolved: 0, ambiguous: 0 };
+    return { changed: false, resolved: 0, ambiguous: 0, resolutions: [] };
   }
 
   let changed = false;
   let resolved = 0;
   let ambiguous = 0;
+  const resolutions: RecoveredExecutionResolution[] = [];
   try {
     for (const mutation of unresolved.filter((candidate) => candidate.state === "prepared")) {
       store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
       changed = true;
       resolved += 1;
+      resolutions.push({
+        intentId: mutation.intentId,
+        operation: mutation.operation,
+        outcome: "confirmed_not_submitted",
+        code: "mutation_confirmed_not_submitted_after_restart",
+        providerOrderId: null,
+      });
     }
 
     const uncertainEntries = unresolved.filter(
@@ -64,6 +76,13 @@ export async function recoverExecutionMutations(
         store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
         changed = true;
         resolved += 1;
+        resolutions.push({
+          intentId: mutation.intentId,
+          operation: mutation.operation,
+          outcome: "submitted",
+          code: "entry_recovered_from_projectx_custom_tag",
+          providerOrderId: outcome.orderId,
+        });
         continue;
       }
       store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
@@ -83,6 +102,13 @@ export async function recoverExecutionMutations(
         store.markMutationSubmitted(mutation.intentId, null, now.toISOString());
         changed = true;
         resolved += 1;
+        resolutions.push({
+          intentId: mutation.intentId,
+          operation: mutation.operation,
+          outcome: "submitted",
+          code: "close_recovered_from_flat_provider_state",
+          providerOrderId: null,
+        });
         continue;
       }
       store.markMutationAmbiguous(
@@ -94,7 +120,7 @@ export async function recoverExecutionMutations(
     }
 
     store.recordRecoveryResult(now.toISOString(), null);
-    return { changed, resolved, ambiguous };
+    return { changed, resolved, ambiguous, resolutions };
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
     store.recordRecoveryResult(now.toISOString(), detail);
