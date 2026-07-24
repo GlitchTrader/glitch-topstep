@@ -118,7 +118,7 @@ export class SqliteExecutionStore {
     );
   }
 
-  public receiptForIntent<T extends Record<string, unknown>>(intentId: string): T | null {
+  public receiptForIntent<T>(intentId: string): T | null {
     const row = this.database.prepare(`
       SELECT payload_json
       FROM execution_receipts
