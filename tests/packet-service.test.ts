@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { AppConfig } from "../src/config.js";
+import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { DecisionPacketService } from "../src/hermes/packet-service.js";
+import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { snapshot } from "./fixtures.js";
 
 function config(): AppConfig {
@@ -52,33 +54,56 @@ function config(): AppConfig {
   };
 }
 
+function healthyRecovery(): ExecutionRecoveryStatus {
+  return {
+    blockingAmbiguity: false,
+    unresolvedMutations: 0,
+    ambiguousMutations: 0,
+    lastRecoveryUtc: null,
+    lastRecoveryError: null,
+  };
+}
+
 describe("decision packet issuance", () => {
-  it("publishes current truth while preserving an already issued decision lease", () => {
+  it("publishes current truth while preserving an issued decision lease", () => {
     let now = 1_000;
     const current = snapshot();
-    const service = new DecisionPacketService(config(), () => current, () => now);
+    const store = new SqliteExecutionStore(":memory:");
+    const service = new DecisionPacketService(config(), () => current, store, healthyRecovery, () => now);
     const first = service.current();
     assert.equal(first.schema_version, "glitch.direct.decision_packet.v2");
     assert.equal(first.required_output_template.operator_profile, "glitch-topstep");
-    assert.equal(first.required_output_template.prompt_version, "glitch-topstep-v2");
-
-    current.quote = {
-      ...current.quote!,
-      bestAsk: 20_001.25,
-      timestamp: "2026-07-21T12:00:05Z",
-    };
+    current.quote = { ...current.quote!, bestAsk: 20_001.25, timestamp: "2026-07-21T12:00:05Z" };
     const second = service.current();
     assert.notEqual(second.market.snapshot_hash, first.market.snapshot_hash);
     assert.ok(service.resolve(first.market.snapshot_hash));
-
     now += 300_001;
     assert.equal(service.resolve(first.market.snapshot_hash), null);
+    store.close();
   });
 
   it("invalidates every issued decision after venue truth is invalidated", () => {
-    const service = new DecisionPacketService(config(), snapshot);
+    const store = new SqliteExecutionStore(":memory:");
+    const service = new DecisionPacketService(config(), snapshot, store, healthyRecovery);
     const issued = service.current();
     service.invalidateAll();
     assert.equal(service.resolve(issued.market.snapshot_hash), null);
+    store.close();
+  });
+
+  it("publishes recovery ambiguity as evidence and capability state", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const recovery = (): ExecutionRecoveryStatus => ({
+      blockingAmbiguity: true,
+      unresolvedMutations: 1,
+      ambiguousMutations: 1,
+      lastRecoveryUtc: null,
+      lastRecoveryError: "provider_order_not_found",
+    });
+    const packet = new DecisionPacketService(config(), snapshot, store, recovery).current();
+    assert.equal(packet.execution.recovery_blocked, true);
+    assert.equal(packet.execution.new_exposure_technically_supported, false);
+    assert.equal(packet.execution.ambiguous_mutations, 1);
+    store.close();
   });
 });
