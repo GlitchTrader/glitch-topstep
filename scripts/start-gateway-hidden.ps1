@@ -25,7 +25,8 @@ if (-not (Test-Path -LiteralPath '.env' -PathType Leaf)) {
 
 $dataDir = Join-Path $repoRoot 'data'
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-$logPath = Join-Path $dataDir 'gateway.log'
+$stdoutLog = Join-Path $dataDir 'gateway.stdout.log'
+$stderrLog = Join-Path $dataDir 'gateway.stderr.log'
 
 $node = (Get-Command node -ErrorAction Stop).Source
 $arguments = @('src/server.js')
@@ -35,12 +36,12 @@ Start-Process `
     -ArgumentList $arguments `
     -WorkingDirectory $repoRoot `
     -WindowStyle Hidden `
-    -RedirectStandardOutput $logPath `
-    -RedirectStandardError $logPath `
+    -RedirectStandardOutput $stdoutLog `
+    -RedirectStandardError $stderrLog `
     | Out-Null
 
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 5
 $ready = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 if ($ready.Count -eq 0) {
-    throw "Glitch Topstep gateway did not bind to port $Port. See $logPath"
+    throw "Glitch Topstep gateway did not bind to port $Port. See $stdoutLog and $stderrLog"
 }
