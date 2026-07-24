@@ -24,9 +24,10 @@ export interface StoredExecutionMutation {
 export interface RecoveredExecutionResolution {
   intentId: string;
   operation: ExecutionOperation;
-  outcome: "submitted" | "confirmed_not_submitted";
+  outcome: "submitted" | "confirmed_not_submitted" | "rejected" | "ambiguous";
   code: string;
   providerOrderId: number | null;
+  detail: string | null;
 }
 
 export interface ExecutionRecoveryStatus {
