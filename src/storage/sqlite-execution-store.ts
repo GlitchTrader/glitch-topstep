@@ -201,6 +201,29 @@ export class SqliteExecutionStore {
     return rows.map((row) => this.mutationFromRow(row));
   }
 
+  public terminalMutationsWithoutReceipts(): StoredExecutionMutation[] {
+    const rows = this.database.prepare(`
+      SELECT
+        outbox.intent_id,
+        outbox.operation,
+        outbox.state,
+        outbox.custom_tag,
+        outbox.request_json,
+        outbox.created_utc,
+        outbox.submitting_utc,
+        outbox.resolved_utc,
+        outbox.provider_order_id,
+        outbox.last_error
+      FROM execution_outbox AS outbox
+      LEFT JOIN execution_receipts AS receipt
+        ON receipt.intent_id = outbox.intent_id
+      WHERE receipt.intent_id IS NULL
+        AND outbox.state IN ('submitted', 'confirmed_not_submitted', 'rejected')
+      ORDER BY outbox.created_utc ASC
+    `).all() as SqlRow[];
+    return rows.map((row) => this.mutationFromRow(row));
+  }
+
   public recoveryStatus(): ExecutionRecoveryStatus {
     const counts = this.database.prepare(`
       SELECT
