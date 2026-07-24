@@ -81,6 +81,7 @@ describe("durable execution recovery", () => {
       new Date("2026-07-21T12:01:00Z"),
     );
     assert.equal(result.resolved, 1);
+    assert.equal(result.resolutions[0]?.outcome, "confirmed_not_submitted");
     assert.equal(store.recoveryStatus().unresolvedMutations, 0);
     store.close();
   });
@@ -109,6 +110,7 @@ describe("durable execution recovery", () => {
     );
     assert.equal(result.resolved, 1);
     assert.equal(result.ambiguous, 0);
+    assert.equal(result.resolutions[0]?.providerOrderId, 9001);
     assert.equal(store.recoveryStatus().blockingAmbiguity, false);
     store.close();
   });
@@ -135,6 +137,7 @@ describe("durable execution recovery", () => {
       new Date("2026-07-21T12:01:00Z"),
     );
     assert.equal(result.ambiguous, 1);
+    assert.equal(result.resolutions[0]?.outcome, "ambiguous");
     assert.equal(store.recoveryStatus().blockingAmbiguity, true);
     store.close();
   });
@@ -161,7 +164,36 @@ describe("durable execution recovery", () => {
       new Date("2026-07-21T12:01:00Z"),
     );
     assert.equal(result.resolved, 1);
+    assert.equal(result.resolutions[0]?.code, "close_recovered_from_flat_provider_state");
     assert.equal(store.recoveryStatus().blockingAmbiguity, false);
+    store.close();
+  });
+
+  it("reconstructs a receipt when submitted state survived but the receipt did not", async () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const value = intent("00000000-0000-4000-8000-000000000005");
+    store.registerIntent(value, "2026-07-21T12:00:05Z");
+    store.prepareMutation(
+      value.intentId,
+      "place_order",
+      { accountId, contractId, type: 2, side: 0, size: 1 },
+      "glt-terminal",
+      "2026-07-21T12:00:06Z",
+    );
+    store.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
+    store.markMutationSubmitted(value.intentId, 9001, "2026-07-21T12:00:08Z");
+
+    const result = await recoverExecutionMutations(
+      store,
+      { searchOrders: async () => { throw new Error("historical lookup must not run"); } },
+      accountId,
+      contractId,
+      [],
+      new Date("2026-07-21T12:01:00Z"),
+    );
+    assert.equal(result.resolutions.length, 1);
+    assert.equal(result.resolutions[0]?.code, "entry_receipt_reconstructed_from_durable_state");
+    assert.equal(result.resolutions[0]?.providerOrderId, 9001);
     store.close();
   });
 });
