@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type {
   AccountVenueSnapshot,
   RiskSettings,
@@ -79,6 +80,11 @@ export interface DirectDecisionPacket {
     gateway_mode: "disabled" | "shadow" | "armed";
     new_exposure_technically_supported: boolean;
     maximum_additional_contracts: number;
+    recovery_blocked: boolean;
+    unresolved_mutations: number;
+    ambiguous_mutations: number;
+    last_recovery_utc: string | null;
+    last_recovery_error: string | null;
     supported_actions: Array<"ENTER_LONG" | "ENTER_SHORT" | "HOLD" | "EXIT" | "NOTHING">;
     authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects";
   };
@@ -88,6 +94,7 @@ export interface DirectDecisionPacket {
 export function canonicalDecisionState(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
+  recovery: ExecutionRecoveryStatus,
 ): Record<string, unknown> {
   return {
     account: snapshot.account,
@@ -103,15 +110,17 @@ export function canonicalDecisionState(
     stateIssues: snapshot.stateIssues,
     stateComplete: snapshot.stateComplete,
     policy,
+    recovery,
   };
 }
 
 export function decisionStateHash(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
+  recovery: ExecutionRecoveryStatus,
 ): string {
   return createHash("sha256")
-    .update(JSON.stringify(canonicalDecisionState(snapshot, policy)))
+    .update(JSON.stringify(canonicalDecisionState(snapshot, policy, recovery)))
     .digest("hex");
 }
 
@@ -119,6 +128,7 @@ export function buildDecisionPacket(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
   _risk: RiskSettings,
+  recovery: ExecutionRecoveryStatus,
   instrument: string,
   tradingMode: "disabled" | "shadow" | "armed",
   leaseMs: number,
@@ -130,7 +140,7 @@ export function buildDecisionPacket(
   const riskBudget = calculateRiskBudget(snapshot.conservativeEquity, policy);
   const remainingCapacity = Math.max(0, policy.maxContracts - snapshot.totalOpenContracts);
   const quote = snapshot.quote;
-  const snapshotHash = decisionStateHash(snapshot, policy);
+  const snapshotHash = decisionStateHash(snapshot, policy, recovery);
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
 
   return {
@@ -208,8 +218,14 @@ export function buildDecisionPacket(
         && snapshot.account.canTrade
         && snapshot.instrumentOpenContracts === 0
         && snapshot.openOrders.length === 0
-        && remainingCapacity > 0,
+        && remainingCapacity > 0
+        && !recovery.blockingAmbiguity,
       maximum_additional_contracts: remainingCapacity,
+      recovery_blocked: recovery.blockingAmbiguity,
+      unresolved_mutations: recovery.unresolvedMutations,
+      ambiguous_mutations: recovery.ambiguousMutations,
+      last_recovery_utc: recovery.lastRecoveryUtc,
+      last_recovery_error: recovery.lastRecoveryError,
       supported_actions: ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"],
       authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects",
     },
