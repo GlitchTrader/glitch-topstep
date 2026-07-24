@@ -1,22 +1,27 @@
+import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
+import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXApiClient } from "./projectx/client.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
+import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 
 export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
+  private readonly executionStore: SqliteExecutionStore;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
+  private storeClosed = false;
 
   public constructor(private readonly config: AppConfig) {
     this.api = new ProjectXApiClient({
@@ -25,6 +30,9 @@ export class GlitchTopstepService {
       apiKey: config.projectX.apiKey,
     });
     this.ledger = new JsonlEventStore(config.dataDir);
+    this.executionStore = new SqliteExecutionStore(
+      join(config.dataDir, "glitch-topstep.sqlite"),
+    );
   }
 
   public async start(): Promise<void> {
@@ -52,12 +60,24 @@ export class GlitchTopstepService {
     this.state.replaceAccounts(accounts);
     this.state.replacePositions(positions);
     this.state.replaceOrders(orders);
+    await recoverExecutionMutations(
+      this.executionStore,
+      this.api,
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+      positions,
+    );
 
     const snapshot = () => this.state.buildSnapshot(
       this.config.scope.accountId,
       this.config.scope.contractId,
     );
-    this.packets = new DecisionPacketService(this.config, snapshot);
+    this.packets = new DecisionPacketService(
+      this.config,
+      snapshot,
+      this.executionStore,
+      () => this.executionStore.recoveryStatus(),
+    );
 
     this.realtime = new ProjectXRealtimeClient(
       {
@@ -91,6 +111,7 @@ export class GlitchTopstepService {
       this.config,
       this.api,
       this.ledger,
+      this.executionStore,
       snapshot,
       (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
     );
@@ -98,9 +119,12 @@ export class GlitchTopstepService {
       this.config.localGateway,
       () => {
         const current = snapshot();
+        const executionRecovery = this.executionStore.recoveryStatus();
         return {
           schema_version: "glitch.direct.health.v2",
-          status: current.stateComplete ? "ok" : "degraded",
+          status: current.stateComplete && !executionRecovery.blockingAmbiguity
+            ? "ok"
+            : "degraded",
           trading_mode: this.config.tradingMode,
           recorded_utc: new Date().toISOString(),
           data_quality: {
@@ -108,6 +132,7 @@ export class GlitchTopstepService {
             issues: current.stateIssues,
             operational: current.operational,
           },
+          execution_recovery: executionRecovery,
         };
       },
       snapshot,
@@ -141,6 +166,7 @@ export class GlitchTopstepService {
         instrument: this.config.scope.instrument,
         trading_mode: this.config.tradingMode,
         policy_authority: this.config.policy.authority,
+        execution_recovery: this.executionStore.recoveryStatus(),
       },
     });
   }
@@ -161,6 +187,10 @@ export class GlitchTopstepService {
     this.gateway = null;
     this.realtime = null;
     this.packets = null;
+    if (!this.storeClosed) {
+      this.executionStore.close();
+      this.storeClosed = true;
+    }
   }
 
   private async reconcile(): Promise<void> {
@@ -184,6 +214,20 @@ export class GlitchTopstepService {
       this.state.replacePositions(positions, receivedAt);
       this.state.replaceOrders(orders, receivedAt);
       this.state.markReconciliationSucceeded(receivedAt);
+
+      if (this.executionStore.recoveryStatus().unresolvedMutations > 0) {
+        const before = JSON.stringify(this.executionStore.recoveryStatus());
+        await recoverExecutionMutations(
+          this.executionStore,
+          this.api,
+          this.config.scope.accountId,
+          this.config.scope.contractId,
+          positions,
+        );
+        if (JSON.stringify(this.executionStore.recoveryStatus()) !== before) {
+          this.packets?.invalidateAll();
+        }
+      }
     } catch (error) {
       this.state.markReconciliationFailed(error);
       throw error;
