@@ -1,6 +1,7 @@
 import type {
   RecoveredExecutionResolution,
   StoredExecutionMutation,
+  StoredIntentWithoutExecution,
 } from "../domain/execution-state.js";
 import type { OrderInfo, PositionInfo } from "../domain/models.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
@@ -29,17 +30,25 @@ export async function recoverExecutionMutations(
   positions: PositionInfo[],
   now = new Date(),
 ): Promise<ExecutionRecoveryResult> {
+  const orphanIntents = store.intentsWithoutReceiptsOrMutations();
   const unresolved = store.unresolvedMutations();
   const terminalWithoutReceipts = store.terminalMutationsWithoutReceipts();
-  if (unresolved.length === 0 && terminalWithoutReceipts.length === 0) {
+  if (
+    orphanIntents.length === 0
+    && unresolved.length === 0
+    && terminalWithoutReceipts.length === 0
+  ) {
     store.recordRecoveryResult(now.toISOString(), null);
     return { changed: false, resolved: 0, ambiguous: 0, resolutions: [] };
   }
 
-  let changed = false;
-  let resolved = 0;
+  let changed = orphanIntents.length > 0;
+  let resolved = orphanIntents.length;
   let ambiguous = 0;
-  const resolutions = terminalWithoutReceipts.map(reconstructTerminalResolution);
+  const resolutions = [
+    ...orphanIntents.map(reconstructOrphanIntentResolution),
+    ...terminalWithoutReceipts.map(reconstructTerminalResolution),
+  ];
   try {
     for (const mutation of unresolved.filter((candidate) => candidate.state === "prepared")) {
       store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
@@ -145,6 +154,35 @@ export async function recoverExecutionMutations(
     store.recordRecoveryResult(now.toISOString(), detail);
     throw error;
   }
+}
+
+function reconstructOrphanIntentResolution(
+  intent: StoredIntentWithoutExecution,
+): RecoveredExecutionResolution {
+  if (intent.action === "HOLD" || intent.action === "NOTHING") {
+    return {
+      intentId: intent.intentId,
+      operation: "no_mutation",
+      outcome: "ignored",
+      code: "no_op_receipt_reconstructed_after_restart",
+      providerOrderId: null,
+      detail: "The intent identity was durable, but no provider mutation was required or prepared.",
+    };
+  }
+
+  const operation = intent.action === "EXIT"
+    ? "close_position"
+    : intent.action === "ENTER_LONG" || intent.action === "ENTER_SHORT"
+      ? "place_order"
+      : "no_mutation";
+  return {
+    intentId: intent.intentId,
+    operation,
+    outcome: "confirmed_not_submitted",
+    code: "intent_confirmed_not_submitted_without_outbox",
+    providerOrderId: null,
+    detail: "The intent identity was persisted, but no durable execution outbox exists; no ProjectX mutation was prepared.",
+  };
 }
 
 function reconstructTerminalResolution(
