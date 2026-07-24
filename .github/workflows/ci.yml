@@ -17,4 +17,15 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npm run check
+      - name: Run build and tests
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee check.log
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-failure-${{ github.run_id }}
+          path: check.log
+          if-no-files-found: error
+          retention-days: 7
