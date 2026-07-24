@@ -30,7 +30,7 @@ export interface StoredIntentWithoutExecution {
 export interface RecoveredExecutionResolution {
   intentId: string;
   operation: ExecutionOperation;
-  outcome: "submitted" | "confirmed_not_submitted" | "rejected" | "ambiguous";
+  outcome: "submitted" | "confirmed_not_submitted" | "rejected" | "ambiguous" | "ignored";
   code: string;
   providerOrderId: number | null;
   detail: string | null;
