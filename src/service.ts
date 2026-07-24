@@ -218,7 +218,9 @@ export class GlitchTopstepService {
       this.state.replaceOrders(orders, receivedAt);
       this.state.markReconciliationSucceeded(receivedAt);
 
-      if (this.executionStore.recoveryStatus().unresolvedMutations > 0) {
+      const requiresRecovery = this.executionStore.recoveryStatus().unresolvedMutations > 0
+        || this.executionStore.terminalMutationsWithoutReceipts().length > 0;
+      if (requiresRecovery) {
         const before = JSON.stringify(this.executionStore.recoveryStatus());
         const recovery = await recoverExecutionMutations(
           this.executionStore,
@@ -245,11 +247,13 @@ export class GlitchTopstepService {
   ): Promise<void> {
     for (const resolution of resolutions) {
       const recordedUtc = new Date().toISOString();
-      const status = resolution.outcome === "confirmed_not_submitted"
-        ? "rejected"
-        : resolution.operation === "close_position"
-          ? "closed"
-          : "submitted";
+      const status = resolution.outcome === "ambiguous"
+        ? "ambiguous"
+        : resolution.outcome === "confirmed_not_submitted" || resolution.outcome === "rejected"
+          ? "rejected"
+          : resolution.operation === "close_position"
+            ? "closed"
+            : "submitted";
       const receipt = {
         schema_version: "glitch.direct.execution_receipt.v1",
         receipt_id: randomUUID(),
@@ -261,7 +265,8 @@ export class GlitchTopstepService {
         ...(resolution.providerOrderId === null
           ? {}
           : { order_id: resolution.providerOrderId }),
-        detail: "Recovered from durable outbox and current ProjectX evidence.",
+        detail: resolution.detail
+          ?? "Recovered from durable outbox and current ProjectX evidence.",
       };
       this.executionStore.recordReceipt(receipt);
       try {
