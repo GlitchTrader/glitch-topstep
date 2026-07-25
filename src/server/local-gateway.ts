@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AccountVenueSnapshot } from "../domain/models.js";
+import type { ProjectXOrderOwnershipSnapshot } from "../domain/order-ownership.js";
 import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
@@ -24,6 +25,7 @@ export class LocalGatewayServer {
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly packet: () => DirectDecisionPacket,
     private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
+    private readonly ownership: () => ProjectXOrderOwnershipSnapshot,
     private readonly coordinator: ExecutionCoordinator,
   ) {}
 
@@ -78,6 +80,10 @@ export class LocalGatewayServer {
           count: events.length,
           events,
         });
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/ownership") {
+        this.json(response, 200, this.ownership());
         return;
       }
       if (request.method === "POST" && url.pathname === "/intent") {
