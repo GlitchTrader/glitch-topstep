@@ -8,6 +8,7 @@ import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXApiClient } from "./projectx/client.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
+import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
@@ -121,18 +122,22 @@ export class GlitchTopstepService {
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
       () => {
+        const recordedAt = new Date();
         const current = snapshot();
+        const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
         const executionRecovery = this.executionStore.recoveryStatus();
         return {
           schema_version: "glitch.direct.health.v2",
-          status: current.stateComplete && !executionRecovery.blockingAmbiguity
+          status: quality.stateComplete && !executionRecovery.blockingAmbiguity
             ? "ok"
             : "degraded",
           trading_mode: this.config.tradingMode,
-          recorded_utc: new Date().toISOString(),
+          recorded_utc: recordedAt.toISOString(),
           data_quality: {
-            state_complete: current.stateComplete,
-            issues: current.stateIssues,
+            state_complete: quality.stateComplete,
+            issues: quality.issues,
+            quote_age_ms: quality.quoteAgeMs,
+            state_age_ms: quality.stateAgeMs,
             operational: current.operational,
           },
           execution_recovery: executionRecovery,
