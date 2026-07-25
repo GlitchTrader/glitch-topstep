@@ -10,6 +10,10 @@ import {
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "../domain/operator.js";
 import { calculateRiskBudget } from "../risk/mll.js";
+import {
+  evaluateSnapshotDataQuality,
+  type SnapshotDataQuality,
+} from "../state/data-quality.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -55,6 +59,8 @@ export interface DirectDecisionPacket {
   data_quality: {
     state_complete: boolean;
     issues: string[];
+    quote_age_ms: number | null;
+    state_age_ms: number | null;
     generation: number;
     user_stream_state: string;
     market_stream_state: string;
@@ -95,6 +101,7 @@ export function canonicalDecisionState(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
   recovery: ExecutionRecoveryStatus,
+  quality: SnapshotDataQuality,
 ): Record<string, unknown> {
   return {
     account: snapshot.account,
@@ -107,8 +114,10 @@ export function canonicalDecisionState(
     unrealizedPnl: snapshot.unrealizedPnl,
     conservativeEquity: snapshot.conservativeEquity,
     operational: snapshot.operational,
-    stateIssues: snapshot.stateIssues,
-    stateComplete: snapshot.stateComplete,
+    dataQuality: {
+      stateComplete: quality.stateComplete,
+      issues: quality.issues,
+    },
     policy,
     recovery,
   };
@@ -118,16 +127,17 @@ export function decisionStateHash(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
   recovery: ExecutionRecoveryStatus,
+  quality: SnapshotDataQuality,
 ): string {
   return createHash("sha256")
-    .update(JSON.stringify(canonicalDecisionState(snapshot, policy, recovery)))
+    .update(JSON.stringify(canonicalDecisionState(snapshot, policy, recovery, quality)))
     .digest("hex");
 }
 
 export function buildDecisionPacket(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
-  _risk: RiskSettings,
+  risk: RiskSettings,
   recovery: ExecutionRecoveryStatus,
   instrument: string,
   tradingMode: "disabled" | "shadow" | "armed",
@@ -140,7 +150,8 @@ export function buildDecisionPacket(
   const riskBudget = calculateRiskBudget(snapshot.conservativeEquity, policy);
   const remainingCapacity = Math.max(0, policy.maxContracts - snapshot.totalOpenContracts);
   const quote = snapshot.quote;
-  const snapshotHash = decisionStateHash(snapshot, policy, recovery);
+  const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
+  const snapshotHash = decisionStateHash(snapshot, policy, recovery, quality);
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
 
   return {
@@ -187,8 +198,10 @@ export function buildDecisionPacket(
       volume: quote?.volume ?? null,
     },
     data_quality: {
-      state_complete: snapshot.stateComplete,
-      issues: [...snapshot.stateIssues],
+      state_complete: quality.stateComplete,
+      issues: [...quality.issues],
+      quote_age_ms: quality.quoteAgeMs,
+      state_age_ms: quality.stateAgeMs,
       generation: snapshot.operational.generation,
       user_stream_state: snapshot.operational.userStream.state,
       market_stream_state: snapshot.operational.marketStream.state,
@@ -214,7 +227,7 @@ export function buildDecisionPacket(
       gateway_mode: tradingMode,
       new_exposure_technically_supported:
         tradingMode !== "disabled"
-        && snapshot.stateComplete
+        && quality.stateComplete
         && snapshot.account.canTrade
         && snapshot.instrumentOpenContracts === 0
         && snapshot.openOrders.length === 0
