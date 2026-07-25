@@ -227,24 +227,32 @@ export class VenueStateStore {
     const instrumentOpenContracts = positions
       .filter((position) => position.contractId === contractId)
       .reduce((sum, position) => sum + Math.abs(position.size), 0);
-    const unrealizedPnl = quote
-      ? positions.reduce((sum, position) => {
-          const positionContract = this.contracts.get(position.contractId);
-          const positionQuote = this.quotes.get(position.contractId)?.value;
-          if (!positionContract || !positionQuote) {
-            return sum;
-          }
-          const pointValue = positionContract.tickValue / positionContract.tickSize;
-          const mark = position.type === 1 ? positionQuote.bestBid : positionQuote.bestAsk;
-          const points = position.type === 1
-            ? mark - position.averagePrice
-            : position.averagePrice - mark;
-          return sum + points * pointValue * position.size;
-        }, 0)
-      : 0;
+
+    const positionDataIssues = new Set<string>();
+    const unrealizedPnl = positions.reduce((sum, position) => {
+      const positionContract = this.contracts.get(position.contractId);
+      if (!positionContract) {
+        positionDataIssues.add(`position_contract_missing:${position.contractId}`);
+        return sum;
+      }
+      const positionQuote = this.quotes.get(position.contractId)?.value;
+      if (!positionQuote) {
+        positionDataIssues.add(`position_quote_missing:${position.contractId}`);
+        return sum;
+      }
+      const pointValue = positionContract.tickValue / positionContract.tickSize;
+      const mark = position.type === 1 ? positionQuote.bestBid : positionQuote.bestAsk;
+      const points = position.type === 1
+        ? mark - position.averagePrice
+        : position.averagePrice - mark;
+      return sum + points * pointValue * position.size;
+    }, 0);
 
     const operational = this.operationalStatus();
-    const stateIssues = this.stateIssues(quote, operational);
+    const stateIssues = [
+      ...this.stateIssues(quote, operational),
+      ...positionDataIssues,
+    ];
     const capturedAt = this.latestStateTimestamp(accountId, contractId);
     return {
       capturedAt,
