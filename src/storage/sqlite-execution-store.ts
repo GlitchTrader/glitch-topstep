@@ -140,18 +140,35 @@ export class SqliteExecutionStore {
     customTag: string | null,
     createdUtc: string,
   ): void {
-    this.database.prepare(`
-      INSERT INTO execution_outbox (
-        intent_id, operation, state, custom_tag, request_json, created_utc,
-        submitting_utc, resolved_utc, provider_order_id, last_error
-      ) VALUES (?, ?, 'prepared', ?, ?, ?, NULL, NULL, NULL, NULL)
-    `).run(
-      intentId,
-      operation,
-      customTag,
-      JSON.stringify(request),
-      createdUtc,
-    );
+    if (operation !== "place_order" && operation !== "close_position") {
+      throw new Error(`execution_mutation_operation_invalid:${operation}`);
+    }
+
+    this.inTransaction(() => {
+      if (operation === "place_order") {
+        const pending = this.entrySubmissionIntentId();
+        if (pending) {
+          throw new Error(`entry_submission_pending:${pending}`);
+        }
+      }
+
+      this.database.prepare(`
+        INSERT INTO execution_outbox (
+          intent_id, operation, state, custom_tag, request_json, created_utc,
+          submitting_utc, resolved_utc, provider_order_id, last_error
+        ) VALUES (?, ?, 'prepared', ?, ?, ?, NULL, NULL, NULL, NULL)
+      `).run(
+        intentId,
+        operation,
+        customTag,
+        JSON.stringify(request),
+        createdUtc,
+      );
+
+      if (operation === "place_order") {
+        this.setMeta("entry_submission_latch", intentId);
+      }
+    });
   }
 
   public markMutationSubmitting(intentId: string, atUtc: string): void {
@@ -176,7 +193,7 @@ export class SqliteExecutionStore {
       resolvedUtc: atUtc,
       providerOrderId: null,
       lastError: null,
-    });
+    }, true);
   }
 
   public markMutationRejected(intentId: string, error: string, atUtc: string): void {
@@ -184,7 +201,7 @@ export class SqliteExecutionStore {
       resolvedUtc: atUtc,
       providerOrderId: null,
       lastError: error,
-    });
+    }, true);
   }
 
   public markMutationAmbiguous(intentId: string, error: string, atUtc: string): void {
@@ -193,6 +210,29 @@ export class SqliteExecutionStore {
       providerOrderId: null,
       lastError: error,
     });
+  }
+
+  public entrySubmissionIntentId(): string | null {
+    return this.meta("entry_submission_latch");
+  }
+
+  public clearEntrySubmissionLatch(intentId: string): boolean {
+    const result = this.database.prepare(`
+      DELETE FROM runtime_meta
+      WHERE key = 'entry_submission_latch' AND value = ?
+    `).run(intentId);
+    return Number(result.changes) === 1;
+  }
+
+  public mutationForIntent(intentId: string): StoredExecutionMutation | null {
+    const row = this.database.prepare(`
+      SELECT
+        intent_id, operation, state, custom_tag, request_json, created_utc,
+        submitting_utc, resolved_utc, provider_order_id, last_error
+      FROM execution_outbox
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    return row ? this.mutationFromRow(row) : null;
   }
 
   public unresolvedMutations(): StoredExecutionMutation[] {
@@ -260,8 +300,12 @@ export class SqliteExecutionStore {
     const lastRecoveryError = this.meta("last_recovery_error");
     const unresolvedMutations = Number(counts.unresolved ?? 0);
     const ambiguousMutations = Number(counts.ambiguous ?? 0);
+    const blockingAmbiguity = ambiguousMutations > 0;
+    const entrySubmissionPending = this.entrySubmissionIntentId() !== null;
     return {
-      blockingAmbiguity: ambiguousMutations > 0,
+      blockingAmbiguity,
+      entrySubmissionPending,
+      blockingNewExposure: blockingAmbiguity || entrySubmissionPending,
       unresolvedMutations,
       ambiguousMutations,
       lastRecoveryUtc,
@@ -349,31 +393,40 @@ export class SqliteExecutionStore {
       providerOrderId?: number | null;
       lastError?: string | null;
     },
+    clearEntryLatch = false,
   ): void {
-    const current = this.database.prepare(`
-      SELECT state, submitting_utc, resolved_utc, provider_order_id, last_error
-      FROM execution_outbox
-      WHERE intent_id = ?
-    `).get(intentId) as SqlRow | undefined;
-    if (!current) {
-      throw new Error(`execution_mutation_not_found:${intentId}`);
-    }
-    const state = String(current.state) as ExecutionMutationState;
-    if (!allowedStates.includes(state)) {
-      throw new Error(`execution_mutation_transition_invalid:${state}->${nextState}`);
-    }
-    this.database.prepare(`
-      UPDATE execution_outbox
-      SET state = ?, submitting_utc = ?, resolved_utc = ?, provider_order_id = ?, last_error = ?
-      WHERE intent_id = ?
-    `).run(
-      nextState,
-      values.submittingUtc === undefined ? current.submitting_utc : values.submittingUtc,
-      values.resolvedUtc === undefined ? current.resolved_utc : values.resolvedUtc,
-      values.providerOrderId === undefined ? current.provider_order_id : values.providerOrderId,
-      values.lastError === undefined ? current.last_error : values.lastError,
-      intentId,
-    );
+    this.inTransaction(() => {
+      const current = this.database.prepare(`
+        SELECT state, submitting_utc, resolved_utc, provider_order_id, last_error
+        FROM execution_outbox
+        WHERE intent_id = ?
+      `).get(intentId) as SqlRow | undefined;
+      if (!current) {
+        throw new Error(`execution_mutation_not_found:${intentId}`);
+      }
+      const state = String(current.state) as ExecutionMutationState;
+      if (!allowedStates.includes(state)) {
+        throw new Error(`execution_mutation_transition_invalid:${state}->${nextState}`);
+      }
+      this.database.prepare(`
+        UPDATE execution_outbox
+        SET state = ?, submitting_utc = ?, resolved_utc = ?, provider_order_id = ?, last_error = ?
+        WHERE intent_id = ?
+      `).run(
+        nextState,
+        values.submittingUtc === undefined ? current.submitting_utc : values.submittingUtc,
+        values.resolvedUtc === undefined ? current.resolved_utc : values.resolvedUtc,
+        values.providerOrderId === undefined ? current.provider_order_id : values.providerOrderId,
+        values.lastError === undefined ? current.last_error : values.lastError,
+        intentId,
+      );
+      if (clearEntryLatch) {
+        this.database.prepare(`
+          DELETE FROM runtime_meta
+          WHERE key = 'entry_submission_latch' AND value = ?
+        `).run(intentId);
+      }
+    });
   }
 
   private mutationFromRow(row: SqlRow): StoredExecutionMutation {
@@ -403,6 +456,18 @@ export class SqliteExecutionStore {
       INSERT INTO runtime_meta(key, value) VALUES (?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `).run(key, value);
+  }
+
+  private inTransaction<T>(action: () => T): T {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = action();
+      this.database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   private parseJson<T>(value: unknown, name: string): T {
