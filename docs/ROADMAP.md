@@ -61,6 +61,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] prove historical order search, timestamp boundaries, and custom-tag retention
 - [ ] prove historical trade search, timestamp boundaries, and `trade.orderId` retention
 - [ ] determine any undocumented order/trade result cap or pagination requirement
+- [ ] compare deterministic replay with the same TopstepX account state
 - [ ] measure quote, print, and DOM event rates on the target machine
 - [ ] validate evidence retention against actual disk growth
 
@@ -89,11 +90,16 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] reject strictly older provider versions without blocking same-timestamp corrections
 - [x] coalesce concurrent sync runs and wait for active work during shutdown
 - [x] expose history status through `/health` and the service-start ledger
+- [x] deterministic query-only state rebuild from retained evidence
+- [x] stable canonical state and evidence hashes
+- [x] through-sequence replay and bounded batched SQLite scans
+- [x] explicit sequence-gap, invalid-payload, unsupported-event, and truncation reporting
+- [x] terminal order, flat position, correction, and voided-trade replay semantics
+- [x] offline replay CLI; no large replay on the trading gateway event loop
 - [ ] persist raw REST response envelopes where contract-drift forensics require them
-- [ ] deterministic state rebuild from the event corpus
-- [ ] correction and contradiction semantics during replay
 - [ ] evidence archive/export workflow
 - [ ] real disk-full and write-failure acceptance
+- [ ] compare replay against live state across every observed ProjectX payload variant
 
 ## R4 — provider order and protection ownership
 
@@ -160,7 +166,10 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 
 ## R8 — replay and comparative evaluation
 
-- [ ] replay raw provider events into canonical state and packets
+- [x] replay retained provider events into canonical state
+- [x] replay exact orders, trades, quote, print, depth, and REST snapshot corrections
+- [x] report incomplete retained corpora rather than claiming full truth
+- [ ] reconstruct canonical packets from replayed state and policy evidence
 - [ ] deterministic decision and receipt replay
 - [ ] simulated fills, fees, and slippage
 - [ ] compare cognition versions on identical evidence
