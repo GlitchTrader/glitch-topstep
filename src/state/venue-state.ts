@@ -329,11 +329,15 @@ export class VenueStateStore {
   }
 
   private latestStateTimestamp(accountId: number, contractId: string): string {
+    const accountPositionQuoteTimes = [...this.positions.values()]
+      .filter((entry) => entry.value.accountId === accountId)
+      .map((entry) => this.quotes.get(entry.value.contractId)?.receivedAt ?? new Date(0).toISOString());
     const required = [
       this.accounts.get(accountId)?.receivedAt ?? this.accountSnapshotAt,
       this.positionSnapshotAt,
       this.orderSnapshotAt,
       this.quotes.get(contractId)?.receivedAt ?? new Date(0).toISOString(),
+      ...accountPositionQuoteTimes,
     ];
     const oldest = Math.min(...required.map((value) => new Date(value).getTime()));
     return new Date(oldest).toISOString();
