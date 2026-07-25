@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ProviderEvidenceEvent } from "../src/domain/provider-evidence.js";
 import {
+  ProviderRestSnapshotRecorder,
   recordProviderEventBeforeApply,
   recordProviderLifecycleEvent,
 } from "../src/projectx/provider-event-recorder.js";
@@ -87,5 +88,63 @@ describe("ProjectX provider event recorder", () => {
     );
     assert.equal(events[0]?.source, "projectx_lifecycle");
     assert.equal(events[0]?.normalizedPayload, null);
+  });
+
+  it("deduplicates unchanged canonical REST snapshots", () => {
+    const events: ProviderEvidenceEvent[] = [];
+    const recorder = new ProviderRestSnapshotRecorder({
+      append: (event) => events.push(event),
+    });
+    const base = {
+      receivedUtc: "2026-07-21T12:00:00Z",
+      eventType: "accounts_snapshot",
+      generation: 1,
+      accountId: 101,
+      contractId: null,
+    };
+
+    assert.equal(recorder.recordIfChanged({
+      ...base,
+      normalizedPayload: [{ id: 101, name: "TEST", balance: 1_000 }],
+    }), true);
+    assert.equal(recorder.recordIfChanged({
+      ...base,
+      receivedUtc: "2026-07-21T12:00:03Z",
+      normalizedPayload: [{ balance: 1_000, name: "TEST", id: 101 }],
+    }), false);
+    assert.equal(recorder.recordIfChanged({
+      ...base,
+      receivedUtc: "2026-07-21T12:00:06Z",
+      normalizedPayload: [{ id: 101, name: "TEST", balance: 1_100 }],
+    }), true);
+
+    assert.equal(events.length, 2);
+    assert.equal(events[0]?.receivedUtc, "2026-07-21T12:00:00Z");
+    assert.equal(events[1]?.receivedUtc, "2026-07-21T12:00:06Z");
+  });
+
+  it("does not cache a REST snapshot when persistence fails", () => {
+    let fail = true;
+    let persisted = 0;
+    const recorder = new ProviderRestSnapshotRecorder({
+      append: () => {
+        if (fail) {
+          throw new Error("disk unavailable");
+        }
+        persisted += 1;
+      },
+    });
+    const snapshot = {
+      receivedUtc: "2026-07-21T12:00:00Z",
+      eventType: "positions_snapshot",
+      generation: 1,
+      accountId: 101,
+      contractId: "MNQ",
+      normalizedPayload: [],
+    };
+    assert.throws(() => recorder.recordIfChanged(snapshot), /disk unavailable/);
+    fail = false;
+    assert.equal(recorder.recordIfChanged(snapshot), true);
+    assert.equal(persisted, 1);
   });
 });
