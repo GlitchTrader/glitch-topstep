@@ -51,13 +51,64 @@ describe("ProjectX provider evidence store", () => {
       assert.deepEqual(store.recent().map((event) => event.sequence), [1, 2]);
       assert.deepEqual(store.status(), {
         eventCount: 2,
+        marketEventCount: 1,
+        earliestSequence: 1,
         latestSequence: 2,
         latestReceivedUtc: "2026-07-21T12:00:01Z",
+        marketEventRetention: 500_000,
       });
       store.close();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("prunes only high-frequency market evidence and preserves monotonic identity", () => {
+    const store = new SqliteProviderEvidenceStore(":memory:", {
+      marketEventRetention: 3,
+      marketPruneInterval: 1,
+    });
+    const append = (
+      source: "projectx_market_stream" | "projectx_user_stream" | "projectx_rest",
+      eventType: string,
+      second: number,
+    ) => store.append({
+      receivedUtc: `2026-07-21T12:00:0${second}Z`,
+      providerTimestampUtc: null,
+      source,
+      eventType,
+      generation: 1,
+      accountId: source === "projectx_market_stream" ? null : 101,
+      contractId: "MNQ",
+      providerEntityId: `${eventType}-${second}`,
+      rawPayload: { second },
+      normalizedPayload: { second },
+    });
+
+    append("projectx_user_stream", "order", 0);
+    append("projectx_market_stream", "quote", 1);
+    append("projectx_market_stream", "trade", 2);
+    append("projectx_rest", "positions_snapshot", 3);
+    append("projectx_market_stream", "depth", 4);
+    append("projectx_market_stream", "quote", 5);
+    const latest = append("projectx_market_stream", "trade", 6);
+
+    const events = store.recent();
+    assert.deepEqual(events.map((event) => event.sequence), [1, 4, 5, 6, 7]);
+    assert.deepEqual(
+      events.filter((event) => event.source === "projectx_market_stream").map((event) => event.sequence),
+      [5, 6, 7],
+    );
+    assert.equal(latest.sequence, 7);
+    assert.deepEqual(store.status(), {
+      eventCount: 5,
+      marketEventCount: 3,
+      earliestSequence: 1,
+      latestSequence: 7,
+      latestReceivedUtc: "2026-07-21T12:00:06Z",
+      marketEventRetention: 3,
+    });
+    store.close();
   });
 
   it("redacts nested credential key variants before persistence", () => {
@@ -108,11 +159,18 @@ describe("ProjectX provider evidence store", () => {
     store.close();
   });
 
-  it("rejects unbounded evidence reads", () => {
+  it("rejects unbounded evidence reads and invalid internal options", () => {
     const store = new SqliteProviderEvidenceStore(":memory:");
     assert.throws(() => store.recent(0), /provider_evidence_limit_invalid/);
     assert.throws(() => store.recent(1_001), /provider_evidence_limit_invalid/);
     store.close();
+    assert.throws(
+      () => new SqliteProviderEvidenceStore(":memory:", {
+        marketEventRetention: 3,
+        marketPruneInterval: 4,
+      }),
+      /market_prune_interval_exceeds_retention/,
+    );
   });
 
   it("redacts objects without mutating the caller payload", () => {
