@@ -1,9 +1,11 @@
 import type { AppConfig } from "../config.js";
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
+import type { MarketObservationState } from "../domain/market-observation.js";
 import type { AccountVenueSnapshot } from "../domain/models.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import {
   buildDecisionPacket,
+  emptyMarketObservationState,
   type DirectDecisionPacket,
 } from "./packet-builder.js";
 
@@ -14,6 +16,7 @@ export class DecisionPacketService {
     private readonly store: SqliteExecutionStore,
     private readonly recovery: () => ExecutionRecoveryStatus,
     private readonly now: () => number = Date.now,
+    private readonly marketObservation: () => MarketObservationState = emptyMarketObservationState,
   ) {}
 
   public current(): DirectDecisionPacket {
@@ -27,6 +30,7 @@ export class DecisionPacketService {
       this.config.tradingMode,
       this.config.packetLeaseMs,
       new Date(nowMs),
+      this.marketObservation(),
     );
     this.store.recordIssuedPacket(packet);
     return packet;

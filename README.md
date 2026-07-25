@@ -80,6 +80,11 @@ Implemented:
 - history synchronization status exposed through `/health` and the service-start ledger;
 - deterministic offline replay of retained ProjectX evidence into canonical account, contract, position, order, trade, quote, print, and depth state;
 - stable replay state/evidence hashes, sequence-gap detection, invalid-payload reporting, through-sequence replay, and bounded/truncated scans;
+- native ProjectX 1m, 5m, 15m, and 60m bar retrieval on startup, reconnect, and every minute;
+- OHLCV validation, duplicate timestamp replacement, rejected-bar counts, gaps, and partial-bar provenance;
+- strategy-neutral ATR, realized volatility, rolling VWAP, EMA levels/slopes/distances, range location, candle anatomy, and volume z-score;
+- preservation of the last successful observation when a later bar refresh fails;
+- exact market-observation state included in decision packet identity without becoming an execution eligibility gate;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -88,9 +93,10 @@ Still required before live promotion:
 - verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
 - actual process-kill and Windows restart fixtures for every durable execution window;
 - raw REST response envelopes where needed for contract-drift forensics;
-- verified ProjectX timestamp-boundary semantics and any undocumented history result limits or pagination behavior;
+- verified ProjectX timestamp-boundary semantics and any undocumented history or bar result limits or pagination behavior;
 - real partial-fill, correction, void, and late-update acceptance;
 - replay comparison with live TopstepX state and explicit correction semantics for every observed payload variant;
+- numerical comparison of native bar series and features with independent TopstepX/chart fixtures;
 - provider-created stop and target child identity or another explicit protection relationship;
 - aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
@@ -99,7 +105,8 @@ Still required before live promotion:
 - independently protected additions and multiple tranches;
 - canonical completed outcomes for Hermes learning;
 - authoritative account-stage, loss-floor, payout, scaling, session, holiday, and special-close reconciliation;
-- instrument-general observation features and acceptance beyond the initial configured contract;
+- session/prior-session structure and deterministic order-flow aggregation;
+- acceptance on at least two Topstep-supported products;
 - frozen after-fee shadow evidence, first complete account lifecycle, and payout evidence.
 
 The current parity and promotion ledger is [`docs/PARITY.md`](docs/PARITY.md).
@@ -160,6 +167,17 @@ npm run replay:evidence -- \
 
 Replay reports gaps and truncation rather than pretending retained evidence is complete. It is an analysis and verification surface, not an execution or cognition authority.
 
+Multi-timeframe bars are also evidence, not a coded strategy:
+
+```text
+1m  immediate path and timing context
+5m  local structure
+15m broader structure and volatility
+60m location and regime
+```
+
+No agreement stack is required. Partial bars remain explicitly incomplete; gaps remain unexplained unless session evidence proves their cause. A bar-source failure is visible in `market_observation.last_error` but does not alter `new_exposure_technically_supported`.
+
 ## Requirements
 
 - Node.js 22+
@@ -179,9 +197,9 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health              no authentication; truthful operational, recovery, evidence, and history status
+GET  /health              no authentication; truthful operational, recovery, evidence, history, and market-observation status
 GET  /state               bearer token required
-GET  /packet              bearer token required
+GET  /packet              bearer token required; includes exact market observation state
 GET  /evidence?limit=100  bearer token required; maximum 1000 events
 GET  /ownership           bearer token required; exact entry/fill identity, protection remains unknown
 POST /intent              bearer token required; strict glitch.intent.v2
@@ -189,7 +207,7 @@ POST /intent              bearer token required; strict glitch.intent.v2
 
 ```bash
 curl -H "Authorization: Bearer $GLITCH_LOCAL_TOKEN" \
-  "http://127.0.0.1:8790/ownership"
+  "http://127.0.0.1:8790/packet"
 ```
 
 Execution and telemetry use separate stores:

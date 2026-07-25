@@ -6,6 +6,7 @@ import type { OrderInfo, PositionInfo } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
+import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
 import { ProjectXApiClient } from "./projectx/client.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
@@ -23,6 +24,9 @@ const DEFAULT_PROVIDER_HISTORY = {
   windowMinutes: 1_440,
   syncIntervalMs: 60_000,
 } as const;
+const MARKET_OBSERVATION_REFRESH_MS = 60_000;
+const MARKET_OBSERVATION_BAR_LIMIT = 500;
+const MARKET_OBSERVATION_LOOKBACK_MULTIPLIER = 3;
 
 export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
@@ -33,12 +37,14 @@ export class GlitchTopstepService {
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private readonly historySync: ProjectXHistorySyncService;
   private readonly historySyncIntervalMs: number;
+  private readonly marketObservation: ProjectXMarketObservationService;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
   private historySyncTimer: NodeJS.Timeout | null = null;
+  private marketObservationTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
   private storesClosed = false;
 
@@ -71,6 +77,16 @@ export class GlitchTopstepService {
         overlapMinutes: history.overlapMinutes,
         windowMinutes: history.windowMinutes,
         generation: () => this.state.operationalStatus().generation,
+      },
+    );
+    this.marketObservation = new ProjectXMarketObservationService(
+      this.api,
+      {
+        contractId: config.scope.contractId,
+        instrument: config.scope.instrument,
+        live: config.scope.liveMarketData,
+        barLimit: MARKET_OBSERVATION_BAR_LIMIT,
+        lookbackMultiplier: MARKET_OBSERVATION_LOOKBACK_MULTIPLIER,
       },
     );
   }
@@ -130,7 +146,10 @@ export class GlitchTopstepService {
     this.state.replaceAccounts(accounts, receivedAt);
     this.state.replacePositions(positions, receivedAt);
     this.state.replaceOrders(orders, receivedAt);
-    await this.historySync.sync();
+    await Promise.all([
+      this.historySync.sync(),
+      this.marketObservation.refresh(),
+    ]);
     const initialRecovery = await recoverExecutionMutations(
       this.executionStore,
       this.api,
@@ -150,6 +169,8 @@ export class GlitchTopstepService {
       snapshot,
       this.executionStore,
       () => this.executionStore.recoveryStatus(),
+      Date.now,
+      () => this.marketObservation.current(),
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -165,7 +186,9 @@ export class GlitchTopstepService {
           await Promise.all([
             this.reconcile(),
             this.historySync.sync(),
+            this.marketObservation.refresh(),
           ]);
+          this.packets?.invalidateAll();
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
@@ -191,6 +214,13 @@ export class GlitchTopstepService {
     }, this.historySyncIntervalMs);
     this.historySyncTimer.unref();
 
+    this.marketObservationTimer = setInterval(() => {
+      void this.marketObservation.refresh().then(() => {
+        this.packets?.invalidateAll();
+      });
+    }, MARKET_OBSERVATION_REFRESH_MS);
+    this.marketObservationTimer.unref();
+
     const coordinator = new ExecutionCoordinator(
       this.config,
       this.api,
@@ -208,12 +238,14 @@ export class GlitchTopstepService {
         const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
         const executionRecovery = this.executionStore.recoveryStatus();
         const providerHistory = this.historySync.currentStatus();
+        const marketObservation = this.marketObservation.current();
         return {
           schema_version: "glitch.direct.health.v2",
           status:
             quality.stateComplete
             && !executionRecovery.blockingAmbiguity
             && providerHistory.lastError === null
+            && marketObservation.last_error === null
               ? "ok"
               : "degraded",
           trading_mode: this.config.tradingMode,
@@ -228,6 +260,7 @@ export class GlitchTopstepService {
           execution_recovery: executionRecovery,
           provider_evidence: this.providerEvidenceStore.status(),
           provider_history: providerHistory,
+          market_observation: marketObservation,
         };
       },
       snapshot,
@@ -265,11 +298,16 @@ export class GlitchTopstepService {
         execution_recovery: this.executionStore.recoveryStatus(),
         provider_evidence: this.providerEvidenceStore.status(),
         provider_history: this.historySync.currentStatus(),
+        market_observation: this.marketObservation.current(),
       },
     });
   }
 
   public async stop(): Promise<void> {
+    if (this.marketObservationTimer) {
+      clearInterval(this.marketObservationTimer);
+      this.marketObservationTimer = null;
+    }
     if (this.historySyncTimer) {
       clearInterval(this.historySyncTimer);
       this.historySyncTimer = null;
@@ -286,7 +324,10 @@ export class GlitchTopstepService {
       this.gateway?.stop() ?? Promise.resolve(),
       this.realtime?.stop() ?? Promise.resolve(),
     ]);
-    await this.historySync.waitForIdle();
+    await Promise.all([
+      this.historySync.waitForIdle(),
+      this.marketObservation.waitForIdle(),
+    ]);
     this.gateway = null;
     this.realtime = null;
     this.packets = null;
