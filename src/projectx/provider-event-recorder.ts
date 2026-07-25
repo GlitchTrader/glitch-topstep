@@ -77,6 +77,8 @@ export function recordProviderEventBeforeApply<T>(
 ): T {
   const normalized = input.parse();
   const identity = input.identity(normalized);
+  const relatedProviderEntityId = identity.relatedProviderEntityId
+    ?? explicitRelatedProviderEntityId(input.eventType, normalized);
   input.sink.append({
     receivedUtc: input.receivedUtc,
     providerTimestampUtc: identity.providerTimestampUtc,
@@ -86,7 +88,7 @@ export function recordProviderEventBeforeApply<T>(
     accountId: identity.accountId,
     contractId: identity.contractId,
     providerEntityId: identity.providerEntityId,
-    relatedProviderEntityId: identity.relatedProviderEntityId ?? null,
+    relatedProviderEntityId,
     rawPayload: input.rawPayload,
     normalizedPayload: normalized,
   });
@@ -104,6 +106,16 @@ export function recordProviderLifecycleEvent(
     source: "projectx_lifecycle",
     normalizedPayload: null,
   });
+}
+
+function explicitRelatedProviderEntityId(eventType: string, value: unknown): string | null {
+  if (eventType !== "trade" || !value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const orderId = (value as Record<string, unknown>).orderId;
+  return typeof orderId === "number" && Number.isInteger(orderId)
+    ? String(orderId)
+    : null;
 }
 
 function stableJson(value: unknown): string {
