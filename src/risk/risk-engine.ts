@@ -6,6 +6,7 @@ import type {
   TradeIntent,
   ValidatedEntry,
 } from "../domain/models.js";
+import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
 import { calculateRiskBudget } from "./mll.js";
 
 export class RiskRejectedError extends Error {
@@ -37,8 +38,28 @@ export function validateEntryRisk(
   if (intent.action !== "ENTER_LONG" && intent.action !== "ENTER_SHORT") {
     throw new RiskRejectedError("entry_action_required");
   }
-  if (!snapshot.stateComplete) {
-    throw new RiskRejectedError("venue_state_incomplete", snapshot.stateIssues.join(","));
+
+  const quality = evaluateSnapshotDataQuality(snapshot, settings, now);
+  if (!quality.stateComplete) {
+    if (quality.issues.includes("quote_stale")) {
+      throw new RiskRejectedError("quote_stale", String(quality.quoteAgeMs));
+    }
+    if (quality.issues.includes("account_state_stale")) {
+      throw new RiskRejectedError("account_state_stale", String(quality.stateAgeMs));
+    }
+    if (quality.issues.includes("quote_timestamp_future")) {
+      throw new RiskRejectedError("quote_timestamp_future", String(quality.quoteAgeMs));
+    }
+    if (quality.issues.includes("account_state_timestamp_future")) {
+      throw new RiskRejectedError("account_state_timestamp_future", String(quality.stateAgeMs));
+    }
+    if (quality.issues.includes("quote_timestamp_invalid")) {
+      throw new RiskRejectedError("quote_timestamp_invalid");
+    }
+    if (quality.issues.includes("account_state_timestamp_invalid")) {
+      throw new RiskRejectedError("account_state_timestamp_invalid");
+    }
+    throw new RiskRejectedError("venue_state_incomplete", quality.issues.join(","));
   }
   if (!snapshot.account.canTrade) {
     throw new RiskRejectedError("account_cannot_trade");
@@ -57,19 +78,6 @@ export function validateEntryRisk(
   }
   if (!snapshot.quote) {
     throw new RiskRejectedError("quote_missing");
-  }
-
-  const intentAge = now.getTime() - new Date(intent.createdUtc).getTime();
-  const quoteAge = now.getTime() - new Date(snapshot.quote.timestamp).getTime();
-  const stateAge = now.getTime() - new Date(snapshot.capturedAt).getTime();
-  if (intentAge < -2_000 || intentAge > settings.maxIntentAgeMs) {
-    throw new RiskRejectedError("intent_stale", String(intentAge));
-  }
-  if (quoteAge < -2_000 || quoteAge > settings.maxQuoteAgeMs) {
-    throw new RiskRejectedError("quote_stale", String(quoteAge));
-  }
-  if (stateAge < -2_000 || stateAge > settings.maxStateAgeMs) {
-    throw new RiskRejectedError("account_state_stale", String(stateAge));
   }
 
   // The initial gateway cannot yet prove independent additions or working-order ownership.
