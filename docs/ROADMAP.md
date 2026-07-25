@@ -60,7 +60,8 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
 - [ ] prove historical order search, timestamp boundaries, and custom-tag retention
 - [ ] prove historical trade search, timestamp boundaries, and `trade.orderId` retention
-- [ ] determine any undocumented order/trade result cap or pagination requirement
+- [ ] prove History/retrieveBars ordering, timeframe, limit, and partial-bar semantics
+- [ ] determine any undocumented order/trade or bar result cap or pagination requirement
 - [ ] compare deterministic replay with the same TopstepX account state
 - [ ] measure quote, print, and DOM event rates on the target machine
 - [ ] validate evidence retention against actual disk growth
@@ -155,13 +156,21 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 ## R7 — instrument-general observation engine
 
 - [ ] active Topstep contract discovery and rollover evidence
-- [ ] native tick, point value, session, and fee metadata
-- [ ] integrated 1m, 5m, 15m, and 60m OHLCV normalization
-- [ ] gap, partial-bar, and timestamp provenance
+- [x] configured contract tick and point-value metadata
+- [x] native 1m, 5m, 15m, and 60m ProjectX bar retrieval
+- [x] OHLCV validation, chronological normalization, and duplicate timestamp replacement
+- [x] rejected-bar counts, timestamp gaps, and live partial-bar provenance
+- [x] ATR-14 and realized-volatility evidence
+- [x] rolling VWAP-20 and distance evidence
+- [x] EMA-20, EMA-50, EMA-200, distances, and slopes
+- [x] range location, candle body/wicks, close location, and volume z-score
+- [x] preserve the last successful observation during source failure
+- [x] refresh on startup, reconnect, and every minute with coalescing and shutdown waiting
+- [x] include exact observation state in packet identity
+- [x] publish observation degradation without turning it into an execution gate
+- [x] prohibit signal, score, action, or strategy eligibility fields in the feature contract
 - [ ] session and prior-session structure
-- [ ] volatility, trend, range, and location evidence
-- [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence
-- [ ] descriptive normalized features without a coded entry strategy
+- [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity aggregation
 - [ ] acceptance on at least two Topstep-supported products
 
 ## R8 — replay and comparative evaluation
@@ -202,6 +211,6 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - no Apex or NinjaTrader implementation assumptions in the Topstep core;
 - no fixed strategy, indicator trigger, quantity schedule, risk percentage, profit quota, grid, or martingale rule in Glitch;
 - no credentials or numeric provider identifiers in Hermes;
-- no hidden cognition gate based on packet quality, capacity, policy, or minimum history;
+- no hidden cognition gate based on packet quality, capacity, policy, bars, features, or minimum history;
 - no order, fill, position, stop, target, or OCO ownership inferred only from price, timing, side similarity, or geometry;
 - no profitability, payout, unattended-operation, funded-stage, or live-readiness claim inferred from tests or architecture.
