@@ -1,4 +1,7 @@
-import type { ProviderHistorySyncResult } from "../domain/provider-history.js";
+import type {
+  ProviderHistorySyncResult,
+  ProviderHistorySyncStatus,
+} from "../domain/provider-history.js";
 import type { OrderInfo, TradeInfo } from "../domain/models.js";
 import { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
 
@@ -61,7 +64,7 @@ export class ProjectXHistorySyncService {
     this.syncKey = options.syncKey ?? `projectx-history:${options.accountId}`;
   }
 
-  public currentStatus() {
+  public currentStatus(): ProviderHistorySyncStatus {
     return this.evidence.historySyncStatus(this.syncKey);
   }
 
@@ -69,21 +72,43 @@ export class ProjectXHistorySyncService {
     if (this.inFlight) {
       return this.inFlight;
     }
-    const run = this.run().finally(() => {
-      if (this.inFlight === run) {
-        this.inFlight = null;
-      }
-    });
+    const run = this.run();
     this.inFlight = run;
+    void run.then(
+      () => {
+        if (this.inFlight === run) {
+          this.inFlight = null;
+        }
+      },
+      () => {
+        if (this.inFlight === run) {
+          this.inFlight = null;
+        }
+      },
+    );
     return run;
+  }
+
+  public async waitForIdle(): Promise<void> {
+    if (!this.inFlight) {
+      return;
+    }
+    await this.inFlight.then(
+      () => undefined,
+      () => undefined,
+    );
   }
 
   private async run(): Promise<ProviderHistorySyncResult> {
     const targetEnd = this.now().getTime();
     const existing = this.evidence.historySyncStatus(this.syncKey);
-    const initialStart = existing.cursorUtc === null
+    const cursorMs = existing.cursorUtc === null ? null : Date.parse(existing.cursorUtc);
+    if (cursorMs !== null && !Number.isFinite(cursorMs)) {
+      throw new Error("provider_history_cursor_invalid");
+    }
+    const initialStart = cursorMs === null
       ? targetEnd - this.options.initialLookbackHours * HOUR_MS
-      : Date.parse(existing.cursorUtc) - this.options.overlapMinutes * MINUTE_MS;
+      : cursorMs - this.options.overlapMinutes * MINUTE_MS;
     let windowStart = Math.min(initialStart, targetEnd);
     const windowSizeMs = this.options.windowMinutes * MINUTE_MS;
     let attemptedWindows = 0;
