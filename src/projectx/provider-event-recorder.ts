@@ -9,6 +9,7 @@ export interface ProviderEventIdentity {
   accountId: number | null;
   contractId: string | null;
   providerEntityId: string | null;
+  relatedProviderEntityId?: string | null;
   providerTimestampUtc: string | null;
 }
 
@@ -62,6 +63,7 @@ export class ProviderRestSnapshotRecorder {
       accountId: input.accountId,
       contractId: input.contractId,
       providerEntityId: input.providerEntityId ?? null,
+      relatedProviderEntityId: null,
       rawPayload: null,
       normalizedPayload: input.normalizedPayload ?? null,
     });
@@ -84,6 +86,7 @@ export function recordProviderEventBeforeApply<T>(
     accountId: identity.accountId,
     contractId: identity.contractId,
     providerEntityId: identity.providerEntityId,
+    relatedProviderEntityId: identity.relatedProviderEntityId ?? null,
     rawPayload: input.rawPayload,
     normalizedPayload: normalized,
   });
@@ -97,6 +100,7 @@ export function recordProviderLifecycleEvent(
 ): void {
   sink.append({
     ...event,
+    relatedProviderEntityId: event.relatedProviderEntityId ?? null,
     source: "projectx_lifecycle",
     normalizedPayload: null,
   });
