@@ -7,7 +7,7 @@ ProjectX market and account truth
              │
              ▼
 Glitch Topstep
-  normalize · calculate · verify · execute · reconcile · protect · journal
+  normalize · calculate · verify · execute · reconcile · recover · journal
              │ sanitized evidence packet
              ▼
 Hermes Topstep operator
@@ -28,7 +28,7 @@ ProjectX owns venue truth.
 Topstep owns final account-rule authority.
 ```
 
-Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, loss-floor headroom, and capacity are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
+Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, and capacity are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
 
 See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
 
@@ -41,28 +41,38 @@ Implemented:
 - ProjectX API-key authentication and session validation;
 - official REST surfaces for accounts, contracts, bars, orders, positions, and trades;
 - official SignalR subscriptions for account, order, position, trade, quote, print, and DOM updates;
-- explicit user-stream, market-stream, connection-generation, and reconciliation health;
-- malformed realtime payloads surfaced as degraded truth rather than silently ignored;
-- conservative bid/ask account marking;
-- configured Topstep hard loss-floor models and protected monetary-risk calculation;
-- account, contract, instrument, operator-profile, packet, and snapshot identity binding;
-- current decision packets with leased issued identities rather than frozen stale packets;
-- strict `glitch.intent.v2` parser;
+- explicit user-stream, market-stream, connection-generation, and REST-reconciliation truth;
+- malformed realtime payloads surfaced as degraded state rather than silently ignored;
+- account-wide conservative bid/ask marking, with missing contract or quote evidence made explicit;
+- configured Topstep hard loss-floor models and stop-aware protected-loss calculations;
+- fees and slippage reserves applied per contract;
+- account, contract, instrument, operator-profile, prompt-version, packet, and snapshot identity binding;
+- one factual freshness contract shared by `/health`, decision packets, and execution validation;
+- current decision packets with durable, bounded issued identities rather than frozen stale packets;
+- strict `glitch.intent.v2` parsing;
 - absolute structural stop/target geometry translated to ProjectX bracket ticks;
 - authenticated loopback API for health, state, packets, and intents;
 - explicit `disabled`, `shadow`, and acknowledged `armed` operator modes;
-- append-only local execution receipts;
+- SQLite WAL execution state with foreign keys and synchronous durable writes;
+- persistent unique intent identity and terminal receipt replay;
+- outbox-before-submit for ProjectX entry and close mutations;
+- explicit `prepared`, `submitting`, `submitted`, `rejected`, and `ambiguous` mutation states;
+- startup and recurring reconciliation of orphan intents, interrupted outbox states, ambiguous submissions, and terminal states missing receipts;
+- entry recovery only from one historical ProjectX order matching custom tag, account, contract, side, type, and quantity;
+- close recovery only when current ProjectX position state proves the configured contract is flat;
+- new exposure blocked while an earlier provider mutation remains ambiguous;
+- append-only JSONL evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
 Still required before live promotion:
 
-- verified connection and sanitized payload evidence from a real TopstepX API subscription;
-- durable SQLite intent identity and outbox-before-submit;
-- transport-ambiguous submission recovery;
+- verified authentication and sanitized payload evidence from a real TopstepX API subscription;
+- actual process-kill and Windows restart fixtures for every durable execution window;
 - fill-to-bracket ownership reconciliation;
-- restart reconstruction of AI-owned orders and positions;
+- full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
 - exact structural bracket correction after fill;
 - verified `MOVE_STOP` and `MOVE_TP`;
+- independently protected additions and multiple tranches;
 - canonical completed outcomes for Hermes learning;
 - authoritative account-stage, loss-floor, payout, scaling, session, holiday, and special-close reconciliation;
 - instrument-general observation features and acceptance beyond the initial configured contract;
@@ -81,6 +91,8 @@ GLITCH_TRADING_MODE=shadow
 ```
 
 `shadow` verifies and journals decisions without calling ProjectX order mutations. `armed` requires an explicit operator acknowledgement, but that acknowledgement is not a readiness claim.
+
+Before an armed mutation, Glitch durably commits intent and outbox identity. It never blindly retries an ambiguous ProjectX request. If provider evidence cannot prove what happened, health becomes degraded and new exposure remains blocked.
 
 ## Requirements
 
@@ -101,7 +113,7 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health   no authentication; truthful operational status only
+GET  /health   no authentication; truthful operational and recovery status
 GET  /state    bearer token required
 GET  /packet   bearer token required
 POST /intent   bearer token required; strict glitch.intent.v2
