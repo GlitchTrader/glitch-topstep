@@ -23,6 +23,13 @@ interface EvidenceRow {
   normalized_payload_json: string;
 }
 
+export interface ProviderEvidenceStoreOptions {
+  marketEventRetention?: number;
+  marketPruneInterval?: number;
+}
+
+const DEFAULT_MARKET_EVENT_RETENTION = 500_000;
+const DEFAULT_MARKET_PRUNE_INTERVAL = 10_000;
 const SECRET_KEY_FRAGMENTS = [
   "apikey",
   "authorization",
@@ -35,14 +42,35 @@ const SECRET_KEY_FRAGMENTS = [
 
 export class SqliteProviderEvidenceStore {
   private readonly database: DatabaseSync;
+  private readonly marketEventRetention: number;
+  private readonly marketPruneInterval: number;
+  private marketEventsSincePrune = 0;
 
-  public constructor(path: string) {
+  public constructor(path: string, options: ProviderEvidenceStoreOptions = {}) {
+    this.marketEventRetention = integerOption(
+      options.marketEventRetention,
+      DEFAULT_MARKET_EVENT_RETENTION,
+      "market_event_retention",
+      10_000,
+      50_000_000,
+    );
+    this.marketPruneInterval = integerOption(
+      options.marketPruneInterval,
+      DEFAULT_MARKET_PRUNE_INTERVAL,
+      "market_prune_interval",
+      100,
+      1_000_000,
+    );
+    if (this.marketPruneInterval > this.marketEventRetention) {
+      throw new Error("market_prune_interval_exceeds_retention");
+    }
+
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
     }
     this.database = new DatabaseSync(path);
     this.database.exec("PRAGMA journal_mode=WAL");
-    this.database.exec("PRAGMA synchronous=FULL");
+    this.database.exec("PRAGMA synchronous=NORMAL");
     this.database.exec("PRAGMA busy_timeout=5000");
     this.migrate();
   }
@@ -52,8 +80,8 @@ export class SqliteProviderEvidenceStore {
   }
 
   public append(event: ProviderEvidenceEvent): StoredProviderEvidenceEvent {
-    const rawPayload = redactSecrets(event.rawPayload);
-    const normalizedPayload = redactSecrets(event.normalizedPayload);
+    const rawPayload = redactSecrets(event.rawPayload ?? null);
+    const normalizedPayload = redactSecrets(event.normalizedPayload ?? null);
     const rawPayloadJson = safeJson(rawPayload);
     const normalizedPayloadJson = safeJson(normalizedPayload);
     const payloadHash = createHash("sha256")
@@ -99,6 +127,14 @@ export class SqliteProviderEvidenceStore {
       normalizedPayloadJson,
     );
 
+    if (event.source === "projectx_market_stream") {
+      this.marketEventsSincePrune += 1;
+      if (this.marketEventsSincePrune >= this.marketPruneInterval) {
+        this.pruneMarketEvents();
+        this.marketEventsSincePrune = 0;
+      }
+    }
+
     return {
       ...event,
       sequence: Number(result.lastInsertRowid),
@@ -137,19 +173,40 @@ export class SqliteProviderEvidenceStore {
     const row = this.database.prepare(`
       SELECT
         COUNT(*) AS event_count,
+        SUM(CASE WHEN source = 'projectx_market_stream' THEN 1 ELSE 0 END) AS market_event_count,
+        MIN(sequence) AS earliest_sequence,
         MAX(sequence) AS latest_sequence,
         MAX(received_utc) AS latest_received_utc
       FROM provider_events
     `).get() as {
       event_count: number | bigint;
+      market_event_count: number | bigint | null;
+      earliest_sequence: number | bigint | null;
       latest_sequence: number | bigint | null;
       latest_received_utc: string | null;
     };
     return {
       eventCount: Number(row.event_count),
+      marketEventCount: Number(row.market_event_count ?? 0),
+      earliestSequence: row.earliest_sequence === null ? null : Number(row.earliest_sequence),
       latestSequence: row.latest_sequence === null ? null : Number(row.latest_sequence),
       latestReceivedUtc: row.latest_received_utc,
+      marketEventRetention: this.marketEventRetention,
     };
+  }
+
+  private pruneMarketEvents(): void {
+    this.database.prepare(`
+      DELETE FROM provider_events
+      WHERE source = 'projectx_market_stream'
+        AND sequence <= COALESCE((
+          SELECT sequence
+          FROM provider_events
+          WHERE source = 'projectx_market_stream'
+          ORDER BY sequence DESC
+          LIMIT 1 OFFSET ?
+        ), 0)
+    `).run(this.marketEventRetention);
   }
 
   private fromRow(row: EvidenceRow): StoredProviderEvidenceEvent {
@@ -200,6 +257,8 @@ export class SqliteProviderEvidenceStore {
         ON provider_events(received_utc, sequence);
       CREATE INDEX IF NOT EXISTS idx_provider_events_entity
         ON provider_events(event_type, account_id, contract_id, provider_entity_id, sequence);
+      CREATE INDEX IF NOT EXISTS idx_provider_events_source_sequence
+        ON provider_events(source, sequence);
 
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
@@ -233,4 +292,18 @@ function isSecretKey(key: string): boolean {
 
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? null) ?? "null";
+}
+
+function integerOption(
+  value: number | undefined,
+  fallback: number,
+  name: string,
+  minimum: number,
+  maximum: number,
+): number {
+  const resolved = value ?? fallback;
+  if (!Number.isInteger(resolved) || resolved < minimum || resolved > maximum) {
+    throw new Error(`provider_evidence_${name}_invalid`);
+  }
+  return resolved;
 }
