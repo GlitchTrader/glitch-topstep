@@ -1,30 +1,62 @@
+import { DatabaseSync } from "node:sqlite";
 import type {
   EntryOrderOwnership,
+  OwnedFillEvidence,
   ProjectXOrderOwnershipSnapshot,
 } from "../domain/order-ownership.js";
 import type { OrderInfo, TradeInfo, TradeIntent } from "../domain/models.js";
 import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
-import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
 
 export interface ProjectXOrderOwnershipOptions {
   accountId: number;
+  accountName: string;
   contractId: string;
+  instrument: string;
+}
+
+interface SubmittedEntryRow {
+  intent_id: string;
+  custom_tag: string | null;
+  request_json: string;
+  provider_order_id: number | bigint | null;
+  intent_json: string;
 }
 
 export class ProjectXOrderOwnershipService {
+  private readonly executionDatabase: DatabaseSync;
+
   public constructor(
-    private readonly execution: SqliteExecutionStore,
+    executionDatabasePath: string,
     private readonly evidence: SqliteProviderEvidenceStore,
     private readonly options: ProjectXOrderOwnershipOptions,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.executionDatabase = new DatabaseSync(executionDatabasePath);
+    this.executionDatabase.exec("PRAGMA query_only=ON");
+    this.executionDatabase.exec("PRAGMA busy_timeout=5000");
+  }
+
+  public close(): void {
+    this.executionDatabase.close();
+  }
 
   public current(): ProjectXOrderOwnershipSnapshot {
-    const entries = this.execution.submittedEntryMutations().map((mutation) => {
-      const intent = this.execution.intentForId(mutation.intentId);
-      return this.buildEntry(mutation.intentId, mutation.request, mutation.customTag, mutation.providerOrderId, intent);
-    });
+    const rows = this.executionDatabase.prepare(`
+      SELECT
+        outbox.intent_id,
+        outbox.custom_tag,
+        outbox.request_json,
+        outbox.provider_order_id,
+        intent.payload_json AS intent_json
+      FROM execution_outbox AS outbox
+      JOIN intents AS intent ON intent.intent_id = outbox.intent_id
+      WHERE outbox.operation = 'place_order'
+        AND outbox.state = 'submitted'
+      ORDER BY outbox.created_utc ASC, outbox.intent_id ASC
+    `).all() as unknown as SubmittedEntryRow[];
+
+    const entries = rows.map((row) => this.buildEntry(row));
     const issues: string[] = [];
     const providerOrderOwners = new Map<number, EntryOrderOwnership[]>();
     for (const entry of entries) {
@@ -51,7 +83,9 @@ export class ProjectXOrderOwnershipService {
       schema_version: "glitch.projectx.order_ownership.v1",
       generated_utc: this.now().toISOString(),
       account_id: this.options.accountId,
+      account_name: this.options.accountName,
       contract_id: this.options.contractId,
+      instrument: this.options.instrument,
       entries,
       unresolved_entry_count: entries.filter((entry) => entry.status !== "provider_observed").length,
       observed_fill_count: entries.reduce(
@@ -64,21 +98,21 @@ export class ProjectXOrderOwnershipService {
     };
   }
 
-  private buildEntry(
-    intentId: string,
-    request: Record<string, unknown>,
-    customTag: string | null,
-    providerOrderId: number | null,
-    intent: TradeIntent | null,
-  ): EntryOrderOwnership {
+  private buildEntry(row: SubmittedEntryRow): EntryOrderOwnership {
     const issues: string[] = [];
     let identityComplete = true;
+    const request = parseRecord(row.request_json, "execution_request", issues);
+    const intent = parseIntent(row.intent_json, issues);
+    const providerOrderId = row.provider_order_id === null
+      ? null
+      : Number(row.provider_order_id);
+    const customTag = row.custom_tag;
 
-    const requestAccountId = integerValue(request.accountId);
-    const requestContractId = stringValue(request.contractId);
-    const requestSide = integerValue(request.side);
-    const requestType = integerValue(request.type);
-    const requestSize = integerValue(request.size);
+    const requestAccountId = integerValue(request?.accountId);
+    const requestContractId = stringValue(request?.contractId);
+    const requestSide = integerValue(request?.side);
+    const requestType = integerValue(request?.type);
+    const requestSize = integerValue(request?.size);
     if (requestAccountId !== this.options.accountId) {
       issues.push(`request_account_mismatch:${requestAccountId ?? "missing"}`);
       identityComplete = false;
@@ -103,7 +137,7 @@ export class ProjectXOrderOwnershipService {
       issues.push("custom_tag_missing");
       identityComplete = false;
     }
-    if (providerOrderId === null) {
+    if (providerOrderId === null || !Number.isInteger(providerOrderId)) {
       issues.push("provider_order_id_missing");
       identityComplete = false;
     }
@@ -112,11 +146,24 @@ export class ProjectXOrderOwnershipService {
       ? intent.action
       : null;
     if (!intent) {
-      issues.push("intent_missing");
       identityComplete = false;
-    } else if (action === null) {
-      issues.push(`intent_action_invalid:${intent.action}`);
-      identityComplete = false;
+    } else {
+      if (intent.account !== this.options.accountName) {
+        issues.push(`intent_account_mismatch:${intent.account}`);
+        identityComplete = false;
+      }
+      if (intent.instrument.toUpperCase() !== this.options.instrument.toUpperCase()) {
+        issues.push(`intent_instrument_mismatch:${intent.instrument}`);
+        identityComplete = false;
+      }
+      if (action === null) {
+        issues.push(`intent_action_invalid:${intent.action}`);
+        identityComplete = false;
+      }
+      if (intent.quantity !== requestSize) {
+        issues.push("intent_request_quantity_mismatch");
+        identityComplete = false;
+      }
     }
     if (action === "ENTER_LONG" && requestSide !== 0) {
       issues.push("intent_request_side_mismatch");
@@ -124,10 +171,6 @@ export class ProjectXOrderOwnershipService {
     }
     if (action === "ENTER_SHORT" && requestSide !== 1) {
       issues.push("intent_request_side_mismatch");
-      identityComplete = false;
-    }
-    if (intent?.quantity !== requestSize) {
-      issues.push("intent_request_quantity_mismatch");
       identityComplete = false;
     }
 
@@ -140,7 +183,20 @@ export class ProjectXOrderOwnershipService {
       .filter((order): order is OrderInfo => order !== null);
     const latestObservedOrder = observedOrders.at(-1) ?? null;
     if (latestObservedOrder) {
-      if (customTag !== null && latestObservedOrder.customTag !== null && latestObservedOrder.customTag !== customTag) {
+      if (latestObservedOrder.accountId !== this.options.accountId) {
+        issues.push("observed_order_account_mismatch");
+        identityComplete = false;
+      }
+      if (latestObservedOrder.contractId !== this.options.contractId) {
+        issues.push("observed_order_contract_mismatch");
+        identityComplete = false;
+      }
+      if (
+        customTag !== null
+        && latestObservedOrder.customTag !== null
+        && latestObservedOrder.customTag !== undefined
+        && latestObservedOrder.customTag !== customTag
+      ) {
         issues.push("observed_order_custom_tag_mismatch");
         identityComplete = false;
       }
@@ -160,15 +216,28 @@ export class ProjectXOrderOwnershipService {
 
     const fills = providerOrderId === null
       ? []
-      : this.fillEvidence(providerOrderId, issues);
+      : this.fillEvidence(providerOrderId, requestSide, issues);
+    const effectiveFilledQuantity = fills.reduce(
+      (total, fill) => total + (fill.trade.voided ? 0 : fill.trade.size),
+      0,
+    );
+    if (requestSize !== null && effectiveFilledQuantity > requestSize) {
+      issues.push(`fill_quantity_exceeds_order:${effectiveFilledQuantity}>${requestSize}`);
+      identityComplete = false;
+    }
+    if (issues.some((issue) => issue.startsWith("fill_") || issue.startsWith("trade_"))) {
+      identityComplete = false;
+    }
+
+    const providerObserved = latestObservedOrder !== null || fills.length > 0;
     const status = !identityComplete
       ? "incomplete"
-      : latestObservedOrder
+      : providerObserved
         ? "provider_observed"
         : "provider_acknowledged";
 
     return {
-      intentId,
+      intentId: row.intent_id,
       account: intent?.account ?? null,
       instrument: intent?.instrument ?? null,
       action,
@@ -181,10 +250,7 @@ export class ProjectXOrderOwnershipService {
       orderEvidenceSequences,
       latestObservedOrder,
       fills,
-      effectiveFilledQuantity: fills.reduce(
-        (total, fill) => total + (fill.trade.voided ? 0 : fill.trade.size),
-        0,
-      ),
+      effectiveFilledQuantity,
       protection: {
         status: "unknown",
         reason: "provider_child_order_relation_not_observed",
@@ -214,8 +280,9 @@ export class ProjectXOrderOwnershipService {
 
   private fillEvidence(
     providerOrderId: number,
+    requestSide: number | null,
     issues: string[],
-  ): Array<{ evidenceSequence: number; trade: TradeInfo }> {
+  ): OwnedFillEvidence[] {
     const events = this.evidence.query({
       source: "projectx_user_stream",
       eventType: "trade",
@@ -224,12 +291,24 @@ export class ProjectXOrderOwnershipService {
       relatedProviderEntityId: String(providerOrderId),
       limit: 10_000,
     });
-    const latestByTradeId = new Map<number, { evidenceSequence: number; trade: TradeInfo }>();
+    const latestByTradeId = new Map<number, OwnedFillEvidence>();
     for (const event of events) {
       const trade = tradeFromEvidence(event, providerOrderId);
       if (!trade) {
         issues.push(`trade_evidence_invalid:${event.sequence}`);
         continue;
+      }
+      if (trade.accountId !== this.options.accountId) {
+        issues.push(`fill_account_mismatch:${trade.id}`);
+      }
+      if (trade.contractId !== this.options.contractId) {
+        issues.push(`fill_contract_mismatch:${trade.id}`);
+      }
+      if (requestSide !== null && trade.side !== requestSide) {
+        issues.push(`fill_side_mismatch:${trade.id}`);
+      }
+      if (!Number.isInteger(trade.size) || trade.size < 1) {
+        issues.push(`fill_size_invalid:${trade.id}`);
       }
       latestByTradeId.set(trade.id, {
         evidenceSequence: event.sequence,
@@ -239,6 +318,38 @@ export class ProjectXOrderOwnershipService {
     return [...latestByTradeId.values()].sort(
       (left, right) => left.evidenceSequence - right.evidenceSequence,
     );
+  }
+}
+
+function parseRecord(
+  input: string,
+  name: string,
+  issues: string[],
+): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    if (!isRecord(parsed)) {
+      issues.push(`${name}_invalid`);
+      return null;
+    }
+    return parsed;
+  } catch {
+    issues.push(`${name}_invalid_json`);
+    return null;
+  }
+}
+
+function parseIntent(input: string, issues: string[]): TradeIntent | null {
+  try {
+    const parsed = JSON.parse(input) as unknown;
+    if (!isTradeIntent(parsed)) {
+      issues.push("intent_invalid");
+      return null;
+    }
+    return parsed;
+  } catch {
+    issues.push("intent_invalid_json");
+    return null;
   }
 }
 
@@ -274,6 +385,17 @@ function tradeFromEvidence(
   return isTradeInfo(event.normalizedPayload) && event.normalizedPayload.orderId === providerOrderId
     ? event.normalizedPayload
     : null;
+}
+
+function isTradeIntent(value: unknown): value is TradeIntent {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return value.schemaVersion === "glitch.intent.v2"
+    && stringValue(value.intentId) !== null
+    && stringValue(value.account) !== null
+    && stringValue(value.instrument) !== null
+    && stringValue(value.action) !== null;
 }
 
 function isOrderInfo(value: unknown): value is OrderInfo {
