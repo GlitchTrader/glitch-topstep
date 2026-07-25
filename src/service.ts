@@ -7,6 +7,7 @@ import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXApiClient } from "./projectx/client.js";
+import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
@@ -21,6 +22,7 @@ export class GlitchTopstepService {
   private readonly ledger: JsonlEventStore;
   private readonly executionStore: SqliteExecutionStore;
   private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
+  private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private packets: DecisionPacketService | null = null;
@@ -46,6 +48,7 @@ export class GlitchTopstepService {
         marketPruneInterval: config.providerEvidence.marketPruneInterval,
       },
     );
+    this.restEvidenceRecorder = new ProviderRestSnapshotRecorder(this.providerEvidenceStore);
   }
 
   public async start(): Promise<void> {
@@ -70,19 +73,31 @@ export class GlitchTopstepService {
     }
 
     const receivedAt = new Date().toISOString();
-    this.recordRestSnapshot("accounts_snapshot", receivedAt, accounts, this.config.scope.accountId, null);
-    this.recordRestSnapshot("contracts_snapshot", receivedAt, contracts, null, this.config.scope.contractId);
+    this.recordRestSnapshot(
+      "accounts_snapshot",
+      receivedAt,
+      sortedById(accounts),
+      this.config.scope.accountId,
+      null,
+    );
+    this.recordRestSnapshot(
+      "contracts_snapshot",
+      receivedAt,
+      sortedById(contracts),
+      null,
+      this.config.scope.contractId,
+    );
     this.recordRestSnapshot(
       "positions_snapshot",
       receivedAt,
-      positions,
+      sortedById(positions),
       this.config.scope.accountId,
       this.config.scope.contractId,
     );
     this.recordRestSnapshot(
       "open_orders_snapshot",
       receivedAt,
-      orders,
+      sortedById(orders),
       this.config.scope.accountId,
       this.config.scope.contractId,
     );
@@ -254,18 +269,24 @@ export class GlitchTopstepService {
       }
 
       const receivedAt = new Date().toISOString();
-      this.recordRestSnapshot("accounts_snapshot", receivedAt, accounts, this.config.scope.accountId, null);
+      this.recordRestSnapshot(
+        "accounts_snapshot",
+        receivedAt,
+        sortedById(accounts),
+        this.config.scope.accountId,
+        null,
+      );
       this.recordRestSnapshot(
         "positions_snapshot",
         receivedAt,
-        positions,
+        sortedById(positions),
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
       this.recordRestSnapshot(
         "open_orders_snapshot",
         receivedAt,
-        orders,
+        sortedById(orders),
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
@@ -310,17 +331,13 @@ export class GlitchTopstepService {
     normalizedPayload: unknown,
     accountId: number | null,
     contractId: string | null,
-  ): void {
-    this.providerEvidenceStore.append({
+  ): boolean {
+    return this.restEvidenceRecorder.recordIfChanged({
       receivedUtc,
-      providerTimestampUtc: null,
-      source: "projectx_rest",
       eventType,
       generation: this.state.operationalStatus().generation,
       accountId,
       contractId,
-      providerEntityId: null,
-      rawPayload: null,
       normalizedPayload,
     });
   }
@@ -396,4 +413,8 @@ export class GlitchTopstepService {
       }
     }
   }
+}
+
+function sortedById<T extends { id: number | string }>(values: T[]): T[] {
+  return [...values].sort((left, right) => String(left.id).localeCompare(String(right.id)));
 }
