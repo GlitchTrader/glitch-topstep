@@ -7,7 +7,7 @@ ProjectX market and account truth
              │
              ▼
 Glitch Topstep
-  normalize · calculate · verify · execute · reconcile · recover · journal
+  normalize · persist evidence · calculate · verify · execute · reconcile · recover
              │ sanitized evidence packet
              ▼
 Hermes Topstep operator
@@ -51,23 +51,30 @@ Implemented:
 - current decision packets with durable, bounded issued identities rather than frozen stale packets;
 - strict `glitch.intent.v2` parsing;
 - absolute structural stop/target geometry translated to ProjectX bracket ticks;
-- authenticated loopback API for health, state, packets, and intents;
+- authenticated loopback API for health, state, packets, provider evidence, and intents;
 - explicit `disabled`, `shadow`, and acknowledged `armed` operator modes;
-- SQLite WAL execution state with foreign keys and synchronous durable writes;
+- SQLite WAL execution state with foreign keys and `synchronous=FULL` durable writes;
 - persistent unique intent identity and terminal receipt replay;
 - outbox-before-submit for ProjectX entry and close mutations;
 - explicit `prepared`, `submitting`, `submitted`, `rejected`, and `ambiguous` mutation states;
 - startup and recurring reconciliation of orphan intents, interrupted outbox states, ambiguous submissions, and terminal states missing receipts;
 - entry recovery only from one historical ProjectX order matching custom tag, account, contract, side, type, and quantity;
 - close recovery only when current ProjectX position state proves the configured contract is flat;
-- new exposure blocked while an earlier provider mutation remains ambiguous;
-- append-only JSONL evidence mirrored after SQLite commits;
+- serialized mutation handling and a durable entry-submission settlement latch;
+- new exposure blocked while an earlier provider mutation is ambiguous or unsettled;
+- a separate `projectx-evidence.sqlite` journal with monotonic sequence numbers and payload hashes;
+- realtime evidence persisted before accepted payloads mutate venue state;
+- normalized REST account, contract, position, and order snapshots persisted before reconciliation replaces state;
+- recursively redacted secret-like fields in persisted evidence;
+- bounded high-frequency market-stream retention while REST, lifecycle, account, position, order, and user-trade evidence remains intact;
+- append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
 Still required before live promotion:
 
-- verified authentication and sanitized payload evidence from a real TopstepX API subscription;
+- verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
 - actual process-kill and Windows restart fixtures for every durable execution window;
+- raw REST response envelopes where needed for contract-drift forensics;
 - fill-to-bracket ownership reconciliation;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
 - exact structural bracket correction after fill;
@@ -94,6 +101,14 @@ GLITCH_TRADING_MODE=shadow
 
 Before an armed mutation, Glitch durably commits intent and outbox identity. It never blindly retries an ambiguous ProjectX request. If provider evidence cannot prove what happened, health becomes degraded and new exposure remains blocked.
 
+Accepted realtime events follow:
+
+```text
+parse → redact and persist raw/normalized evidence → mutate VenueStateStore
+```
+
+If evidence persistence fails, state does not silently advance.
+
 ## Requirements
 
 - Node.js 22+
@@ -113,15 +128,23 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health   no authentication; truthful operational and recovery status
-GET  /state    bearer token required
-GET  /packet   bearer token required
-POST /intent   bearer token required; strict glitch.intent.v2
+GET  /health              no authentication; truthful operational, recovery, and evidence status
+GET  /state               bearer token required
+GET  /packet              bearer token required
+GET  /evidence?limit=100  bearer token required; maximum 1000 events
+POST /intent              bearer token required; strict glitch.intent.v2
 ```
 
 ```bash
 curl -H "Authorization: Bearer $GLITCH_LOCAL_TOKEN" \
-  http://127.0.0.1:8790/packet
+  "http://127.0.0.1:8790/evidence?limit=100"
+```
+
+Execution and telemetry use separate stores:
+
+```text
+data/glitch-topstep.sqlite     execution identity and recovery; WAL/FULL
+data/projectx-evidence.sqlite  provider evidence; WAL/NORMAL; bounded market-event retention
 ```
 
 ## Hermes profile
