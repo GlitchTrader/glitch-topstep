@@ -26,8 +26,11 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Bounded market-event retention | Implemented | Tune retention from observed quote/print/DOM rates |
 | Authenticated evidence inspection | Implemented | Operator acceptance and replay tooling |
 | Explicit provider relationship index | Implemented | Validate `trade.orderId` retention on real payloads |
-| Submitted entry-order ownership | Implemented from durable provider order ID | Historical order sync after offline intervals |
-| Fill ownership | Implemented only from exact `trade.orderId` relation | Historical trade sync and real partial/voided fill fixtures |
+| Durable historical order/trade cursor | Implemented | Real ProjectX timestamp-boundary and restart acceptance |
+| Bounded history windows and correction overlap | Implemented | Verify undocumented result caps or pagination behavior |
+| Historical provider-version deduplication | Implemented | Real correction, void, and late-update payload fixtures |
+| Submitted entry-order ownership | Implemented from durable provider order ID | Real offline interval and order-correction acceptance |
+| Fill ownership | Implemented only from exact `trade.orderId` relation | Real partial, corrected, and voided fill fixtures |
 | Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
 | Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
@@ -51,13 +54,14 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 1. **Authority, runtime truth, durable intent identity, and mutation recovery — implemented in software.**
 2. **Integrated ProjectX evidence journal — implemented in software.**
 3. **Exact submitted-entry and fill ownership from explicit provider IDs — implemented in software.**
-4. Real ProjectX read-only, payload-rate, disconnect, offline-sync, and crash-window acceptance.
-5. Deterministic state replay and explicit protective-child ownership discovery.
-6. Protection reconstruction and exact amendments.
-7. Canonical outcomes and Hermes learning input.
-8. Multi-timeframe and order-flow evidence.
-9. Automatic Topstep policy and session truth.
-10. One-account shadow evaluation, promotion review, and payout lifecycle.
+4. **Durable offline order/trade history continuity — implemented in software.**
+5. Real ProjectX read-only, payload-rate, timestamp-boundary, disconnect, correction, and crash-window acceptance.
+6. Deterministic state replay and explicit protective-child ownership discovery.
+7. Protection reconstruction and exact amendments.
+8. Canonical outcomes and Hermes learning input.
+9. Multi-timeframe and order-flow evidence.
+10. Automatic Topstep policy and session truth.
+11. One-account shadow evaluation, promotion review, and payout lifecycle.
 
 ## Promotion rule
 

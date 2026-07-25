@@ -7,6 +7,7 @@ import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXApiClient } from "./projectx/client.js";
+import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
@@ -16,6 +17,13 @@ import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 import { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
 
+const DEFAULT_PROVIDER_HISTORY = {
+  initialLookbackHours: 168,
+  overlapMinutes: 1_440,
+  windowMinutes: 1_440,
+  syncIntervalMs: 60_000,
+} as const;
+
 export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
@@ -23,11 +31,14 @@ export class GlitchTopstepService {
   private readonly executionStore: SqliteExecutionStore;
   private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
+  private readonly historySync: ProjectXHistorySyncService;
+  private readonly historySyncIntervalMs: number;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
+  private historySyncTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
   private storesClosed = false;
 
@@ -49,6 +60,19 @@ export class GlitchTopstepService {
       },
     );
     this.restEvidenceRecorder = new ProviderRestSnapshotRecorder(this.providerEvidenceStore);
+    const history = config.providerHistory ?? DEFAULT_PROVIDER_HISTORY;
+    this.historySyncIntervalMs = history.syncIntervalMs;
+    this.historySync = new ProjectXHistorySyncService(
+      this.api,
+      this.providerEvidenceStore,
+      {
+        accountId: config.scope.accountId,
+        initialLookbackHours: history.initialLookbackHours,
+        overlapMinutes: history.overlapMinutes,
+        windowMinutes: history.windowMinutes,
+        generation: () => this.state.operationalStatus().generation,
+      },
+    );
   }
 
   public async start(): Promise<void> {
@@ -106,6 +130,7 @@ export class GlitchTopstepService {
     this.state.replaceAccounts(accounts, receivedAt);
     this.state.replacePositions(positions, receivedAt);
     this.state.replaceOrders(orders, receivedAt);
+    await this.historySync.sync();
     const initialRecovery = await recoverExecutionMutations(
       this.executionStore,
       this.api,
@@ -137,7 +162,10 @@ export class GlitchTopstepService {
         evidence: this.providerEvidenceStore,
         onReconnected: async () => {
           this.packets?.invalidateAll();
-          await this.reconcile();
+          await Promise.all([
+            this.reconcile(),
+            this.historySync.sync(),
+          ]);
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
@@ -156,6 +184,13 @@ export class GlitchTopstepService {
     }, this.config.reconcileIntervalMs);
     this.reconciliationTimer.unref();
 
+    this.historySyncTimer = setInterval(() => {
+      void this.historySync.sync().catch((error: unknown) => {
+        console.error("ProjectX history synchronization failed", error);
+      });
+    }, this.historySyncIntervalMs);
+    this.historySyncTimer.unref();
+
     const coordinator = new ExecutionCoordinator(
       this.config,
       this.api,
@@ -172,11 +207,15 @@ export class GlitchTopstepService {
         const current = snapshot();
         const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
         const executionRecovery = this.executionStore.recoveryStatus();
+        const providerHistory = this.historySync.currentStatus();
         return {
           schema_version: "glitch.direct.health.v2",
-          status: quality.stateComplete && !executionRecovery.blockingAmbiguity
-            ? "ok"
-            : "degraded",
+          status:
+            quality.stateComplete
+            && !executionRecovery.blockingAmbiguity
+            && providerHistory.lastError === null
+              ? "ok"
+              : "degraded",
           trading_mode: this.config.tradingMode,
           recorded_utc: recordedAt.toISOString(),
           data_quality: {
@@ -188,6 +227,7 @@ export class GlitchTopstepService {
           },
           execution_recovery: executionRecovery,
           provider_evidence: this.providerEvidenceStore.status(),
+          provider_history: providerHistory,
         };
       },
       snapshot,
@@ -224,11 +264,16 @@ export class GlitchTopstepService {
         policy_authority: this.config.policy.authority,
         execution_recovery: this.executionStore.recoveryStatus(),
         provider_evidence: this.providerEvidenceStore.status(),
+        provider_history: this.historySync.currentStatus(),
       },
     });
   }
 
   public async stop(): Promise<void> {
+    if (this.historySyncTimer) {
+      clearInterval(this.historySyncTimer);
+      this.historySyncTimer = null;
+    }
     if (this.reconciliationTimer) {
       clearInterval(this.reconciliationTimer);
       this.reconciliationTimer = null;
@@ -241,6 +286,7 @@ export class GlitchTopstepService {
       this.gateway?.stop() ?? Promise.resolve(),
       this.realtime?.stop() ?? Promise.resolve(),
     ]);
+    await this.historySync.waitForIdle();
     this.gateway = null;
     this.realtime = null;
     this.packets = null;

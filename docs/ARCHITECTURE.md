@@ -37,6 +37,7 @@ See [`AUTHORITY.md`](AUTHORITY.md).
 ```text
 ProjectX REST
   authentication · discovery · bars · reconciliation · mutations
+  bounded historical order/trade windows
 
 ProjectX User SignalR Hub
   account · position · order · trade events
@@ -51,6 +52,7 @@ Provider evidence boundary
   persist raw + normalized evidence
   assign sequence + payload hash
   preserve explicit provider relationships
+  preserve durable historical record heads
             │ persistence succeeds
             ▼
 VenueStateStore
@@ -87,8 +89,8 @@ ProjectX order mutation
 
 Query-only ownership projection
   durable Glitch intent + submitted provider order ID
-  exact ProjectX order evidence
-  exact ProjectX trade.orderId relationships
+  exact realtime or historical ProjectX order evidence
+  exact realtime or historical ProjectX trade.orderId relationships
   contradiction reporting
   protection remains unknown without child/OCO evidence
 ```
@@ -117,7 +119,7 @@ Glitch owns:
 - exact provider identities;
 - parsing, normalization, and attributable evidence;
 - tick, point-value, fee, slippage, and bracket calculations;
-- stream health, reconnect generation, and REST reconciliation;
+- stream health, reconnect generation, REST reconciliation, and historical continuity;
 - hard contract capacity and hard loss-floor survival;
 - order identity, idempotency, ownership, protection, restart recovery, and receipts.
 
@@ -160,7 +162,7 @@ Execution identity and provider telemetry use separate SQLite databases because 
 
 - WAL;
 - `synchronous=NORMAL` to avoid blocking the Node event loop for every quote, print, or DOM update;
-- REST, lifecycle, account, position, order, and user-trade evidence retained;
+- REST, lifecycle, account, position, order, user-trade, and historical order/trade evidence retained;
 - only high-frequency `projectx_market_stream` events are bounded by configurable count retention;
 - sequence values remain monotonic across pruning and restart.
 
@@ -172,6 +174,46 @@ GET /evidence?limit=100
 
 It exists for acceptance, debugging, replay, and ownership research. It is not injected into Hermes by default.
 
+## Durable order and trade history
+
+Realtime streams alone cannot reconstruct an offline interval. `ProjectXHistorySyncService` retrieves order and trade history through bounded timestamp windows.
+
+```text
+last completed cursor - correction overlap
+  → fetch ProjectX orders and trades for one bounded window
+  → persist changed provider records
+  → advance cursor only after both retrievals succeed
+```
+
+The history contract is:
+
+- initial lookback, overlap, window size, and cadence are explicit configuration;
+- each window records an attempt before provider calls;
+- orders and trades are fetched together;
+- the cursor advances only when both calls and all evidence writes succeed;
+- a later-window failure preserves the last completed cursor;
+- reconnect and scheduled runs resume with overlap;
+- concurrent runs coalesce into one promise;
+- shutdown clears timers and waits for the active window before closing SQLite.
+
+Historical evidence uses durable per-provider-record heads. Receipt time is excluded from content identity, so unchanged overlap results remain suppressed across process restart. A changed record at the same provider timestamp is retained as a correction. A record with a strictly older provider timestamp cannot replace a newer durable head.
+
+History events retain REST provenance:
+
+```text
+historical_order
+historical_trade
+```
+
+The ownership projection consumes these event types through exact provider IDs. History failure sets `provider_history.last_error` and degrades `/health`, but it does not become a cognition or trading-strategy gate and does not prevent risk-reducing execution.
+
+Still requiring real acceptance:
+
+- ProjectX timestamp inclusivity/exclusivity at window boundaries;
+- any undocumented result cap or pagination behavior;
+- late corrections, voids, and partial-fill updates;
+- raw REST response envelopes.
+
 ## Exact order and fill ownership
 
 The ownership view is a read-only projection over the two durable databases. It does not mutate execution state and cannot authorize an order amendment.
@@ -179,8 +221,8 @@ The ownership view is a read-only projection over the two durable databases. It 
 ```text
 durable Glitch intent
   + submitted execution_outbox providerOrderId/customTag
-  + exact ProjectX order evidence with that order ID
-  + exact ProjectX trade evidence where trade.orderId matches
+  + exact realtime or historical ProjectX order evidence with that order ID
+  + exact realtime or historical ProjectX trade evidence where trade.orderId matches
   = attributable entry order and fills
 ```
 
@@ -291,7 +333,6 @@ The settlement latch prevents a second entry while a submitted entry has not yet
 
 Still missing:
 
-- historical order/trade ingestion after offline intervals;
 - aggregate position ownership;
 - provider order groups;
 - provider-created stop/target ownership;

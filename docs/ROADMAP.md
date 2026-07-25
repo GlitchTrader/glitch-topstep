@@ -58,12 +58,13 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] prove disconnect, reconnect, generation invalidation, and REST reconciliation
 - [ ] compare all account positions and conservative PnL with TopstepX UI
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
-- [ ] prove historical order search and custom-tag retention
-- [ ] prove historical trade search and `trade.orderId` retention
+- [ ] prove historical order search, timestamp boundaries, and custom-tag retention
+- [ ] prove historical trade search, timestamp boundaries, and `trade.orderId` retention
+- [ ] determine any undocumented order/trade result cap or pagination requirement
 - [ ] measure quote, print, and DOM event rates on the target machine
 - [ ] validate evidence retention against actual disk growth
 
-## R3 — provider evidence and replay foundation
+## R3 — provider evidence, history, and replay foundation
 
 - [x] one integrated monotonic provider-event journal
 - [x] dedicated `projectx-evidence.sqlite` WAL store
@@ -79,6 +80,15 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] preserve REST, lifecycle, account, position, order, and user-trade evidence during market pruning
 - [x] explicit related-provider identity field and index
 - [x] backward-compatible relation migration and trade-order backfill
+- [x] durable historical order/trade cursor
+- [x] bounded timestamp windows with cursor advancement only after complete window retrieval
+- [x] configurable correction overlap
+- [x] persistent content/version heads across process restart
+- [x] suppress unchanged historical overlap evidence
+- [x] append changed provider versions
+- [x] reject strictly older provider versions without blocking same-timestamp corrections
+- [x] coalesce concurrent sync runs and wait for active work during shutdown
+- [x] expose history status through `/health` and the service-start ledger
 - [ ] persist raw REST response envelopes where contract-drift forensics require them
 - [ ] deterministic state rebuild from the event corpus
 - [ ] correction and contradiction semantics during replay
@@ -91,13 +101,14 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] durable submitted entry identity from intent, custom tag, and provider order ID
 - [x] exact user-stream order ownership by provider order ID
 - [x] exact REST open-order ownership by provider order ID
+- [x] exact historical-order ownership by provider order ID
 - [x] exact fill ownership only when `trade.orderId` matches the submitted entry
+- [x] historical-fill continuity after offline intervals
 - [x] voided-fill handling and latest trade correction by provider trade ID
 - [x] detect account, contract, side, type, size, custom-tag, overfill, and duplicate-order contradictions
 - [x] authenticated `/ownership` inspection
 - [x] keep protection status `unknown` without explicit child/OCO relation
 - [x] prohibit ownership inference from price, timing, side similarity, or working-order geometry
-- [ ] synchronize historical orders and trades after offline intervals
 - [ ] identify provider-created stop and target orders from an explicit relationship
 - [ ] prove aggregate open-position ownership without proximity inference
 - [ ] persist order groups and protective-leg identity
