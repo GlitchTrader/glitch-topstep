@@ -7,50 +7,74 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] strict TypeScript project
 - [x] official ProjectX REST adapter
 - [x] official ProjectX SignalR adapter
-- [x] canonical state store
+- [x] canonical account, position, order, quote, print, and depth state
+- [x] explicit Alan / Hermes / Glitch authority contract
+- [x] no hidden simulated-only, entry-window, daily-budget, or risk-fraction strategy gates
 - [x] hard Topstep loss-floor models
 - [x] stop-aware protected-loss calculation
-- [x] strict Glitch intent parser
+- [x] per-contract fee and slippage reserves
+- [x] strict operator-profile and prompt-version intent identity
 - [x] loopback health, state, packet, and intent API
+- [x] explicit stream, payload, reconnect-generation, and reconciliation truth
+- [x] shared freshness truth across health, packet, and execution
+- [x] account-wide conservative PnL with missing evidence made explicit
 - [x] shadow mode
 - [x] dedicated `glitch-topstep` Hermes profile
-- [x] explicit operator/builder authority contract
-- [x] remove simulated-only, entry-window, daily-budget, and risk-fraction cognition gates
-- [x] explicit stream, payload, reconnect-generation, and reconciliation truth
-- [x] current packets with bounded issued-decision leases
-- [x] nonblocking Hermes cognition launcher
-- [x] deterministic unit tests for the implemented contracts
+- [x] deterministic tests for implemented contracts
 
-## R1 — real ProjectX read-only proof
+## R1 — durable execution identity and recovery
+
+- [x] SQLite WAL store and migration marker
+- [x] foreign keys and synchronous durable writes
+- [x] durable unique intent identity
+- [x] durable issued-packet leases and invalidation
+- [x] outbox persisted before provider mutation
+- [x] mutation lifecycle: `prepared`, `submitting`, `submitted`, `rejected`, `ambiguous`
+- [x] authoritative provider rejection versus ambiguous transport distinction
+- [x] entry recovery by unique historical custom tag plus full order identity
+- [x] close recovery only from authoritative flat position state
+- [x] orphan intent recovery
+- [x] prepared outbox recovery
+- [x] terminal state without receipt recovery
+- [x] no-op receipt recovery
+- [x] recovery health and new-exposure block during ambiguity
+- [ ] actual process-kill fixture before outbox creation
+- [ ] actual process-kill fixture before provider call
+- [ ] actual process-kill fixture during ambiguous transport
+- [ ] actual process-kill fixture after provider response but before receipt
+- [ ] Windows machine-restart persistence fixture
+- [ ] bounded recovery flatten for owned but unresolved exposure
+- [ ] zero duplicate entries in a real ProjectX acceptance session
+
+## R2 — real ProjectX read-only proof
 
 - [ ] authenticate using a real TopstepX ProjectX key
-- [ ] capture sanitized official payload examples
+- [ ] capture sanitized official payload fixtures
 - [ ] reconcile selected account and active contract
 - [ ] prove every user-hub subscription
 - [ ] prove quote, print, and DOM subscriptions
 - [ ] prove disconnect, reconnect, generation invalidation, and REST reconciliation
-- [ ] persist raw provider events for replay
-- [ ] compare local balance, positions, orders, fills, and PnL with TopstepX UI
+- [ ] compare all account positions and conservative PnL with TopstepX UI
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
+- [ ] prove historical order search and custom-tag retention
 
-## R2 — durable execution identity
+## R3 — provider evidence and replay foundation
 
-- [ ] SQLite WAL store and migrations
-- [ ] monotonic event sequence
-- [ ] durable unique intent identity
-- [ ] atomic outbox persisted before provider mutation
-- [ ] provider mutation attempt and acknowledgement state
-- [ ] ambiguous transport recovery by custom tag
-- [ ] order-group state machine
-- [ ] startup reconstruction
-- [ ] bounded recovery close/flatten
-- [ ] zero duplicate entries across process and machine restart fixtures
+- [ ] one integrated monotonic provider-event journal
+- [ ] persist sanitized raw and normalized REST evidence
+- [ ] persist sanitized raw and normalized user-stream events before state mutation
+- [ ] persist sanitized raw and normalized market-stream events before state mutation
+- [ ] bounded authenticated evidence inspection
+- [ ] deterministic state rebuild from the event corpus
+- [ ] reconnect and correction events preserved append-only
+- [ ] no credentials or session tokens in persisted evidence
 
-## R3 — provider order and protection ownership
+## R4 — provider order and protection ownership
 
 - [ ] reconcile entry order and actual fills
-- [ ] identify provider-created stop and target orders
-- [ ] prove side, quantity, contract, and parent intent ownership
+- [ ] identify provider-created stop and target orders from observed evidence
+- [ ] prove side, quantity, contract, and parent-intent ownership
+- [ ] persist order groups and protective-leg identity
 - [ ] correct tick-distance brackets to exact intended absolute prices
 - [ ] fail visibly and reduce risk when protection cannot be proven
 - [ ] reconstruct protection after restart
@@ -60,7 +84,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] independently protected additions and multiple tranches
 - [ ] full exit ownership and residual-order cleanup
 
-## R4 — canonical outcomes and learning evidence
+## R5 — canonical outcomes and learning evidence
 
 - [ ] canonical completed Topstep outcome from provider fills
 - [ ] after-fee realized result
@@ -71,7 +95,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] gateway outcome publication to the Hermes profile
 - [ ] rejection and transport episodes available to review without becoming false trade outcomes
 
-## R5 — Topstep policy and session authority
+## R6 — Topstep policy and session authority
 
 - [ ] canonical product and account-stage record
 - [ ] provider/dashboard source provenance and hashes
@@ -85,19 +109,19 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] holiday, early-close, timezone, and DST truth
 - [ ] explicit contradiction and stale-source handling
 
-## R6 — instrument-general observation engine
+## R7 — instrument-general observation engine
 
 - [ ] active Topstep contract discovery and rollover evidence
 - [ ] native tick, point value, session, and fee metadata
-- [ ] 1m, 5m, 15m, and 60m OHLCV normalization
-- [ ] gap and timestamp provenance
+- [ ] integrated 1m, 5m, 15m, and 60m OHLCV normalization
+- [ ] gap, partial-bar, and timestamp provenance
 - [ ] session and prior-session structure
 - [ ] volatility, trend, range, and location evidence
 - [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence
 - [ ] descriptive normalized features without a coded entry strategy
 - [ ] acceptance on at least two Topstep-supported products
 
-## R7 — replay and comparative evaluation
+## R8 — replay and comparative evaluation
 
 - [ ] replay raw provider events into canonical packets
 - [ ] deterministic decision and receipt replay
@@ -107,7 +131,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] report expectancy, drawdown, MFE/MAE capture, churn, rejection, rule survival, and uncertainty
 - [ ] prevent one sample from silently becoming hard-coded strategy policy
 
-## R8 — one-account market-readiness evidence
+## R9 — one-account market-readiness evidence
 
 - [ ] actual Windows/Hermes installation acceptance
 - [ ] one configured Topstep account
@@ -119,7 +143,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] explicit operator promotion review
 - [ ] first complete account and payout lifecycle evidence
 
-## R9 — scale only after evidence
+## R10 — scale only after evidence
 
 - [ ] additional Topstep-supported instruments
 - [ ] additional account products and stages
