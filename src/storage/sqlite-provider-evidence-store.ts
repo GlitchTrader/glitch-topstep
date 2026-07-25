@@ -73,6 +73,7 @@ export class SqliteProviderEvidenceStore {
     this.database.exec("PRAGMA synchronous=NORMAL");
     this.database.exec("PRAGMA busy_timeout=5000");
     this.migrate();
+    this.pruneMarketEvents();
   }
 
   public close(): void {
@@ -192,6 +193,9 @@ export class SqliteProviderEvidenceStore {
       latestSequence: row.latest_sequence === null ? null : Number(row.latest_sequence),
       latestReceivedUtc: row.latest_received_utc,
       marketEventRetention: this.marketEventRetention,
+      marketPruneInterval: this.marketPruneInterval,
+      maximumMarketEventsBetweenPrunes:
+        this.marketEventRetention + this.marketPruneInterval - 1,
     };
   }
 
