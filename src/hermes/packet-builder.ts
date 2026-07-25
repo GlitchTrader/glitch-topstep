@@ -87,6 +87,7 @@ export interface DirectDecisionPacket {
     new_exposure_technically_supported: boolean;
     maximum_additional_contracts: number;
     recovery_blocked: boolean;
+    entry_submission_pending: boolean;
     unresolved_mutations: number;
     ambiguous_mutations: number;
     last_recovery_utc: string | null;
@@ -232,9 +233,10 @@ export function buildDecisionPacket(
         && snapshot.instrumentOpenContracts === 0
         && snapshot.openOrders.length === 0
         && remainingCapacity > 0
-        && !recovery.blockingAmbiguity,
+        && !recovery.blockingNewExposure,
       maximum_additional_contracts: remainingCapacity,
-      recovery_blocked: recovery.blockingAmbiguity,
+      recovery_blocked: recovery.blockingNewExposure,
+      entry_submission_pending: recovery.entrySubmissionPending,
       unresolved_mutations: recovery.unresolvedMutations,
       ambiguous_mutations: recovery.ambiguousMutations,
       last_recovery_utc: recovery.lastRecoveryUtc,
