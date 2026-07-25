@@ -39,13 +39,14 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | `MOVE_STOP` / `MOVE_TP` | Missing | Exact-leg mutation and sibling non-interference |
 | Multiple independent entry tranches | Missing | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
-| Deterministic provider replay | Missing | State rebuild and correction semantics from journal |
+| Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
+| Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
 | Multi-timeframe normalized market evidence | Missing | Integrated 1m/5m/15m/60m ProjectX series |
 | Tape, delta, depth, and liquidity features | Raw streams journaled | Deterministic aggregation and replay fixtures |
 | Instrument-general Topstep support | Configurable single contract | At least two Topstep-supported contracts |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
 | Session, holiday, and early-close truth | Missing | Authoritative calendar and failure visibility |
-| Replay and comparative evaluation | Missing | Identical evidence corpus across cognition versions |
+| Replay and comparative cognition evaluation | Replay foundation implemented | Identical evidence corpus across cognition versions |
 | Hermes autonomous cognition | Implemented in companion profile | Actual Windows/Hermes acceptance |
 | First complete payout lifecycle | Missing | Reconciled account progression and payout evidence |
 
@@ -55,13 +56,14 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 2. **Integrated ProjectX evidence journal — implemented in software.**
 3. **Exact submitted-entry and fill ownership from explicit provider IDs — implemented in software.**
 4. **Durable offline order/trade history continuity — implemented in software.**
-5. Real ProjectX read-only, payload-rate, timestamp-boundary, disconnect, correction, and crash-window acceptance.
-6. Deterministic state replay and explicit protective-child ownership discovery.
-7. Protection reconstruction and exact amendments.
-8. Canonical outcomes and Hermes learning input.
-9. Multi-timeframe and order-flow evidence.
-10. Automatic Topstep policy and session truth.
-11. One-account shadow evaluation, promotion review, and payout lifecycle.
+5. **Deterministic offline provider replay — implemented in software.**
+6. Real ProjectX read-only, payload-rate, timestamp-boundary, disconnect, correction, replay comparison, and crash-window acceptance.
+7. Explicit protective-child ownership discovery and protection reconstruction.
+8. Exact amendments and multiple protected tranches.
+9. Canonical outcomes and Hermes learning input.
+10. Multi-timeframe and order-flow evidence.
+11. Automatic Topstep policy and session truth.
+12. One-account shadow evaluation, promotion review, and payout lifecycle.
 
 ## Promotion rule
 
