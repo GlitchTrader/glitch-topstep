@@ -1,10 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AccountVenueSnapshot } from "../domain/models.js";
-import type { ProjectXOrderOwnershipSnapshot } from "../domain/order-ownership.js";
 import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
 
 const MAX_BODY_BYTES = 65_536;
 const DEFAULT_EVIDENCE_LIMIT = 100;
@@ -14,10 +14,19 @@ export interface LocalGatewayOptions {
   host: string;
   port: number;
   token: string;
+  ownership?: {
+    executionDatabasePath: string;
+    evidenceDatabasePath: string;
+    accountId: number;
+    accountName: string;
+    contractId: string;
+    instrument: string;
+  };
 }
 
 export class LocalGatewayServer {
   private server: Server | null = null;
+  private ownershipService: ProjectXOrderOwnershipService | null;
 
   public constructor(
     private readonly options: LocalGatewayOptions,
@@ -25,9 +34,22 @@ export class LocalGatewayServer {
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly packet: () => DirectDecisionPacket,
     private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
-    private readonly ownership: () => ProjectXOrderOwnershipSnapshot,
     private readonly coordinator: ExecutionCoordinator,
-  ) {}
+  ) {
+    const ownership = options.ownership;
+    this.ownershipService = ownership
+      ? new ProjectXOrderOwnershipService(
+          ownership.executionDatabasePath,
+          ownership.evidenceDatabasePath,
+          {
+            accountId: ownership.accountId,
+            accountName: ownership.accountName,
+            contractId: ownership.contractId,
+            instrument: ownership.instrument,
+          },
+        )
+      : null;
+  }
 
   public async start(): Promise<void> {
     if (this.server) {
@@ -45,12 +67,13 @@ export class LocalGatewayServer {
   public async stop(): Promise<void> {
     const server = this.server;
     this.server = null;
-    if (!server) {
-      return;
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
     }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
+    this.ownershipService?.close();
+    this.ownershipService = null;
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -83,7 +106,11 @@ export class LocalGatewayServer {
         return;
       }
       if (request.method === "GET" && url.pathname === "/ownership") {
-        this.json(response, 200, this.ownership());
+        if (!this.ownershipService) {
+          this.json(response, 503, { error: "ownership_projection_unavailable" });
+          return;
+        }
+        this.json(response, 200, this.ownershipService.current());
         return;
       }
       if (request.method === "POST" && url.pathname === "/intent") {
