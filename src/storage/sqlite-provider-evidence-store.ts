@@ -19,15 +19,15 @@ interface EvidenceRow {
   normalized_payload_json: string;
 }
 
-const SECRET_KEYS = new Set([
+const SECRET_KEY_FRAGMENTS = [
   "apikey",
-  "api_key",
   "authorization",
+  "credential",
   "jwt",
   "password",
   "secret",
   "token",
-]);
+];
 
 export class SqliteProviderEvidenceStore {
   private readonly database: DatabaseSync;
@@ -93,7 +93,7 @@ export class SqliteProviderEvidenceStore {
       FROM provider_events
       ORDER BY sequence DESC
       LIMIT ?
-    `).all(limit) as EvidenceRow[];
+    `).all(limit) as unknown as EvidenceRow[];
     return rows.reverse().map((row) => ({
       sequence: Number(row.sequence),
       recordedUtc: row.recorded_utc,
@@ -158,11 +158,16 @@ export function redactSecrets(value: unknown): unknown {
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(input)) {
-    if (SECRET_KEYS.has(key.toLowerCase())) {
+    if (isSecretKey(key)) {
       output[key] = "[REDACTED]";
       continue;
     }
     output[key] = redactSecrets(item);
   }
   return output;
+}
+
+function isSecretKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return SECRET_KEY_FRAGMENTS.some((fragment) => normalized.includes(fragment));
 }
