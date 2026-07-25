@@ -5,8 +5,10 @@ import type {
   ProjectXOrderOwnershipSnapshot,
 } from "../domain/order-ownership.js";
 import type { OrderInfo, TradeInfo, TradeIntent } from "../domain/models.js";
-import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
-import { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
+import type {
+  ProviderEvidenceQuery,
+  StoredProviderEvidenceEvent,
+} from "../domain/provider-evidence.js";
 
 export interface ProjectXOrderOwnershipOptions {
   accountId: number;
@@ -23,21 +25,42 @@ interface SubmittedEntryRow {
   intent_json: string;
 }
 
+interface EvidenceRow {
+  sequence: number | bigint;
+  received_utc: string;
+  provider_timestamp_utc: string | null;
+  source: string;
+  event_type: string;
+  generation: number | bigint;
+  account_id: number | bigint | null;
+  contract_id: string | null;
+  provider_entity_id: string | null;
+  related_provider_entity_id: string | null;
+  payload_hash: string;
+  raw_payload_json: string;
+  normalized_payload_json: string;
+}
+
 export class ProjectXOrderOwnershipService {
   private readonly executionDatabase: DatabaseSync;
+  private readonly evidenceDatabase: DatabaseSync;
 
   public constructor(
     executionDatabasePath: string,
-    private readonly evidence: SqliteProviderEvidenceStore,
+    evidenceDatabasePath: string,
     private readonly options: ProjectXOrderOwnershipOptions,
     private readonly now: () => Date = () => new Date(),
   ) {
     this.executionDatabase = new DatabaseSync(executionDatabasePath);
     this.executionDatabase.exec("PRAGMA query_only=ON");
     this.executionDatabase.exec("PRAGMA busy_timeout=5000");
+    this.evidenceDatabase = new DatabaseSync(evidenceDatabasePath);
+    this.evidenceDatabase.exec("PRAGMA query_only=ON");
+    this.evidenceDatabase.exec("PRAGMA busy_timeout=5000");
   }
 
   public close(): void {
+    this.evidenceDatabase.close();
     this.executionDatabase.close();
   }
 
@@ -260,7 +283,7 @@ export class ProjectXOrderOwnershipService {
   }
 
   private orderEvidence(providerOrderId: number): StoredProviderEvidenceEvent[] {
-    const direct = this.evidence.query({
+    const direct = this.queryEvidence({
       source: "projectx_user_stream",
       eventType: "order",
       accountId: this.options.accountId,
@@ -268,7 +291,7 @@ export class ProjectXOrderOwnershipService {
       providerEntityId: String(providerOrderId),
       limit: 10_000,
     });
-    const snapshots = this.evidence.query({
+    const snapshots = this.queryEvidence({
       source: "projectx_rest",
       eventType: "open_orders_snapshot",
       accountId: this.options.accountId,
@@ -283,7 +306,7 @@ export class ProjectXOrderOwnershipService {
     requestSide: number | null,
     issues: string[],
   ): OwnedFillEvidence[] {
-    const events = this.evidence.query({
+    const events = this.queryEvidence({
       source: "projectx_user_stream",
       eventType: "trade",
       accountId: this.options.accountId,
@@ -318,6 +341,68 @@ export class ProjectXOrderOwnershipService {
     return [...latestByTradeId.values()].sort(
       (left, right) => left.evidenceSequence - right.evidenceSequence,
     );
+  }
+
+  private queryEvidence(query: ProviderEvidenceQuery): StoredProviderEvidenceEvent[] {
+    const limit = query.limit ?? 1_000;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
+      throw new Error("provider_evidence_query_limit_invalid");
+    }
+    const clauses: string[] = [];
+    const parameters: Array<string | number> = [];
+    const add = (clause: string, value: string | number | undefined): void => {
+      if (value === undefined) {
+        return;
+      }
+      clauses.push(clause);
+      parameters.push(value);
+    };
+    add("source = ?", query.source);
+    add("event_type = ?", query.eventType);
+    add("account_id = ?", query.accountId);
+    add("contract_id = ?", query.contractId);
+    add("provider_entity_id = ?", query.providerEntityId);
+    add("related_provider_entity_id = ?", query.relatedProviderEntityId);
+    add("sequence > ?", query.afterSequence);
+    const where = clauses.length === 0 ? "" : `WHERE ${clauses.join(" AND ")}`;
+    const rows = this.evidenceDatabase.prepare(`
+      SELECT * FROM (
+        SELECT
+          sequence,
+          received_utc,
+          provider_timestamp_utc,
+          source,
+          event_type,
+          generation,
+          account_id,
+          contract_id,
+          provider_entity_id,
+          related_provider_entity_id,
+          payload_hash,
+          raw_payload_json,
+          normalized_payload_json
+        FROM provider_events
+        ${where}
+        ORDER BY sequence DESC
+        LIMIT ?
+      )
+      ORDER BY sequence ASC
+    `).all(...parameters, limit) as unknown as EvidenceRow[];
+    return rows.map((row) => ({
+      sequence: Number(row.sequence),
+      receivedUtc: row.received_utc,
+      providerTimestampUtc: row.provider_timestamp_utc,
+      source: row.source as StoredProviderEvidenceEvent["source"],
+      eventType: row.event_type,
+      generation: Number(row.generation),
+      accountId: row.account_id === null ? null : Number(row.account_id),
+      contractId: row.contract_id,
+      providerEntityId: row.provider_entity_id,
+      relatedProviderEntityId: row.related_provider_entity_id,
+      payloadHash: row.payload_hash,
+      rawPayload: JSON.parse(row.raw_payload_json) as unknown,
+      normalizedPayload: JSON.parse(row.normalized_payload_json) as unknown,
+    }));
   }
 }
 
