@@ -14,7 +14,7 @@ function baseIntent() {
     confidence: 0.5,
     snapshot_hash: "snapshot",
     model_version: "test",
-    prompt_version: "test-v1",
+    prompt_version: "glitch-topstep-v2",
     reason: "No edge.",
     decision_audit: {
       bull_case: "Limited bullish evidence.",
@@ -49,11 +49,15 @@ describe("Glitch intent contract", () => {
     assert.equal(parseTradeIntent(entry).quantity, 1);
   });
 
-  it("rejects unknown fields, profile mismatches, and choice mismatches", () => {
+  it("rejects unknown fields, profile mismatches, prompt mismatches, and choice mismatches", () => {
     assert.throws(() => parseTradeIntent({ ...baseIntent(), surprise: true }), /unknown_intent_field/);
     assert.throws(
       () => parseTradeIntent({ ...baseIntent(), operator_profile: "glitch-toptrader" }),
       /operator_profile_mismatch/,
+    );
+    assert.throws(
+      () => parseTradeIntent({ ...baseIntent(), prompt_version: "glitch-topstep-v1" }),
+      /prompt_version_mismatch/,
     );
     const mismatch = baseIntent();
     mismatch.decision_audit.final_choice = "HOLD";
