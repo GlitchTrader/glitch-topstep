@@ -12,13 +12,13 @@ export interface OwnedFillEvidence {
 
 export interface EntryOrderOwnership {
   intentId: string;
-  account: string;
-  instrument: string;
-  action: "ENTER_LONG" | "ENTER_SHORT";
-  quantity: number;
-  plannedStopLoss: number;
-  plannedTakeProfit: number;
-  customTag: string;
+  account: string | null;
+  instrument: string | null;
+  action: "ENTER_LONG" | "ENTER_SHORT" | null;
+  quantity: number | null;
+  plannedStopLoss: number | null;
+  plannedTakeProfit: number | null;
+  customTag: string | null;
   providerOrderId: number | null;
   status: EntryOrderOwnershipStatus;
   orderEvidenceSequences: number[];
@@ -36,10 +36,13 @@ export interface ProjectXOrderOwnershipSnapshot {
   schema_version: "glitch.projectx.order_ownership.v1";
   generated_utc: string;
   account_id: number;
+  account_name: string;
   contract_id: string;
+  instrument: string;
   entries: EntryOrderOwnership[];
   unresolved_entry_count: number;
   observed_fill_count: number;
   protection_status: "unknown";
+  issues: string[];
   authority: "Only explicit durable provider identities are attributed; price and timing proximity are never ownership evidence.";
 }
