@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
+import type { OrderInfo, PositionInfo } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
@@ -71,6 +72,7 @@ export class GlitchTopstepService {
       positions,
     );
     await this.persistRecoveryResolutions(initialRecovery.resolutions);
+    this.reconcileEntrySubmissionLatch(positions, orders);
 
     const snapshot = () => this.state.buildSnapshot(
       this.config.scope.accountId,
@@ -118,6 +120,7 @@ export class GlitchTopstepService {
       this.executionStore,
       snapshot,
       (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
+      () => this.packets?.invalidateAll(),
     );
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
@@ -223,6 +226,7 @@ export class GlitchTopstepService {
       this.state.replaceOrders(orders, receivedAt);
       this.state.markReconciliationSucceeded(receivedAt);
 
+      const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders);
       const requiresRecovery = this.executionStore.recoveryStatus().unresolvedMutations > 0
         || this.executionStore.terminalMutationsWithoutReceipts().length > 0
         || this.executionStore.intentsWithoutReceiptsOrMutations().length > 0;
@@ -240,12 +244,44 @@ export class GlitchTopstepService {
           this.packets?.invalidateAll();
         }
       }
+      if (latchCleared) {
+        this.packets?.invalidateAll();
+      }
     } catch (error) {
       this.state.markReconciliationFailed(error);
       throw error;
     } finally {
       this.reconciliationInFlight = false;
     }
+  }
+
+  private reconcileEntrySubmissionLatch(
+    positions: PositionInfo[],
+    orders: OrderInfo[],
+  ): boolean {
+    const intentId = this.executionStore.entrySubmissionIntentId();
+    if (!intentId) {
+      return false;
+    }
+    const mutation = this.executionStore.mutationForIntent(intentId);
+    if (!mutation || mutation.operation !== "place_order") {
+      return false;
+    }
+
+    const positionObserved = positions.some(
+      (position) => position.accountId === this.config.scope.accountId
+        && position.contractId === this.config.scope.contractId
+        && position.type !== 0
+        && Math.abs(position.size) > 0,
+    );
+    const orderObserved = mutation.customTag !== null && orders.some(
+      (order) => order.accountId === this.config.scope.accountId
+        && order.contractId === this.config.scope.contractId
+        && order.customTag === mutation.customTag,
+    );
+    return positionObserved || orderObserved
+      ? this.executionStore.clearEntrySubmissionLatch(intentId)
+      : false;
   }
 
   private async persistRecoveryResolutions(
