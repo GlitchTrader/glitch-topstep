@@ -22,6 +22,8 @@ const policy: TopstepPolicyState = {
 
 const recovery: ExecutionRecoveryStatus = {
   blockingAmbiguity: false,
+  entrySubmissionPending: false,
+  blockingNewExposure: false,
   unresolvedMutations: 0,
   ambiguousMutations: 0,
   lastRecoveryUtc: null,
@@ -77,7 +79,7 @@ describe("SQLite execution store", () => {
       "MNQ",
       "shadow",
       300_000,
-      new Date("2026-07-21T12:00:00Z"),
+      new Date("2026-07-21T12:00:05Z"),
     );
     store.recordIssuedPacket(packet);
     assert.equal(
@@ -109,7 +111,7 @@ describe("SQLite execution store", () => {
     store.close();
   });
 
-  it("distinguishes prepared state from ambiguous provider submission", () => {
+  it("atomically latches one entry until provider state settles", () => {
     const store = new SqliteExecutionStore(":memory:");
     const first = intent();
     store.registerIntent(first, "2026-07-21T12:00:05Z");
@@ -120,21 +122,33 @@ describe("SQLite execution store", () => {
       "glt-first",
       "2026-07-21T12:00:06Z",
     );
-    assert.equal(store.recoveryStatus().blockingAmbiguity, false);
-    store.markMutationConfirmedNotSubmitted(first.intentId, "2026-07-21T12:00:07Z");
+    assert.equal(store.entrySubmissionIntentId(), first.intentId);
+    assert.equal(store.recoveryStatus().entrySubmissionPending, true);
+    assert.equal(store.recoveryStatus().blockingNewExposure, true);
 
     const second = intent("00000000-0000-4000-8000-000000000002");
-    store.registerIntent(second, "2026-07-21T12:00:08Z");
+    store.registerIntent(second, "2026-07-21T12:00:07Z");
+    assert.throws(() => store.prepareMutation(
+      second.intentId,
+      "place_order",
+      { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
+      "glt-second",
+      "2026-07-21T12:00:08Z",
+    ), /entry_submission_pending/);
+
+    store.markMutationConfirmedNotSubmitted(first.intentId, "2026-07-21T12:00:09Z");
+    assert.equal(store.recoveryStatus().entrySubmissionPending, false);
     store.prepareMutation(
       second.intentId,
       "place_order",
       { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
       "glt-second",
-      "2026-07-21T12:00:09Z",
+      "2026-07-21T12:00:10Z",
     );
-    store.markMutationSubmitting(second.intentId, "2026-07-21T12:00:10Z");
-    store.markMutationAmbiguous(second.intentId, "network_timeout", "2026-07-21T12:00:11Z");
+    store.markMutationSubmitting(second.intentId, "2026-07-21T12:00:11Z");
+    store.markMutationAmbiguous(second.intentId, "network_timeout", "2026-07-21T12:00:12Z");
     assert.equal(store.recoveryStatus().blockingAmbiguity, true);
+    assert.equal(store.recoveryStatus().blockingNewExposure, true);
     assert.equal(store.recoveryStatus().ambiguousMutations, 1);
     store.close();
   });
