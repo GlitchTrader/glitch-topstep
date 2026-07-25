@@ -41,7 +41,10 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
-| Multi-timeframe normalized market evidence | Missing | Integrated 1m/5m/15m/60m ProjectX series |
+| Native 1m/5m/15m/60m ProjectX bars | Implemented | Verify real History API boundaries, ordering, limits, and partial bars |
+| Multi-timeframe normalization, gaps, and partial-bar provenance | Implemented | Compare against TopstepX chart output |
+| Strategy-neutral ATR, volatility, VWAP, EMA, location, candle, and volume features | Implemented | Validate numerical parity against independent fixtures |
+| Market observation packet identity | Implemented without execution gating | Real Hermes observation and cost/latency acceptance |
 | Tape, delta, depth, and liquidity features | Raw streams journaled | Deterministic aggregation and replay fixtures |
 | Instrument-general Topstep support | Configurable single contract | At least two Topstep-supported contracts |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
@@ -57,13 +60,14 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 3. **Exact submitted-entry and fill ownership from explicit provider IDs — implemented in software.**
 4. **Durable offline order/trade history continuity — implemented in software.**
 5. **Deterministic offline provider replay — implemented in software.**
-6. Real ProjectX read-only, payload-rate, timestamp-boundary, disconnect, correction, replay comparison, and crash-window acceptance.
-7. Explicit protective-child ownership discovery and protection reconstruction.
-8. Exact amendments and multiple protected tranches.
-9. Canonical outcomes and Hermes learning input.
-10. Multi-timeframe and order-flow evidence.
-11. Automatic Topstep policy and session truth.
-12. One-account shadow evaluation, promotion review, and payout lifecycle.
+6. **Native multi-timeframe ProjectX market evidence — implemented in software.**
+7. Real ProjectX read-only, payload-rate, bar/history boundary, disconnect, correction, replay comparison, and crash-window acceptance.
+8. Explicit protective-child ownership discovery and protection reconstruction.
+9. Exact amendments and multiple protected tranches.
+10. Canonical outcomes and Hermes learning input.
+11. Order-flow aggregation and richer session evidence.
+12. Automatic Topstep policy and session truth.
+13. One-account shadow evaluation, promotion review, and payout lifecycle.
 
 ## Promotion rule
 
