@@ -38,6 +38,8 @@ export interface RecoveredExecutionResolution {
 
 export interface ExecutionRecoveryStatus {
   blockingAmbiguity: boolean;
+  entrySubmissionPending: boolean;
+  blockingNewExposure: boolean;
   unresolvedMutations: number;
   ambiguousMutations: number;
   lastRecoveryUtc: string | null;
