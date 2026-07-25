@@ -219,7 +219,8 @@ export class GlitchTopstepService {
       this.state.markReconciliationSucceeded(receivedAt);
 
       const requiresRecovery = this.executionStore.recoveryStatus().unresolvedMutations > 0
-        || this.executionStore.terminalMutationsWithoutReceipts().length > 0;
+        || this.executionStore.terminalMutationsWithoutReceipts().length > 0
+        || this.executionStore.intentsWithoutReceiptsOrMutations().length > 0;
       if (requiresRecovery) {
         const before = JSON.stringify(this.executionStore.recoveryStatus());
         const recovery = await recoverExecutionMutations(
@@ -249,17 +250,19 @@ export class GlitchTopstepService {
       const recordedUtc = new Date().toISOString();
       const status = resolution.outcome === "ambiguous"
         ? "ambiguous"
-        : resolution.outcome === "confirmed_not_submitted" || resolution.outcome === "rejected"
-          ? "rejected"
-          : resolution.operation === "close_position"
-            ? "closed"
-            : "submitted";
+        : resolution.outcome === "ignored"
+          ? "ignored"
+          : resolution.outcome === "confirmed_not_submitted" || resolution.outcome === "rejected"
+            ? "rejected"
+            : resolution.operation === "close_position"
+              ? "closed"
+              : "submitted";
       const receipt = {
         schema_version: "glitch.direct.execution_receipt.v1",
         receipt_id: randomUUID(),
         recorded_utc: recordedUtc,
         intent_id: resolution.intentId,
-        mode: "armed",
+        mode: this.config.tradingMode,
         status,
         code: resolution.code,
         ...(resolution.providerOrderId === null
