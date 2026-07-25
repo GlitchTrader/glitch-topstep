@@ -51,14 +51,14 @@ export class SqliteProviderEvidenceStore {
       options.marketEventRetention,
       DEFAULT_MARKET_EVENT_RETENTION,
       "market_event_retention",
-      10_000,
+      1,
       50_000_000,
     );
     this.marketPruneInterval = integerOption(
       options.marketPruneInterval,
       DEFAULT_MARKET_PRUNE_INTERVAL,
       "market_prune_interval",
-      100,
+      1,
       1_000_000,
     );
     if (this.marketPruneInterval > this.marketEventRetention) {
