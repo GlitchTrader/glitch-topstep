@@ -59,6 +59,8 @@ function config(): AppConfig {
 function healthyRecovery(): ExecutionRecoveryStatus {
   return {
     blockingAmbiguity: false,
+    entrySubmissionPending: false,
+    blockingNewExposure: false,
     unresolvedMutations: 0,
     ambiguousMutations: 0,
     lastRecoveryUtc: null,
@@ -121,6 +123,8 @@ describe("decision packet issuance", () => {
     const store = new SqliteExecutionStore(":memory:");
     const recovery = (): ExecutionRecoveryStatus => ({
       blockingAmbiguity: true,
+      entrySubmissionPending: true,
+      blockingNewExposure: true,
       unresolvedMutations: 1,
       ambiguousMutations: 1,
       lastRecoveryUtc: null,
@@ -134,8 +138,29 @@ describe("decision packet issuance", () => {
       () => CURRENT_TIME_MS,
     ).current();
     assert.equal(packet.execution.recovery_blocked, true);
+    assert.equal(packet.execution.entry_submission_pending, true);
     assert.equal(packet.execution.new_exposure_technically_supported, false);
     assert.equal(packet.execution.ambiguous_mutations, 1);
+    store.close();
+  });
+
+  it("publishes a pending accepted entry as a factual capability block", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const recovery = (): ExecutionRecoveryStatus => ({
+      ...healthyRecovery(),
+      entrySubmissionPending: true,
+      blockingNewExposure: true,
+    });
+    const packet = new DecisionPacketService(
+      config(),
+      snapshot,
+      store,
+      recovery,
+      () => CURRENT_TIME_MS,
+    ).current();
+    assert.equal(packet.execution.entry_submission_pending, true);
+    assert.equal(packet.execution.recovery_blocked, true);
+    assert.equal(packet.execution.new_exposure_technically_supported, false);
     store.close();
   });
 });
