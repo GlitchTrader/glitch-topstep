@@ -13,6 +13,7 @@ export interface ProviderEvidenceEvent {
   accountId: number | null;
   contractId: string | null;
   providerEntityId: string | null;
+  relatedProviderEntityId: string | null;
   rawPayload: unknown;
   normalizedPayload: unknown;
 }
@@ -20,6 +21,17 @@ export interface ProviderEvidenceEvent {
 export interface StoredProviderEvidenceEvent extends ProviderEvidenceEvent {
   sequence: number;
   payloadHash: string;
+}
+
+export interface ProviderEvidenceQuery {
+  source?: ProviderEvidenceSource;
+  eventType?: string;
+  accountId?: number;
+  contractId?: string;
+  providerEntityId?: string;
+  relatedProviderEntityId?: string;
+  afterSequence?: number;
+  limit?: number;
 }
 
 export interface ProviderEvidenceStatus {
