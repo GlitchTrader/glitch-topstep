@@ -24,6 +24,9 @@ export interface StoredProviderEvidenceEvent extends ProviderEvidenceEvent {
 
 export interface ProviderEvidenceStatus {
   eventCount: number;
+  marketEventCount: number;
+  earliestSequence: number | null;
   latestSequence: number | null;
   latestReceivedUtc: string | null;
+  marketEventRetention: number;
 }
