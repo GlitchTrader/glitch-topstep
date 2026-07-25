@@ -202,7 +202,7 @@ export class ProjectXOrderOwnershipService {
       : this.orderEvidence(providerOrderId);
     const orderEvidenceSequences = orderEvents.map((event) => event.sequence);
     const observedOrders = orderEvents
-      .map((event) => orderFromEvidence(event, providerOrderId))
+      .map((event) => orderFromEvidence(event, providerOrderId!))
       .filter((order): order is OrderInfo => order !== null);
     const latestObservedOrder = observedOrders.at(-1) ?? null;
     if (latestObservedOrder) {
