@@ -77,6 +77,13 @@ describe("factual execution safety", () => {
     assert.equal(result.riskBudget.currentBuffer, 3_000);
   });
 
+  it("reserves fees and slippage for every contract", () => {
+    const value = intent();
+    value.quantity = 2;
+    const result = validateEntryRisk(value, snapshot(), policy, settings, context);
+    assert.equal(result.riskUsd, 87);
+  });
+
   it("rejects only a protected loss that reaches the hard loss floor", () => {
     const value = intent();
     value.stopLoss = 18_490.25;
