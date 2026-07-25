@@ -115,7 +115,8 @@ export function validateEntryRisk(
   const pointValue = snapshot.contract.tickValue / snapshot.contract.tickSize;
   const rawRisk = Math.abs(referencePrice - stopLoss) * pointValue * quantity;
   const slippageReserve = settings.slippageReserveTicks * snapshot.contract.tickValue * quantity;
-  const riskUsd = rawRisk + slippageReserve + settings.estimatedRoundTurnFeesUsd;
+  const feeReserve = settings.estimatedRoundTurnFeesUsd * quantity;
+  const riskUsd = rawRisk + slippageReserve + feeReserve;
   const riskBudget = calculateRiskBudget(snapshot.conservativeEquity, policy);
   if (riskBudget.currentBuffer <= 0) {
     throw new RiskRejectedError("no_hard_loss_buffer");
