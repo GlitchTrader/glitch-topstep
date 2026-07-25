@@ -72,6 +72,12 @@ Implemented:
 - fill ownership derived only from ProjectX trades whose `orderId` exactly matches that submitted entry order;
 - contradiction detection for account, contract, side, type, quantity, custom tag, overfill, and duplicate provider order identity;
 - protection ownership explicitly reported as `unknown` until ProjectX supplies a verifiable child-order or OCO relationship;
+- durable order/trade history synchronization on startup, reconnect, and a configurable cadence;
+- bounded timestamp windows with a durable cursor advanced only after complete order and trade retrieval;
+- configurable correction overlap with unchanged historical evidence suppressed across restart;
+- changed provider records retained as new versions while strictly older versions cannot replace a newer durable head;
+- historical order and fill evidence consumed by `/ownership` through the same exact provider-ID rules;
+- history synchronization status exposed through `/health` and the service-start ledger;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -80,7 +86,8 @@ Still required before live promotion:
 - verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
 - actual process-kill and Windows restart fixtures for every durable execution window;
 - raw REST response envelopes where needed for contract-drift forensics;
-- historical order and trade synchronization after offline intervals;
+- verified ProjectX timestamp-boundary semantics and any undocumented history result limits or pagination behavior;
+- real partial-fill, correction, void, and late-update acceptance;
 - provider-created stop and target child identity or another explicit protection relationship;
 - aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
@@ -127,6 +134,17 @@ Glitch intent
 
 Price proximity, timing proximity, side similarity, working-order geometry, and aggregate position state are not ownership evidence. A nearby stop or target remains unrelated until ProjectX exposes an explicit child-order or OCO relationship.
 
+Historical continuity follows:
+
+```text
+durable cursor - correction overlap
+  → bounded ProjectX order/trade window
+  → persist changed provider records
+  → advance cursor only after both retrievals succeed
+```
+
+A history failure degrades evidence health but does not become a hidden trading strategy gate. The next scheduled or reconnect run resumes from the last completed cursor.
+
 ## Requirements
 
 - Node.js 22+
@@ -146,7 +164,7 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health              no authentication; truthful operational, recovery, and evidence status
+GET  /health              no authentication; truthful operational, recovery, evidence, and history status
 GET  /state               bearer token required
 GET  /packet              bearer token required
 GET  /evidence?limit=100  bearer token required; maximum 1000 events
@@ -163,7 +181,7 @@ Execution and telemetry use separate stores:
 
 ```text
 data/glitch-topstep.sqlite     execution identity and recovery; WAL/FULL
-data/projectx-evidence.sqlite  provider evidence; WAL/NORMAL; bounded market-event retention
+data/projectx-evidence.sqlite  provider evidence/history; WAL/NORMAL; bounded market-event retention
 ```
 
 ## Hermes profile
