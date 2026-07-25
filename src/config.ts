@@ -42,6 +42,12 @@ export interface AppConfig {
     marketEventRetention: number;
     marketPruneInterval: number;
   };
+  providerHistory?: {
+    initialLookbackHours: number;
+    overlapMinutes: number;
+    windowMinutes: number;
+    syncIntervalMs: number;
+  };
   dataDir: string;
   reconcileIntervalMs: number;
   packetLeaseMs: number;
@@ -198,6 +204,31 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
   const instrument = required(environment, "GLITCH_INSTRUMENT").toUpperCase();
   const dataDir = optional(environment, "GLITCH_DATA_DIR", "./data");
 
+  const initialLookbackHours = numberValue(
+    environment,
+    "GLITCH_PROVIDER_HISTORY_INITIAL_LOOKBACK_HOURS",
+    168,
+    (value) => Number.isInteger(value) && value >= 1 && value <= 8_760,
+  );
+  const overlapMinutes = numberValue(
+    environment,
+    "GLITCH_PROVIDER_HISTORY_OVERLAP_MINUTES",
+    10,
+    (value) => Number.isInteger(value) && value >= 1 && value <= 1_440,
+  );
+  const windowMinutes = numberValue(
+    environment,
+    "GLITCH_PROVIDER_HISTORY_WINDOW_MINUTES",
+    1_440,
+    (value) => Number.isInteger(value) && value >= 5 && value <= 10_080,
+  );
+  const syncIntervalMs = numberValue(
+    environment,
+    "GLITCH_PROVIDER_HISTORY_SYNC_INTERVAL_MS",
+    60_000,
+    (value) => Number.isInteger(value) && value >= 30_000 && value <= 86_400_000,
+  );
+
   return {
     projectX: {
       username: required(environment, "PROJECTX_USERNAME"),
@@ -255,6 +286,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     providerEvidence: {
       marketEventRetention,
       marketPruneInterval,
+    },
+    providerHistory: {
+      initialLookbackHours,
+      overlapMinutes,
+      windowMinutes,
+      syncIntervalMs,
     },
     dataDir,
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
