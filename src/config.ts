@@ -1,7 +1,8 @@
 import type {
   RiskSettings,
+  TopstepLossModel,
+  TopstepPolicyAuthority,
   TopstepPolicyState,
-  TopstepProgram,
   TradingMode,
 } from "./domain/models.js";
 
@@ -26,7 +27,6 @@ export interface AppConfig {
     token: string;
   };
   tradingMode: TradingMode;
-  requireSimulatedAccount: boolean;
   policy: TopstepPolicyState;
   risk: RiskSettings;
   dataDir: string;
@@ -63,6 +63,22 @@ function numberValue(
   return value;
 }
 
+function nullableNumberValue(
+  environment: NodeJS.ProcessEnv,
+  name: string,
+  predicate: (value: number) => boolean,
+): number | null {
+  const raw = environment[name]?.trim();
+  if (!raw) {
+    return null;
+  }
+  const value = Number(raw);
+  if (!Number.isFinite(value) || !predicate(value)) {
+    throw new Error(`invalid_environment_number:${name}`);
+  }
+  return value;
+}
+
 function booleanValue(environment: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
   const raw = environment[name]?.trim().toLowerCase();
   if (!raw) {
@@ -81,13 +97,27 @@ function enumValue<T extends string>(
   environment: NodeJS.ProcessEnv,
   name: string,
   allowed: readonly T[],
-  fallback: T,
+  fallback?: T,
 ): T {
-  const raw = (environment[name]?.trim() || fallback) as T;
+  const raw = (environment[name]?.trim() || fallback) as T | undefined;
+  if (!raw) {
+    throw new Error(`missing_environment_variable:${name}`);
+  }
   if (!allowed.includes(raw)) {
     throw new Error(`invalid_environment_enum:${name}`);
   }
   return raw;
+}
+
+function optionalUtc(environment: NodeJS.ProcessEnv, name: string): string | null {
+  const value = environment[name]?.trim() || null;
+  if (!value) {
+    return null;
+  }
+  if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(value) || !Number.isFinite(Date.parse(value))) {
+    throw new Error(`invalid_environment_datetime:${name}`);
+  }
+  return value;
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -97,11 +127,16 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     ["disabled", "shadow", "armed"],
     "shadow",
   );
-  const program = enumValue<TopstepProgram>(
+  const lossModel = enumValue<TopstepLossModel>(
     environment,
-    "GLITCH_PROGRAM",
-    ["combine", "xfa"],
-    "xfa",
+    "GLITCH_LOSS_MODEL",
+    ["trading_combine_eod", "express_funded_eod", "operator_provided_floor"],
+  );
+  const policyAuthority = enumValue<TopstepPolicyAuthority>(
+    environment,
+    "GLITCH_POLICY_AUTHORITY",
+    ["operator_configured", "provider_reconciled"],
+    "operator_configured",
   );
   const localToken = required(environment, "GLITCH_LOCAL_TOKEN");
   if (localToken.length < 24) {
@@ -112,6 +147,15 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     && environment.GLITCH_ARMED_ACK !== "I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY"
   ) {
     throw new Error("armed_mode_requires_explicit_scaffold_acknowledgement");
+  }
+
+  const operatorProvidedLossFloorUsd = nullableNumberValue(
+    environment,
+    "GLITCH_HARD_LOSS_FLOOR_USD",
+    Number.isFinite,
+  );
+  if (lossModel === "operator_provided_floor" && operatorProvidedLossFloorUsd === null) {
+    throw new Error("GLITCH_HARD_LOSS_FLOOR_USD is required for operator_provided_floor");
   }
 
   return {
@@ -126,7 +170,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       accountId: numberValue(environment, "GLITCH_ACCOUNT_ID", undefined, (value) => Number.isInteger(value) && value > 0),
       accountName: required(environment, "GLITCH_ACCOUNT_NAME"),
       contractId: required(environment, "GLITCH_CONTRACT_ID"),
-      instrument: optional(environment, "GLITCH_INSTRUMENT", "MNQ").toUpperCase(),
+      instrument: required(environment, "GLITCH_INSTRUMENT").toUpperCase(),
       liveMarketData: booleanValue(environment, "GLITCH_LIVE_MARKET_DATA", false),
     },
     localGateway: {
@@ -135,29 +179,28 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       token: localToken,
     },
     tradingMode,
-    requireSimulatedAccount: booleanValue(environment, "GLITCH_REQUIRE_SIMULATED", true),
     policy: {
-      program,
-      accountSize: numberValue(environment, "GLITCH_ACCOUNT_SIZE", 50_000, (value) => value > 0),
-      initialMaxLoss: numberValue(environment, "GLITCH_INITIAL_MAX_LOSS", 2_000, (value) => value > 0),
-      highestEndOfDayBalance: numberValue(environment, "GLITCH_HIGHEST_EOD_BALANCE", 0, () => true),
-      mllLockedAtZero: booleanValue(environment, "GLITCH_MLL_LOCKED_AT_ZERO", false),
+      accountStage: optional(environment, "GLITCH_ACCOUNT_STAGE", "unknown"),
+      lossModel,
+      authority: policyAuthority,
+      verifiedAtUtc: optionalUtc(environment, "GLITCH_POLICY_VERIFIED_AT_UTC"),
+      startingBalance: numberValue(environment, "GLITCH_STARTING_BALANCE", 50_000, (value) => value > 0),
+      initialMaximumLoss: numberValue(environment, "GLITCH_INITIAL_MAXIMUM_LOSS", 2_000, (value) => value > 0),
+      highestEndOfDayBalance: numberValue(environment, "GLITCH_HIGHEST_EOD_BALANCE", 0, Number.isFinite),
+      lossFloorLockedAtZero: booleanValue(environment, "GLITCH_LOSS_FLOOR_LOCKED_AT_ZERO", false),
       payoutProcessed: booleanValue(environment, "GLITCH_PAYOUT_PROCESSED", false),
+      operatorProvidedLossFloorUsd,
       maxContracts: numberValue(environment, "GLITCH_MAX_CONTRACTS", 1, (value) => Number.isInteger(value) && value > 0),
-      maxDailyRiskUsd: numberValue(environment, "GLITCH_MAX_DAILY_RISK_USD", 200, (value) => value >= 0),
-      dailyRealizedPnlUsd: numberValue(environment, "GLITCH_DAILY_REALIZED_PNL_USD", 0, () => true),
-      entryWindowOpen: booleanValue(environment, "GLITCH_ENTRY_WINDOW_OPEN", false),
     },
     risk: {
-      maxRiskFractionOfBuffer: numberValue(environment, "GLITCH_MAX_RISK_FRACTION_OF_BUFFER", 0.04, (value) => value > 0 && value <= 1),
       estimatedRoundTurnFeesUsd: numberValue(environment, "GLITCH_ESTIMATED_ROUND_TURN_FEES_USD", 2.5, (value) => value >= 0),
       slippageReserveTicks: numberValue(environment, "GLITCH_SLIPPAGE_RESERVE_TICKS", 2, (value) => Number.isInteger(value) && value >= 0),
       maxQuoteAgeMs: numberValue(environment, "GLITCH_MAX_QUOTE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
       maxStateAgeMs: numberValue(environment, "GLITCH_MAX_STATE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
-      maxIntentAgeMs: numberValue(environment, "GLITCH_MAX_INTENT_AGE_MS", 60_000, (value) => Number.isInteger(value) && value > 0),
+      maxIntentAgeMs: numberValue(environment, "GLITCH_MAX_INTENT_AGE_MS", 300_000, (value) => Number.isInteger(value) && value > 0),
     },
     dataDir: optional(environment, "GLITCH_DATA_DIR", "./data"),
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
-    packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 60_000, (value) => Number.isInteger(value) && value >= 1_000),
+    packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 300_000, (value) => Number.isInteger(value) && value >= 1_000),
   };
 }

@@ -1,9 +1,9 @@
 {
   "name": "glitch-topstep",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
-  "description": "Venue-neutral Glitch direct trading gateway with a ProjectX/TopstepX adapter.",
+  "description": "Topstep-first AI trading gateway built directly on ProjectX/TopstepX.",
   "engines": {
     "node": ">=22"
   },

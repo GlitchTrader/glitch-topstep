@@ -1,101 +1,160 @@
 # Roadmap
 
-Progress is evidence-gated, not calendar-gated.
+Progress is evidence-gated, not calendar-gated. Tests prove software contracts; real ProjectX sessions prove integration; attributable after-fee samples evaluate the operator. None alone proves profitability or live readiness.
 
-## R0 — scaffold
+## R0 — Topstep-first authority and truthful scaffold
 
 - [x] strict TypeScript project
 - [x] official ProjectX REST adapter
 - [x] official ProjectX SignalR adapter
-- [x] canonical state store
-- [x] MLL model
-- [x] stop-aware risk budget
-- [x] strict Glitch intent parser
-- [x] loopback packet and intent API
+- [x] canonical account, position, order, quote, print, and depth state
+- [x] explicit Alan / Hermes / Glitch authority contract
+- [x] no hidden simulated-only, entry-window, daily-budget, or risk-fraction strategy gates
+- [x] hard Topstep loss-floor models
+- [x] stop-aware protected-loss calculation
+- [x] per-contract fee and slippage reserves
+- [x] strict operator-profile and prompt-version intent identity
+- [x] loopback health, state, packet, and intent API
+- [x] explicit stream, payload, reconnect-generation, and reconciliation truth
+- [x] shared freshness truth across health, packet, and execution
+- [x] account-wide conservative PnL with missing evidence made explicit
 - [x] shadow mode
-- [x] deterministic tests
+- [x] dedicated `glitch-topstep` Hermes profile
+- [x] deterministic tests for implemented contracts
 
-## R1 — live read-only adapter proof
+## R1 — durable execution identity and recovery
+
+- [x] SQLite WAL store and migration marker
+- [x] foreign keys and synchronous durable writes
+- [x] durable unique intent identity
+- [x] durable issued-packet leases and invalidation
+- [x] outbox persisted before provider mutation
+- [x] mutation lifecycle: `prepared`, `submitting`, `submitted`, `rejected`, `ambiguous`
+- [x] authoritative provider rejection versus ambiguous transport distinction
+- [x] entry recovery by unique historical custom tag plus full order identity
+- [x] close recovery only from authoritative flat position state
+- [x] orphan intent recovery
+- [x] prepared outbox recovery
+- [x] terminal state without receipt recovery
+- [x] no-op receipt recovery
+- [x] recovery health and new-exposure block during ambiguity
+- [ ] actual process-kill fixture before outbox creation
+- [ ] actual process-kill fixture before provider call
+- [ ] actual process-kill fixture during ambiguous transport
+- [ ] actual process-kill fixture after provider response but before receipt
+- [ ] Windows machine-restart persistence fixture
+- [ ] bounded recovery flatten for owned but unresolved exposure
+- [ ] zero duplicate entries in a real ProjectX acceptance session
+
+## R2 — real ProjectX read-only proof
 
 - [ ] authenticate using a real TopstepX ProjectX key
-- [ ] reconcile account and contract selection
-- [ ] prove all user-hub subscriptions
-- [ ] prove quote, trade, and DOM subscriptions
-- [ ] reconnect and REST reconciliation
-- [ ] persist provider events
-- [ ] compare local balance, positions, orders, and PnL with UI
-- [ ] compare local MLL mirror with dashboard
+- [ ] capture sanitized official payload fixtures
+- [ ] reconcile selected account and active contract
+- [ ] prove every user-hub subscription
+- [ ] prove quote, print, and DOM subscriptions
+- [ ] prove disconnect, reconnect, generation invalidation, and REST reconciliation
+- [ ] compare all account positions and conservative PnL with TopstepX UI
+- [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
+- [ ] prove historical order search and custom-tag retention
 
-## R2 — durable execution state
+## R3 — provider evidence and replay foundation
 
-- [ ] SQLite event store and migrations
-- [ ] atomic intent outbox
-- [ ] durable idempotency
-- [ ] order-group state machine
-- [ ] fill and child-bracket reconciliation
-- [ ] exact structural-price correction
-- [ ] startup reconstruction
-- [ ] bounded recovery flatten
+- [ ] one integrated monotonic provider-event journal
+- [ ] persist sanitized raw and normalized REST evidence
+- [ ] persist sanitized raw and normalized user-stream events before state mutation
+- [ ] persist sanitized raw and normalized market-stream events before state mutation
+- [ ] bounded authenticated evidence inspection
+- [ ] deterministic state rebuild from the event corpus
+- [ ] reconnect and correction events preserved append-only
+- [ ] no credentials or session tokens in persisted evidence
+
+## R4 — provider order and protection ownership
+
+- [ ] reconcile entry order and actual fills
+- [ ] identify provider-created stop and target orders from observed evidence
+- [ ] prove side, quantity, contract, and parent-intent ownership
+- [ ] persist order groups and protective-leg identity
+- [ ] correct tick-distance brackets to exact intended absolute prices
+- [ ] fail visibly and reduce risk when protection cannot be proven
+- [ ] reconstruct protection after restart
 - [ ] `MOVE_STOP`
 - [ ] `MOVE_TP`
-- [ ] full exit ownership rules
+- [ ] exact-leg mutation with sibling non-interference
+- [ ] independently protected additions and multiple tranches
+- [ ] full exit ownership and residual-order cleanup
 
-## R3 — account lifecycle and policy
+## R5 — canonical outcomes and learning evidence
 
-- [ ] authoritative session calendar
-- [ ] holidays and special closes
-- [ ] EOD balance capture
-- [ ] MLL correction workflow
-- [ ] Combine lifecycle
-- [ ] XFA lifecycle
-- [ ] payout eligibility and pending state
-- [ ] post-payout reconciliation
-- [ ] scaling-tier state
-- [ ] policy package versioning and source hashes
+- [ ] canonical completed Topstep outcome from provider fills
+- [ ] after-fee realized result
+- [ ] MFE, MAE, duration, and exit cause
+- [ ] planned versus realized risk and reward
+- [ ] account-policy effects and attribution confidence
+- [ ] explicit incomplete or contradictory outcomes
+- [ ] gateway outcome publication to the Hermes profile
+- [ ] rejection and transport episodes available to review without becoming false trade outcomes
 
-## R4 — Hermes operator profile
+## R6 — Topstep policy and session authority
 
-Companion repository: `GlitchTrader/glitch-topstep-hermes-profile`.
+- [ ] canonical product and account-stage record
+- [ ] provider/dashboard source provenance and hashes
+- [ ] EOD balance and hard loss-floor history
+- [ ] floor correction workflow
+- [ ] Trading Combine lifecycle
+- [ ] Express Funded lifecycle
+- [ ] payout eligibility, pending, processed, and post-payout reconciliation
+- [ ] scaling tier and authoritative contract ceiling
+- [ ] session flat deadlines
+- [ ] holiday, early-close, timezone, and DST truth
+- [ ] explicit contradiction and stale-source handling
 
-- [x] installable `glitch-topstep` profile scaffold
-- [x] no venue credentials in the profile or model packet
-- [x] memory-only scheduled model toolset
-- [x] five-minute flat cadence
-- [x] one-minute positioned cadence
-- [x] bounded current packet and five-frame path
-- [x] isolated scheduled sessions
-- [x] strict single-object JSON output
-- [x] separate learning worker
-- [x] proposed-by-default evidence-gated cognitive overlays
-- [x] deterministic operator controls and strict-contract flatten
-- [ ] installed Windows/Hermes acceptance
-- [ ] canonical completed-outcome feed from this gateway
-- [ ] real shadow-session packet/receipt verification
-- [ ] amendment actions after protection ownership is proven
+## R7 — instrument-general observation engine
 
-## R5 — one-account acceptance
+- [ ] active Topstep contract discovery and rollover evidence
+- [ ] native tick, point value, session, and fee metadata
+- [ ] integrated 1m, 5m, 15m, and 60m OHLCV normalization
+- [ ] gap, partial-bar, and timestamp provenance
+- [ ] session and prior-session structure
+- [ ] volatility, trend, range, and location evidence
+- [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence
+- [ ] descriptive normalized features without a coded entry strategy
+- [ ] acceptance on at least two Topstep-supported products
 
-- [ ] one MNQ account
-- [ ] one entry tranche
-- [ ] one stop and target
+## R8 — replay and comparative evaluation
+
+- [ ] replay raw provider events into canonical packets
+- [ ] deterministic decision and receipt replay
+- [ ] simulated fills, fees, and slippage
+- [ ] compare cognition versions on identical evidence
+- [ ] freeze inclusion, exclusion, regime, and missing-data rules before evaluation
+- [ ] report expectancy, drawdown, MFE/MAE capture, churn, rejection, rule survival, and uncertainty
+- [ ] prevent one sample from silently becoming hard-coded strategy policy
+
+## R9 — one-account market-readiness evidence
+
+- [ ] actual Windows/Hermes installation acceptance
+- [ ] one configured Topstep account
 - [ ] zero duplicate entries
-- [ ] zero unprotected exposure
-- [ ] complete restart recovery
+- [ ] zero unexplained unprotected exposure
+- [ ] complete reconnect and restart recovery
 - [ ] complete attribution
-- [ ] reconciled after-fee sample
-- [ ] first payout lifecycle
+- [ ] reconciled after-fee shadow sample
+- [ ] explicit operator promotion review
+- [ ] first complete account and payout lifecycle evidence
 
-## R6 — replication
+## R10 — scale only after evidence
 
-- [ ] Topstep native copier observation
-- [ ] follower drift and unlink detection
-- [ ] payout unlink recovery
-- [ ] identical stage/tier requirements
-- [ ] portfolio-level correlated risk
-- [ ] scale to additional accounts only after evidence
+- [ ] additional Topstep-supported instruments
+- [ ] additional account products and stages
+- [ ] portfolio-level correlated exposure evidence
+- [ ] Topstep-native account/copy capabilities only when officially supported and reconciled
+- [ ] extract reusable venue-neutral contracts only after the Topstep implementation is proven
 
-## R7 — second venue
+## Permanent boundaries
 
-- [ ] extract canonical core package
-- [ ] implement approved Tradovate adapter
-- [ ] preserve the same intent, risk, event, and recovery contracts
+- no Apex or NinjaTrader implementation assumptions in the Topstep core;
+- no fixed strategy, indicator trigger, quantity schedule, risk percentage, profit quota, grid, or martingale rule in Glitch;
+- no credentials or numeric provider identifiers in Hermes;
+- no hidden cognition gate based on packet quality, capacity, policy, or minimum history;
+- no profitability, payout, unattended-operation, funded-stage, or live-readiness claim inferred from tests or architecture.

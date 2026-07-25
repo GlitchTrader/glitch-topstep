@@ -6,6 +6,7 @@ import type {
   TradeIntent,
   ValidatedEntry,
 } from "../domain/models.js";
+import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
 import { calculateRiskBudget } from "./mll.js";
 
 export class RiskRejectedError extends Error {
@@ -23,7 +24,6 @@ export interface RiskValidationContext {
   expectedAccountName: string;
   expectedInstrument: string;
   expectedSnapshotHash: string;
-  requireSimulatedAccount: boolean;
   now?: Date;
 }
 
@@ -38,14 +38,31 @@ export function validateEntryRisk(
   if (intent.action !== "ENTER_LONG" && intent.action !== "ENTER_SHORT") {
     throw new RiskRejectedError("entry_action_required");
   }
-  if (!snapshot.stateComplete) {
-    throw new RiskRejectedError("venue_state_incomplete");
+
+  const quality = evaluateSnapshotDataQuality(snapshot, settings, now);
+  if (!quality.stateComplete) {
+    if (quality.issues.includes("quote_stale")) {
+      throw new RiskRejectedError("quote_stale", String(quality.quoteAgeMs));
+    }
+    if (quality.issues.includes("account_state_stale")) {
+      throw new RiskRejectedError("account_state_stale", String(quality.stateAgeMs));
+    }
+    if (quality.issues.includes("quote_timestamp_future")) {
+      throw new RiskRejectedError("quote_timestamp_future", String(quality.quoteAgeMs));
+    }
+    if (quality.issues.includes("account_state_timestamp_future")) {
+      throw new RiskRejectedError("account_state_timestamp_future", String(quality.stateAgeMs));
+    }
+    if (quality.issues.includes("quote_timestamp_invalid")) {
+      throw new RiskRejectedError("quote_timestamp_invalid");
+    }
+    if (quality.issues.includes("account_state_timestamp_invalid")) {
+      throw new RiskRejectedError("account_state_timestamp_invalid");
+    }
+    throw new RiskRejectedError("venue_state_incomplete", quality.issues.join(","));
   }
   if (!snapshot.account.canTrade) {
     throw new RiskRejectedError("account_cannot_trade");
-  }
-  if (context.requireSimulatedAccount && snapshot.account.simulated !== true) {
-    throw new RiskRejectedError("simulated_account_required");
   }
   if (snapshot.account.id !== context.expectedAccountId) {
     throw new RiskRejectedError("account_id_mismatch");
@@ -59,31 +76,17 @@ export function validateEntryRisk(
   if (intent.snapshotHash !== context.expectedSnapshotHash) {
     throw new RiskRejectedError("snapshot_hash_mismatch");
   }
-  if (!policy.entryWindowOpen) {
-    throw new RiskRejectedError("entry_window_closed");
-  }
   if (!snapshot.quote) {
     throw new RiskRejectedError("quote_missing");
   }
 
-  const intentAge = now.getTime() - new Date(intent.createdUtc).getTime();
-  const quoteAge = now.getTime() - new Date(snapshot.quote.timestamp).getTime();
-  const stateAge = now.getTime() - new Date(snapshot.capturedAt).getTime();
-  if (intentAge < -2_000 || intentAge > settings.maxIntentAgeMs) {
-    throw new RiskRejectedError("intent_stale", String(intentAge));
-  }
-  if (quoteAge < -2000 || quoteAge > settings.maxQuoteAgeMs) {
-    throw new RiskRejectedError("quote_stale", String(quoteAge));
-  }
-  if (stateAge < -2000 || stateAge > settings.maxStateAgeMs) {
-    throw new RiskRejectedError("account_state_stale", String(stateAge));
-  }
-
+  // The initial gateway cannot yet prove independent additions or working-order ownership.
+  // Rejecting these states protects venue truth; it does not encode a trading strategy.
   if (snapshot.instrumentOpenContracts !== 0) {
-    throw new RiskRejectedError("position_already_open");
+    throw new RiskRejectedError("position_addition_not_implemented");
   }
   if (snapshot.openOrders.length !== 0) {
-    throw new RiskRejectedError("working_orders_present");
+    throw new RiskRejectedError("working_order_ownership_unresolved");
   }
 
   const quantity = intent.quantity;
@@ -98,7 +101,7 @@ export function validateEntryRisk(
 
   const remainingCapacity = Math.max(0, policy.maxContracts - snapshot.totalOpenContracts);
   if (quantity > remainingCapacity) {
-    throw new RiskRejectedError("max_contracts_exceeded");
+    throw new RiskRejectedError("hard_contract_capacity_exceeded");
   }
   if (!isTickAligned(stopLoss, snapshot.contract.tickSize)) {
     throw new RiskRejectedError("stop_not_tick_aligned");
@@ -120,19 +123,16 @@ export function validateEntryRisk(
   const pointValue = snapshot.contract.tickValue / snapshot.contract.tickSize;
   const rawRisk = Math.abs(referencePrice - stopLoss) * pointValue * quantity;
   const slippageReserve = settings.slippageReserveTicks * snapshot.contract.tickValue * quantity;
-  const riskUsd = rawRisk + slippageReserve + settings.estimatedRoundTurnFeesUsd;
-  const riskBudget = calculateRiskBudget(
-    snapshot.conservativeEquity,
-    policy,
-    settings.maxRiskFractionOfBuffer,
-  );
+  const feeReserve = settings.estimatedRoundTurnFeesUsd * quantity;
+  const riskUsd = rawRisk + slippageReserve + feeReserve;
+  const riskBudget = calculateRiskBudget(snapshot.conservativeEquity, policy);
   if (riskBudget.currentBuffer <= 0) {
-    throw new RiskRejectedError("no_mll_buffer");
+    throw new RiskRejectedError("no_hard_loss_buffer");
   }
-  if (riskUsd > riskBudget.allowedRiskUsd + 1e-8) {
+  if (riskUsd >= riskBudget.currentBuffer - 1e-8) {
     throw new RiskRejectedError(
-      "risk_budget_exceeded",
-      `risk=${riskUsd.toFixed(2)},allowed=${riskBudget.allowedRiskUsd.toFixed(2)}`,
+      "hard_loss_floor_breach",
+      `protected_risk=${riskUsd.toFixed(2)},buffer=${riskBudget.currentBuffer.toFixed(2)}`,
     );
   }
 

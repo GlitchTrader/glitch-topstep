@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type {
   AccountVenueSnapshot,
   RiskSettings,
@@ -9,11 +10,16 @@ import {
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "../domain/operator.js";
 import { calculateRiskBudget } from "../risk/mll.js";
+import {
+  evaluateSnapshotDataQuality,
+  type SnapshotDataQuality,
+} from "../state/data-quality.js";
 
 export interface DirectDecisionPacket {
-  schema_version: "glitch.direct.decision_packet.v1";
+  schema_version: "glitch.direct.decision_packet.v2";
   packet_id: string;
   created_utc: string;
+  expires_utc: string;
   venue: "projectx";
   firm: "topstep";
   instrument: string;
@@ -32,9 +38,11 @@ export interface DirectDecisionPacket {
   contract: {
     id: string;
     name: string;
+    description: string;
     symbol_id: string;
     tick_size: number;
     tick_value: number;
+    active_contract: boolean;
   };
   market: {
     snapshot_hash: string;
@@ -48,22 +56,44 @@ export interface DirectDecisionPacket {
     session_low: number | null;
     volume: number | null;
   };
+  data_quality: {
+    state_complete: boolean;
+    issues: string[];
+    quote_age_ms: number | null;
+    state_age_ms: number | null;
+    generation: number;
+    user_stream_state: string;
+    market_stream_state: string;
+    reconciliation_state: string;
+    reconciliation_generation: number;
+    last_user_event_utc: string | null;
+    last_market_event_utc: string | null;
+    last_reconciled_utc: string | null;
+  };
   policy: {
-    program: "combine" | "xfa";
-    account_size: number;
-    initial_max_loss: number;
+    account_stage: string;
+    authority: string;
+    verified_at_utc: string | null;
+    loss_model: string;
+    starting_balance: number;
+    initial_maximum_loss: number;
     highest_end_of_day_balance: number;
-    liquidation_floor: number;
-    current_buffer: number;
-    allowed_risk_usd: number;
+    hard_loss_floor_usd: number;
+    current_buffer_usd: number;
     max_contracts: number;
-    entry_window_open: boolean;
   };
   execution: {
-    state_complete: boolean;
-    entry_actions_enabled: boolean;
-    valid_entry_quantities: number[];
-    authority: "Glitch validates and executes; Hermes proposes only";
+    gateway_mode: "disabled" | "shadow" | "armed";
+    new_exposure_technically_supported: boolean;
+    maximum_additional_contracts: number;
+    recovery_blocked: boolean;
+    entry_submission_pending: boolean;
+    unresolved_mutations: number;
+    ambiguous_mutations: number;
+    last_recovery_utc: string | null;
+    last_recovery_error: string | null;
+    supported_actions: Array<"ENTER_LONG" | "ENTER_SHORT" | "HOLD" | "EXIT" | "NOTHING">;
+    authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects";
   };
   required_output_template: Record<string, unknown>;
 }
@@ -71,6 +101,8 @@ export interface DirectDecisionPacket {
 export function canonicalDecisionState(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
+  recovery: ExecutionRecoveryStatus,
+  quality: SnapshotDataQuality,
 ): Record<string, unknown> {
   return {
     account: snapshot.account,
@@ -82,17 +114,24 @@ export function canonicalDecisionState(
     instrumentOpenContracts: snapshot.instrumentOpenContracts,
     unrealizedPnl: snapshot.unrealizedPnl,
     conservativeEquity: snapshot.conservativeEquity,
-    stateComplete: snapshot.stateComplete,
+    operational: snapshot.operational,
+    dataQuality: {
+      stateComplete: quality.stateComplete,
+      issues: quality.issues,
+    },
     policy,
+    recovery,
   };
 }
 
 export function decisionStateHash(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
+  recovery: ExecutionRecoveryStatus,
+  quality: SnapshotDataQuality,
 ): string {
   return createHash("sha256")
-    .update(JSON.stringify(canonicalDecisionState(snapshot, policy)))
+    .update(JSON.stringify(canonicalDecisionState(snapshot, policy, recovery, quality)))
     .digest("hex");
 }
 
@@ -100,27 +139,27 @@ export function buildDecisionPacket(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
   risk: RiskSettings,
+  recovery: ExecutionRecoveryStatus,
   instrument: string,
+  tradingMode: "disabled" | "shadow" | "armed",
+  leaseMs: number,
+  now = new Date(),
 ): DirectDecisionPacket {
-  const createdUtc = new Date().toISOString();
+  const createdUtc = now.toISOString();
+  const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
   const packetId = randomUUID();
-  const riskBudget = calculateRiskBudget(
-    snapshot.conservativeEquity,
-    policy,
-    risk.maxRiskFractionOfBuffer,
-  );
+  const riskBudget = calculateRiskBudget(snapshot.conservativeEquity, policy);
   const remainingCapacity = Math.max(0, policy.maxContracts - snapshot.totalOpenContracts);
-  const validEntryQuantities = snapshot.stateComplete && policy.entryWindowOpen
-    ? Array.from({ length: remainingCapacity }, (_, index) => index + 1)
-    : [];
   const quote = snapshot.quote;
-  const snapshotHash = decisionStateHash(snapshot, policy);
+  const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
+  const snapshotHash = decisionStateHash(snapshot, policy, recovery, quality);
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
 
   return {
-    schema_version: "glitch.direct.decision_packet.v1",
+    schema_version: "glitch.direct.decision_packet.v2",
     packet_id: packetId,
     created_utc: createdUtc,
+    expires_utc: expiresUtc,
     venue: "projectx",
     firm: "topstep",
     instrument,
@@ -139,9 +178,11 @@ export function buildDecisionPacket(
     contract: {
       id: snapshot.contract.id,
       name: snapshot.contract.name,
+      description: snapshot.contract.description,
       symbol_id: snapshot.contract.symbolId,
       tick_size: snapshot.contract.tickSize,
       tick_value: snapshot.contract.tickValue,
+      active_contract: snapshot.contract.activeContract,
     },
     market: {
       snapshot_hash: snapshotHash,
@@ -157,26 +198,51 @@ export function buildDecisionPacket(
       session_low: quote?.low ?? null,
       volume: quote?.volume ?? null,
     },
+    data_quality: {
+      state_complete: quality.stateComplete,
+      issues: [...quality.issues],
+      quote_age_ms: quality.quoteAgeMs,
+      state_age_ms: quality.stateAgeMs,
+      generation: snapshot.operational.generation,
+      user_stream_state: snapshot.operational.userStream.state,
+      market_stream_state: snapshot.operational.marketStream.state,
+      reconciliation_state: snapshot.operational.reconciliation.state,
+      reconciliation_generation: snapshot.operational.reconciliation.generation,
+      last_user_event_utc: snapshot.operational.userStream.lastEventAt,
+      last_market_event_utc: snapshot.operational.marketStream.lastEventAt,
+      last_reconciled_utc: snapshot.operational.reconciliation.lastSucceededAt,
+    },
     policy: {
-      program: policy.program,
-      account_size: policy.accountSize,
-      initial_max_loss: policy.initialMaxLoss,
+      account_stage: policy.accountStage,
+      authority: policy.authority,
+      verified_at_utc: policy.verifiedAtUtc,
+      loss_model: policy.lossModel,
+      starting_balance: policy.startingBalance,
+      initial_maximum_loss: policy.initialMaximumLoss,
       highest_end_of_day_balance: policy.highestEndOfDayBalance,
-      liquidation_floor: riskBudget.liquidationFloor,
-      current_buffer: riskBudget.currentBuffer,
-      allowed_risk_usd: riskBudget.allowedRiskUsd,
+      hard_loss_floor_usd: riskBudget.liquidationFloor,
+      current_buffer_usd: riskBudget.currentBuffer,
       max_contracts: policy.maxContracts,
-      entry_window_open: policy.entryWindowOpen,
     },
     execution: {
-      state_complete: snapshot.stateComplete,
-      entry_actions_enabled:
-        snapshot.stateComplete
+      gateway_mode: tradingMode,
+      new_exposure_technically_supported:
+        tradingMode !== "disabled"
+        && quality.stateComplete
         && snapshot.account.canTrade
-        && policy.entryWindowOpen
-        && validEntryQuantities.length > 0,
-      valid_entry_quantities: validEntryQuantities,
-      authority: "Glitch validates and executes; Hermes proposes only",
+        && snapshot.instrumentOpenContracts === 0
+        && snapshot.openOrders.length === 0
+        && remainingCapacity > 0
+        && !recovery.blockingNewExposure,
+      maximum_additional_contracts: remainingCapacity,
+      recovery_blocked: recovery.blockingNewExposure,
+      entry_submission_pending: recovery.entrySubmissionPending,
+      unresolved_mutations: recovery.unresolvedMutations,
+      ambiguous_mutations: recovery.ambiguousMutations,
+      last_recovery_utc: recovery.lastRecoveryUtc,
+      last_recovery_error: recovery.lastRecoveryError,
+      supported_actions: ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"],
+      authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects",
     },
     required_output_template: {
       schema_version: "glitch.intent.v2",

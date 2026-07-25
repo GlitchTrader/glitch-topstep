@@ -1,5 +1,8 @@
 import { TradeActions, type DecisionAudit, type TradeAction, type TradeIntent } from "./models.js";
-import { GLITCH_TOPSTEP_OPERATOR_PROFILE } from "./operator.js";
+import {
+  GLITCH_TOPSTEP_OPERATOR_PROFILE,
+  GLITCH_TOPSTEP_PROMPT_VERSION,
+} from "./operator.js";
 
 const CORE_FIELDS = new Set([
   "schema_version",
@@ -117,6 +120,10 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   if (operatorProfile !== GLITCH_TOPSTEP_OPERATOR_PROFILE) {
     throw new Error("operator_profile_mismatch");
   }
+  const promptVersion = stringField(input, "prompt_version", 128);
+  if (promptVersion !== GLITCH_TOPSTEP_PROMPT_VERSION) {
+    throw new Error("prompt_version_mismatch");
+  }
   const action = parseAction(input.action);
   const confidence = input.confidence;
   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
@@ -159,7 +166,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     confidence,
     snapshotHash: stringField(input, "snapshot_hash", 256),
     modelVersion: stringField(input, "model_version", 128),
-    promptVersion: stringField(input, "prompt_version", 128),
+    promptVersion,
     reason: stringField(input, "reason", 1000),
     decisionAudit: parseDecisionAudit(input.decision_audit, action),
     ...(quantity === undefined ? {} : { quantity }),

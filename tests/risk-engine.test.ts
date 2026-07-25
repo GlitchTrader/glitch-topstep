@@ -1,84 +1,36 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type {
-  AccountVenueSnapshot,
   RiskSettings,
   TopstepPolicyState,
   TradeIntent,
 } from "../src/domain/models.js";
 import { RiskRejectedError, validateEntryRisk } from "../src/risk/risk-engine.js";
+import { snapshot } from "./fixtures.js";
 
-const now = new Date("2026-07-21T12:00:05Z");
+const policy: TopstepPolicyState = {
+  accountStage: "express_funded_standard",
+  lossModel: "express_funded_eod",
+  authority: "operator_configured",
+  verifiedAtUtc: null,
+  startingBalance: 50_000,
+  initialMaximumLoss: 2_000,
+  highestEndOfDayBalance: 0,
+  lossFloorLockedAtZero: false,
+  payoutProcessed: false,
+  operatorProvidedLossFloorUsd: null,
+  maxContracts: 3,
+};
 
-function snapshot(): AccountVenueSnapshot {
-  return {
-    capturedAt: "2026-07-21T12:00:04Z",
-    account: {
-      id: 101,
-      name: "TEST_ACCOUNT",
-      balance: 1_000,
-      canTrade: true,
-      isVisible: true,
-      simulated: true,
-    },
-    contract: {
-      id: "CON.F.US.MNQ.U26",
-      name: "MNQU6",
-      description: "Micro E-mini Nasdaq",
-      tickSize: 0.25,
-      tickValue: 0.5,
-      activeContract: true,
-      symbolId: "F.US.MNQ",
-    },
-    quote: {
-      contractId: "CON.F.US.MNQ.U26",
-      symbol: "F.US.MNQ",
-      lastPrice: 20_000,
-      bestBid: 19_999.75,
-      bestAsk: 20_000.25,
-      open: 19_950,
-      high: 20_020,
-      low: 19_930,
-      volume: 10_000,
-      timestamp: "2026-07-21T12:00:04Z",
-    },
-    positions: [],
-    openOrders: [],
-    totalOpenContracts: 0,
-    instrumentOpenContracts: 0,
-    unrealizedPnl: 0,
-    conservativeEquity: 1_000,
-    stateComplete: true,
-  };
-}
+const settings: RiskSettings = {
+  estimatedRoundTurnFeesUsd: 2.5,
+  slippageReserveTicks: 2,
+  maxQuoteAgeMs: 5_000,
+  maxStateAgeMs: 5_000,
+  maxIntentAgeMs: 300_000,
+};
 
-function policy(): TopstepPolicyState {
-  return {
-    program: "xfa",
-    accountSize: 50_000,
-    initialMaxLoss: 2_000,
-    highestEndOfDayBalance: 0,
-    mllLockedAtZero: false,
-    payoutProcessed: false,
-    maxContracts: 3,
-    maxDailyRiskUsd: 200,
-    dailyRealizedPnlUsd: 0,
-    entryWindowOpen: true,
-  };
-}
-
-function settings(): RiskSettings {
-  return {
-    maxRiskFractionOfBuffer: 0.04,
-    estimatedRoundTurnFeesUsd: 2.5,
-    slippageReserveTicks: 2,
-    maxQuoteAgeMs: 5_000,
-    maxStateAgeMs: 5_000,
-    maxIntentAgeMs: 60_000,
-  };
-}
-
-function intent(quantity = 1): TradeIntent {
+function intent(): TradeIntent {
   return {
     schemaVersion: "glitch.intent.v2",
     intentId: "00000000-0000-4000-8000-000000000001",
@@ -90,7 +42,7 @@ function intent(quantity = 1): TradeIntent {
     confidence: 0.6,
     snapshotHash: "hash",
     modelVersion: "test",
-    promptVersion: "test-v1",
+    promptVersion: "glitch-topstep-v2",
     reason: "Test entry.",
     decisionAudit: {
       bullCase: "Bull.",
@@ -103,7 +55,7 @@ function intent(quantity = 1): TradeIntent {
       changeCondition: "Change.",
       finalChoice: "ENTER_LONG",
     },
-    quantity,
+    quantity: 1,
     orderType: "MARKET",
     stopLoss: 19_980.25,
     takeProfit1: 20_030.25,
@@ -115,50 +67,59 @@ const context = {
   expectedAccountName: "TEST_ACCOUNT",
   expectedInstrument: "MNQ",
   expectedSnapshotHash: "hash",
-  requireSimulatedAccount: true,
-  now,
+  now: new Date("2026-07-21T12:00:05Z"),
 };
 
-describe("deterministic entry risk", () => {
-  it("accepts a protected entry inside the stop-aware buffer budget", () => {
-    const result = validateEntryRisk(intent(1), snapshot(), policy(), settings(), context);
+describe("factual execution safety", () => {
+  it("computes protected risk without applying an arbitrary percentage budget", () => {
+    const result = validateEntryRisk(intent(), snapshot(), policy, settings, context);
     assert.equal(result.riskUsd, 43.5);
-    assert.equal(result.stopTicks, 80);
-    assert.equal(result.targetTicks, 120);
+    assert.equal(result.riskBudget.currentBuffer, 3_000);
   });
 
-  it("rejects quantity whose stop-aware risk exceeds the account budget", () => {
+  it("reserves fees and slippage for every contract", () => {
+    const value = intent();
+    value.quantity = 2;
+    const result = validateEntryRisk(value, snapshot(), policy, settings, context);
+    assert.equal(result.riskUsd, 87);
+  });
+
+  it("rejects only a protected loss that reaches the hard loss floor", () => {
+    const value = intent();
+    value.stopLoss = 18_490.25;
     assert.throws(
-      () => validateEntryRisk(intent(3), snapshot(), policy(), settings(), context),
-      /risk_budget_exceeded/,
+      () => validateEntryRisk(value, snapshot(), policy, settings, context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "hard_loss_floor_breach",
     );
   });
 
-  it("rejects live accounts when the configured scope requires simulation", () => {
-    const value = snapshot();
-    value.account.simulated = false;
+  it("rejects hard contract capacity but not the account simulation class", () => {
+    const oversized = intent();
+    oversized.quantity = 4;
     assert.throws(
-      () => validateEntryRisk(intent(), value, policy(), settings(), context),
-      (error: unknown) => error instanceof RiskRejectedError && error.code === "simulated_account_required",
+      () => validateEntryRisk(oversized, snapshot(), policy, settings, context),
+      /hard_contract_capacity_exceeded/,
     );
+
+    const live = snapshot();
+    live.account.simulated = false;
+    assert.doesNotThrow(() => validateEntryRisk(intent(), live, policy, settings, context));
   });
 
-  it("rejects stale state and crossed identity", () => {
+  it("rejects stale or incomplete venue truth", () => {
     const stale = snapshot();
     stale.capturedAt = "2026-07-21T11:59:00Z";
     assert.throws(
-      () => validateEntryRisk(intent(), stale, policy(), settings(), context),
+      () => validateEntryRisk(intent(), stale, policy, settings, context),
       /account_state_stale/,
     );
+
+    const incomplete = snapshot();
+    incomplete.stateComplete = false;
+    incomplete.stateIssues = ["market_stream_reconnecting"];
     assert.throws(
-      () => validateEntryRisk(
-        { ...intent(), account: "WRONG" },
-        snapshot(),
-        policy(),
-        settings(),
-        context,
-      ),
-      /account_name_mismatch/,
+      () => validateEntryRisk(intent(), incomplete, policy, settings, context),
+      /venue_state_incomplete/,
     );
   });
 });

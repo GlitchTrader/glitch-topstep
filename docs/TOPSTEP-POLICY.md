@@ -1,138 +1,127 @@
-# Topstep policy model
+# Topstep policy evidence
 
-**Last verified:** July 21, 2026
+**Last reviewed:** July 24, 2026
 
-This document distinguishes provider API facts from locally modeled firm rules. Topstep remains the final authority.
+This document separates official provider facts, operator-confirmed account facts, local calculations, and trading judgment. Topstep remains the final authority.
 
-## API facts
+## Product boundary
 
-Topstep officially permits automated strategies through TopstepX API Access for supported account stages and provides:
+Glitch Topstep is tailored to Topstep accounts connected through the official ProjectX trader API. It does not import Apex rules, NinjaTrader assumptions, master/follower replication, or generic prop-firm policy.
 
-- live and historical market data
-- direct order execution
-- account, order, position, and trade streams
-- custom risk logic
-- one API subscription across linked TopstepX accounts
+The configured account and contract are the current acceptance scope, not a permanent MNQ strategy or account-class abstraction.
 
-API trading must originate from the trader's personal device. Topstep currently prohibits VPS, VPN, and remote-server API trading. There is no separate API sandbox.
+## Evidence authority
 
-Source:
+Every account-policy field must name its authority:
 
-- https://help.topstep.com/en/articles/11187768-topstepx-api-access
+- `provider_reconciled` — derived from current provider/dashboard evidence and persisted with provenance;
+- `operator_configured` — supplied by the human operator because the API does not expose the fact;
+- unknown or contradictory facts remain explicit and must not be silently guessed.
 
-## ProjectX facts
+Hermes receives these fields as evidence. Glitch uses only authoritative hard boundaries required to make order mutation factually safe.
 
-The documented trader API exposes:
+## ProjectX evidence
 
-- account ID, name, balance, tradability, visibility, and sometimes simulated/live status
-- contracts with tick size and tick value
-- positions
-- open and historical orders
-- trades, PnL, and fees
-- quotes, prints, and market depth
-- historical bars
-- market entries with provider-side stop and target brackets
+The trader API currently provides account, contract, order, position, trade, quote, print, depth, and historical-bar surfaces. It does not expose every Topstep commercial-program field directly.
 
-The public trader API does not currently document direct fields for:
+Account stage, payout state, scaling state, qualifying EOD balance, loss-floor lock, session deadlines, and related program facts therefore require a separate versioned policy-evidence pipeline. The current scaffold receives several of these facts through configuration. This is not production authority.
 
-- MLL floor
-- payout eligibility
-- winning-day progress
-- consistency percentage
-- scaling tier
-- payout processing state
-- call-up state
+## Hard loss-floor model
 
-Glitch must model and reconcile those states locally.
+The gateway currently supports three explicit models.
 
-Sources:
-
-- https://gateway.docs.projectx.com/docs/realtime/
-- https://gateway.docs.projectx.com/docs/api-reference/account/search-accounts/
-- https://gateway.docs.projectx.com/docs/api-reference/order/order-place/
-
-## Maximum Loss Limit model
-
-### Trading Combine
+### Trading Combine end-of-day trail
 
 Let:
 
-- `S` = starting balance
-- `D` = initial maximum loss allowance
-- `H` = highest qualifying end-of-day balance
+- `S` = starting balance;
+- `D` = initial maximum-loss allowance;
+- `H` = highest qualifying end-of-day balance.
 
 ```text
 floor = min(S, S - D + max(0, H - S))
 ```
 
-### Express Funded Account
+### Express Funded end-of-day trail
 
 ```text
 floor = min(0, -D + max(0, H))
 ```
 
-After the floor locks at zero or a payout establishes a zero floor:
+When authoritative evidence says the floor is locked at zero or a payout has established the zero floor:
 
 ```text
 floor = 0
 ```
 
-Current usable buffer:
+### Explicit reconciled floor
+
+When a current authoritative source supplies the exact hard floor:
 
 ```text
-buffer = conservativeEquity - floor
+floor = operatorOrProviderSuppliedFloor
 ```
 
-Conservative equity marks longs at bid and shorts at ask, then subtracts fee and slippage reserves in trade-risk calculations.
+The configuration must identify whether that value is operator-configured or provider-reconciled.
 
-The current implementation receives `H`, payout state, and lock state from configuration. This is temporary. Production code must persist EOD balances, reconcile them with the dashboard, and require an explicit correction event when local and provider states disagree.
-
-Source:
-
-- https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit
-
-## Internal risk budget
-
-Provider liquidation limits are not normal operating budgets.
+## Current hard headroom
 
 ```text
-fractionBudget = currentBuffer * configuredRiskFraction
-dailyRemaining = max(0, internalDailyRisk - realizedLossToday)
-allowedRisk     = min(fractionBudget, dailyRemaining)
+currentBuffer = conservativeEquity - hardLossFloor
 ```
 
-Trade risk:
+Conservative equity marks longs at bid and shorts at ask.
+
+`currentBuffer` is not a recommended risk budget. It is the remaining distance to an authoritative hard loss boundary.
+
+## Protected trade calculation
 
 ```text
-rawRisk = abs(referencePrice - stopPrice) * pointValue * quantity
-risk     = rawRisk + slippageReserve + feeReserve
+rawRisk = abs(currentExecutablePrice - stopPrice) * pointValue * quantity
+protectedRisk = rawRisk + slippageReserve + feeReserve
 ```
 
-The intent is rejected when:
+Glitch rejects entry only when the current protected loss would reach or cross the hard loss floor, or when another factual execution invariant fails.
 
-```text
-risk > allowedRisk
-```
+Glitch does not derive or enforce:
 
-## Compliance posture
+- a fixed percentage of buffer;
+- a daily internal loss budget;
+- a fixed quantity schedule;
+- a daily profit target;
+- a winning-day quota;
+- an entry window invented by the builder;
+- a simulated-only cognition rule.
 
-Glitch TopTrader must not implement account stacking or disposable high-risk attempts. Topstep explicitly prohibits repeatedly blowing accounts through aggressive attempts and may deny payouts or close accounts for program-gaming behavior.
+Those are strategy or operator-policy choices unless Topstep exposes them as an authoritative hard order boundary.
 
-The business objective is consistent, responsible positive expectancy and account survival—not exploiting a nominal reset price.
+## Contract capacity
 
-Sources:
+The current configured `maxContracts` is treated as a hard account ceiling, not a sizing recommendation. Production must derive and version this value from authoritative current account-stage evidence.
 
-- https://help.topstep.com/en/articles/10305426-prohibited-trading-strategies-at-topstep
-- https://help.topstep.com/en/articles/10296582-prohibited-conduct
+Hermes remains responsible for selecting quantity. Glitch independently rejects quantity above the hard ceiling.
 
-## Account class
+## Account and payout lifecycle
 
-The user selects the account. The code does not need an elaborate paper/live abstraction.
+Production parity requires a canonical account-policy record containing at least:
 
-The initial direct gateway still defaults to:
+- Topstep product and account stage;
+- starting balance and current balance;
+- current hard loss floor and its source;
+- qualifying highest EOD balance;
+- floor lock state;
+- maximum contract tier;
+- payout eligibility, pending, processed, and post-payout state;
+- scaling state;
+- required flat deadlines;
+- holiday, early-close, timezone, and DST evidence;
+- source URLs or provider evidence hashes;
+- verification time and contradiction history.
 
-```text
-GLITCH_REQUIRE_SIMULATED=true
-```
+No payout, scaling, funded-stage, or live-readiness claim may be inferred from account name, balance changes, or incomplete local state.
 
-This is a development guard, not the permanent product model. It can later be relaxed only through an explicit versioned promotion with venue evidence.
+## Decision versus execution
+
+Hermes may choose a decision from incomplete policy evidence. Glitch may refuse the resulting order mutation when a required hard execution fact cannot be proven.
+
+That refusal must produce an explicit receipt. The attempted decision remains available to review and learning; the builder must not hide it behind an eligibility gate.

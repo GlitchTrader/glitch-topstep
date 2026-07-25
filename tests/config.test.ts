@@ -8,17 +8,33 @@ function environment(): NodeJS.ProcessEnv {
     PROJECTX_API_KEY: "key",
     GLITCH_ACCOUNT_ID: "1",
     GLITCH_ACCOUNT_NAME: "SIM",
-    GLITCH_CONTRACT_ID: "MNQ",
+    GLITCH_CONTRACT_ID: "CON.F.US.MNQ.U26",
+    GLITCH_INSTRUMENT: "MNQ",
+    GLITCH_LOSS_MODEL: "express_funded_eod",
     GLITCH_LOCAL_TOKEN: "012345678901234567890123",
   };
 }
 
-describe("configuration safety", () => {
-  it("defaults to shadow mode with entries closed", () => {
+describe("configuration authority", () => {
+  it("defaults to shadow without strategy or paper/live gates", () => {
     const config = loadConfig(environment());
     assert.equal(config.tradingMode, "shadow");
-    assert.equal(config.policy.entryWindowOpen, false);
-    assert.equal(config.requireSimulatedAccount, true);
+    assert.equal(config.scope.instrument, "MNQ");
+    assert.equal(config.policy.authority, "operator_configured");
+    assert.equal(config.policy.lossModel, "express_funded_eod");
+    assert.equal("requireSimulatedAccount" in config, false);
+    assert.equal("maxRiskFractionOfBuffer" in config.risk, false);
+    assert.equal("entryWindowOpen" in config.policy, false);
+  });
+
+  it("requires an explicit instrument and loss model", () => {
+    const withoutInstrument = { ...environment() };
+    delete withoutInstrument.GLITCH_INSTRUMENT;
+    assert.throws(() => loadConfig(withoutInstrument), /GLITCH_INSTRUMENT/);
+
+    const withoutModel = { ...environment() };
+    delete withoutModel.GLITCH_LOSS_MODEL;
+    assert.throws(() => loadConfig(withoutModel), /GLITCH_LOSS_MODEL/);
   });
 
   it("requires an exact acknowledgement before armed mode", () => {

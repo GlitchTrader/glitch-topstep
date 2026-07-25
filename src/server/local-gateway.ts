@@ -10,7 +10,6 @@ export interface LocalGatewayOptions {
   host: string;
   port: number;
   token: string;
-  tradingMode: "disabled" | "shadow" | "armed";
 }
 
 export class LocalGatewayServer {
@@ -18,6 +17,7 @@ export class LocalGatewayServer {
 
   public constructor(
     private readonly options: LocalGatewayOptions,
+    private readonly health: () => Record<string, unknown>,
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly packet: () => DirectDecisionPacket,
     private readonly coordinator: ExecutionCoordinator,
@@ -51,12 +51,7 @@ export class LocalGatewayServer {
     try {
       const url = new URL(request.url ?? "/", `http://${this.options.host}:${this.options.port}`);
       if (request.method === "GET" && url.pathname === "/health") {
-        this.json(response, 200, {
-          schema_version: "glitch.direct.health.v1",
-          status: "ok",
-          trading_mode: this.options.tradingMode,
-          recorded_utc: new Date().toISOString(),
-        });
+        this.json(response, 200, this.health());
         return;
       }
       if (!this.authorized(request)) {
@@ -74,7 +69,11 @@ export class LocalGatewayServer {
       if (request.method === "POST" && url.pathname === "/intent") {
         const body = await this.readJsonBody(request);
         const receipt: ExecutionReceipt = await this.coordinator.handleWireIntent(body);
-        const status = receipt.status === "rejected" ? 422 : 202;
+        const status = receipt.status === "rejected"
+          ? 422
+          : receipt.status === "ambiguous"
+            ? 503
+            : 202;
         this.json(response, status, receipt);
         return;
       }
