@@ -78,6 +78,8 @@ Implemented:
 - changed provider records retained as new versions while strictly older versions cannot replace a newer durable head;
 - historical order and fill evidence consumed by `/ownership` through the same exact provider-ID rules;
 - history synchronization status exposed through `/health` and the service-start ledger;
+- deterministic offline replay of retained ProjectX evidence into canonical account, contract, position, order, trade, quote, print, and depth state;
+- stable replay state/evidence hashes, sequence-gap detection, invalid-payload reporting, through-sequence replay, and bounded/truncated scans;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -88,6 +90,7 @@ Still required before live promotion:
 - raw REST response envelopes where needed for contract-drift forensics;
 - verified ProjectX timestamp-boundary semantics and any undocumented history result limits or pagination behavior;
 - real partial-fill, correction, void, and late-update acceptance;
+- replay comparison with live TopstepX state and explicit correction semantics for every observed payload variant;
 - provider-created stop and target child identity or another explicit protection relationship;
 - aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
@@ -144,6 +147,18 @@ durable cursor - correction overlap
 ```
 
 A history failure degrades evidence health but does not become a hidden trading strategy gate. The next scheduled or reconnect run resumes from the last completed cursor.
+
+Replay is offline and query-only:
+
+```bash
+npm run replay:evidence -- \
+  --database ./data/projectx-evidence.sqlite \
+  --through-sequence 100000 \
+  --max-events 1000000 \
+  --batch-size 5000
+```
+
+Replay reports gaps and truncation rather than pretending retained evidence is complete. It is an analysis and verification surface, not an execution or cognition authority.
 
 ## Requirements
 
