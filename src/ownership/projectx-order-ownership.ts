@@ -283,9 +283,17 @@ export class ProjectXOrderOwnershipService {
   }
 
   private orderEvidence(providerOrderId: number): StoredProviderEvidenceEvent[] {
-    const direct = this.queryEvidence({
+    const realtime = this.queryEvidence({
       source: "projectx_user_stream",
       eventType: "order",
+      accountId: this.options.accountId,
+      contractId: this.options.contractId,
+      providerEntityId: String(providerOrderId),
+      limit: 10_000,
+    });
+    const historical = this.queryEvidence({
+      source: "projectx_rest",
+      eventType: "historical_order",
       accountId: this.options.accountId,
       contractId: this.options.contractId,
       providerEntityId: String(providerOrderId),
@@ -298,7 +306,8 @@ export class ProjectXOrderOwnershipService {
       contractId: this.options.contractId,
       limit: 10_000,
     }).filter((event) => snapshotContainsOrder(event, providerOrderId));
-    return [...direct, ...snapshots].sort((left, right) => left.sequence - right.sequence);
+    return [...realtime, ...historical, ...snapshots]
+      .sort((left, right) => left.sequence - right.sequence);
   }
 
   private fillEvidence(
@@ -306,7 +315,7 @@ export class ProjectXOrderOwnershipService {
     requestSide: number | null,
     issues: string[],
   ): OwnedFillEvidence[] {
-    const events = this.queryEvidence({
+    const realtime = this.queryEvidence({
       source: "projectx_user_stream",
       eventType: "trade",
       accountId: this.options.accountId,
@@ -314,6 +323,16 @@ export class ProjectXOrderOwnershipService {
       relatedProviderEntityId: String(providerOrderId),
       limit: 10_000,
     });
+    const historical = this.queryEvidence({
+      source: "projectx_rest",
+      eventType: "historical_trade",
+      accountId: this.options.accountId,
+      contractId: this.options.contractId,
+      relatedProviderEntityId: String(providerOrderId),
+      limit: 10_000,
+    });
+    const events = [...realtime, ...historical]
+      .sort((left, right) => left.sequence - right.sequence);
     const latestByTradeId = new Map<number, OwnedFillEvidence>();
     for (const event of events) {
       const trade = tradeFromEvidence(event, providerOrderId);
@@ -450,7 +469,7 @@ function orderFromEvidence(
   event: StoredProviderEvidenceEvent,
   providerOrderId: number,
 ): OrderInfo | null {
-  if (event.eventType === "order") {
+  if (event.eventType === "order" || event.eventType === "historical_order") {
     return isOrderInfo(event.normalizedPayload) && event.normalizedPayload.id === providerOrderId
       ? event.normalizedPayload
       : null;
