@@ -63,7 +63,7 @@ export class ProviderRestSnapshotRecorder {
       contractId: input.contractId,
       providerEntityId: input.providerEntityId ?? null,
       rawPayload: null,
-      normalizedPayload: input.normalizedPayload,
+      normalizedPayload: input.normalizedPayload ?? null,
     });
     this.lastContentHashByIdentity.set(identity, contentHash);
     return true;
@@ -103,7 +103,7 @@ export function recordProviderLifecycleEvent(
 }
 
 function stableJson(value: unknown): string {
-  return JSON.stringify(stableValue(value));
+  return JSON.stringify(stableValue(value) ?? null) ?? "null";
 }
 
 function stableValue(value: unknown): unknown {
