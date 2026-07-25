@@ -14,7 +14,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] stop-aware protected-loss calculation
 - [x] per-contract fee and slippage reserves
 - [x] strict operator-profile and prompt-version intent identity
-- [x] loopback health, state, packet, and intent API
+- [x] loopback health, state, packet, evidence, and intent API
 - [x] explicit stream, payload, reconnect-generation, and reconciliation truth
 - [x] shared freshness truth across health, packet, and execution
 - [x] account-wide conservative PnL with missing evidence made explicit
@@ -25,19 +25,21 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 ## R1 — durable execution identity and recovery
 
 - [x] SQLite WAL store and migration marker
-- [x] foreign keys and synchronous durable writes
+- [x] foreign keys and synchronous `FULL` durable writes
 - [x] durable unique intent identity
 - [x] durable issued-packet leases and invalidation
 - [x] outbox persisted before provider mutation
 - [x] mutation lifecycle: `prepared`, `submitting`, `submitted`, `rejected`, `ambiguous`
 - [x] authoritative provider rejection versus ambiguous transport distinction
+- [x] serialized intent handling
+- [x] durable entry-submission settlement latch
 - [x] entry recovery by unique historical custom tag plus full order identity
 - [x] close recovery only from authoritative flat position state
 - [x] orphan intent recovery
 - [x] prepared outbox recovery
 - [x] terminal state without receipt recovery
 - [x] no-op receipt recovery
-- [x] recovery health and new-exposure block during ambiguity
+- [x] recovery health and new-exposure block during ambiguity or settlement
 - [ ] actual process-kill fixture before outbox creation
 - [ ] actual process-kill fixture before provider call
 - [ ] actual process-kill fixture during ambiguous transport
@@ -57,17 +59,28 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] compare all account positions and conservative PnL with TopstepX UI
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
 - [ ] prove historical order search and custom-tag retention
+- [ ] measure quote, print, and DOM event rates on the target machine
+- [ ] validate evidence retention against actual disk growth
 
 ## R3 — provider evidence and replay foundation
 
-- [ ] one integrated monotonic provider-event journal
-- [ ] persist sanitized raw and normalized REST evidence
-- [ ] persist sanitized raw and normalized user-stream events before state mutation
-- [ ] persist sanitized raw and normalized market-stream events before state mutation
-- [ ] bounded authenticated evidence inspection
+- [x] one integrated monotonic provider-event journal
+- [x] dedicated `projectx-evidence.sqlite` WAL store
+- [x] persist normalized REST account, contract, position, and open-order snapshots before state replacement
+- [x] persist sanitized raw and normalized user-stream events before state mutation
+- [x] persist sanitized raw and normalized market-stream events before state mutation
+- [x] persist lifecycle and reconnect evidence
+- [x] payload SHA-256 hashes and monotonic sequences
+- [x] recursively redact secret-like payload fields
+- [x] bounded authenticated evidence inspection
+- [x] separate execution `FULL` durability from telemetry `NORMAL` durability
+- [x] bounded market-stream event retention
+- [x] preserve REST, lifecycle, account, position, order, and user-trade evidence during market pruning
+- [ ] persist raw REST response envelopes where contract-drift forensics require them
 - [ ] deterministic state rebuild from the event corpus
-- [ ] reconnect and correction events preserved append-only
-- [ ] no credentials or session tokens in persisted evidence
+- [ ] correction and contradiction semantics during replay
+- [ ] evidence archive/export workflow
+- [ ] real disk-full and write-failure acceptance
 
 ## R4 — provider order and protection ownership
 
@@ -123,7 +136,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 
 ## R8 — replay and comparative evaluation
 
-- [ ] replay raw provider events into canonical packets
+- [ ] replay raw provider events into canonical state and packets
 - [ ] deterministic decision and receipt replay
 - [ ] simulated fills, fees, and slippage
 - [ ] compare cognition versions on identical evidence
@@ -157,4 +170,5 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - no fixed strategy, indicator trigger, quantity schedule, risk percentage, profit quota, grid, or martingale rule in Glitch;
 - no credentials or numeric provider identifiers in Hermes;
 - no hidden cognition gate based on packet quality, capacity, policy, or minimum history;
+- no bracket ownership inferred only from price and timing;
 - no profitability, payout, unattended-operation, funded-stage, or live-readiness claim inferred from tests or architecture.

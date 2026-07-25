@@ -54,6 +54,10 @@ function config(dataDir: string): AppConfig {
       maxStateAgeMs: 5_000,
       maxIntentAgeMs: 300_000,
     },
+    providerEvidence: {
+      marketEventRetention: 500_000,
+      marketPruneInterval: 10_000,
+    },
     dataDir,
     reconcileIntervalMs: 3_000,
     packetLeaseMs: 300_000,
