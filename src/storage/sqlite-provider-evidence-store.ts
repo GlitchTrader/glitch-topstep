@@ -116,26 +116,38 @@ export class SqliteProviderEvidenceStore {
     const prepared = prepareEvidence(event);
     return this.inTransaction(() => {
       const head = this.database.prepare(`
-        SELECT content_hash
+        SELECT content_hash, provider_timestamp_utc
         FROM provider_evidence_heads
         WHERE identity_key = ?
-      `).get(identityKey) as { content_hash: string } | undefined;
+      `).get(identityKey) as {
+        content_hash: string;
+        provider_timestamp_utc: string | null;
+      } | undefined;
       if (head?.content_hash === prepared.contentHash) {
+        return { appended: false, event: null };
+      }
+      if (isStrictlyOlder(event.providerTimestampUtc, head?.provider_timestamp_utc ?? null)) {
         return { appended: false, event: null };
       }
 
       const stored = this.insertPrepared(prepared);
       this.database.prepare(`
         INSERT INTO provider_evidence_heads (
-          identity_key, content_hash, latest_sequence, updated_utc
-        ) VALUES (?, ?, ?, ?)
+          identity_key,
+          content_hash,
+          provider_timestamp_utc,
+          latest_sequence,
+          updated_utc
+        ) VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(identity_key) DO UPDATE SET
           content_hash = excluded.content_hash,
+          provider_timestamp_utc = excluded.provider_timestamp_utc,
           latest_sequence = excluded.latest_sequence,
           updated_utc = excluded.updated_utc
       `).run(
         identityKey,
         prepared.contentHash,
+        event.providerTimestampUtc,
         stored.sequence,
         event.receivedUtc,
       );
@@ -543,6 +555,7 @@ export class SqliteProviderEvidenceStore {
       CREATE TABLE IF NOT EXISTS provider_evidence_heads (
         identity_key TEXT PRIMARY KEY,
         content_hash TEXT NOT NULL,
+        provider_timestamp_utc TEXT,
         latest_sequence INTEGER NOT NULL,
         updated_utc TEXT NOT NULL
       ) STRICT;
@@ -563,6 +576,14 @@ export class SqliteProviderEvidenceStore {
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     `);
+
+    const headColumns = this.database.prepare(`PRAGMA table_info(provider_evidence_heads)`).all() as unknown as Array<{
+      name: string;
+    }>;
+    if (!headColumns.some((column) => column.name === "provider_timestamp_utc")) {
+      this.database.exec(`ALTER TABLE provider_evidence_heads ADD COLUMN provider_timestamp_utc TEXT`);
+    }
+
     this.backfillTradeRelations();
     this.database.exec(`
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
@@ -648,11 +669,7 @@ export function redactSecrets(value: unknown): unknown {
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(input)) {
-    if (isSecretKey(key)) {
-      output[key] = "[REDACTED]";
-      continue;
-    }
-    output[key] = redactSecrets(item);
+    output[key] = isSecretKey(key) ? "[REDACTED]" : redactSecrets(item);
   }
   return output;
 }
@@ -664,14 +681,7 @@ function prepareEvidence(event: ProviderEvidenceEvent): PreparedEvidence {
   const rawPayloadJson = safeJson(rawPayload);
   const normalizedPayloadJson = safeJson(normalizedPayload);
   const payloadHash = evidencePayloadHash({
-    receivedUtc: event.receivedUtc,
-    providerTimestampUtc: event.providerTimestampUtc,
-    source: event.source,
-    eventType: event.eventType,
-    generation: event.generation,
-    accountId: event.accountId,
-    contractId: event.contractId,
-    providerEntityId: event.providerEntityId,
+    ...event,
     relatedProviderEntityId,
     rawPayload,
     normalizedPayload,
@@ -728,10 +738,9 @@ function stableValue(value: unknown): unknown {
   if (!value || typeof value !== "object") {
     return value;
   }
-  const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
-  for (const key of Object.keys(input).sort()) {
-    output[key] = stableValue(input[key]);
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    output[key] = stableValue((value as Record<string, unknown>)[key]);
   }
   return output;
 }
@@ -742,6 +751,15 @@ function relatedOrderId(value: unknown): number | null {
   }
   const orderId = (value as Record<string, unknown>).orderId;
   return typeof orderId === "number" && Number.isInteger(orderId) ? orderId : null;
+}
+
+function isStrictlyOlder(candidate: string | null, current: string | null): boolean {
+  if (candidate === null || current === null) {
+    return false;
+  }
+  const candidateMs = Date.parse(candidate);
+  const currentMs = Date.parse(current);
+  return Number.isFinite(candidateMs) && Number.isFinite(currentMs) && candidateMs < currentMs;
 }
 
 function isSecretKey(key: string): boolean {
