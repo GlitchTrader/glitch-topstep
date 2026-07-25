@@ -4,14 +4,12 @@
 
 Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. It is not a port of NinjaTrader, Apex rules, replication, or a generic prop-firm compliance engine.
 
-The first product boundary is:
-
 ```text
 ProjectX / TopstepX
         │
         ▼
 Glitch Topstep gateway
-  provider truth · calculations · execution · recovery · evidence
+  provider truth · evidence · calculations · execution · recovery
         │ sanitized packet / strict intent
         ▼
 Hermes profile: glitch-topstep
@@ -47,35 +45,40 @@ ProjectX Market SignalR Hub
   quote · print · depth events
             │
             ▼
+Provider evidence boundary
+  parse payload
+  redact secret-like fields
+  persist raw + normalized evidence
+  assign sequence + payload hash
+            │ persistence succeeds
+            ▼
 VenueStateStore
-  parsed provider evidence
   connection generation
   stream health and payload faults
   reconciliation state
-  conservative bid/ask marking
+  account-wide conservative bid/ask marking
             │
-            ├──────────────────────┐
-            ▼                      ▼
-DecisionPacketService       Hard execution calculations
-  current packet             tick and point value
-  issued snapshot lease      stop-aware protected loss
-  sanitized identity         hard contract ceiling
-  explicit data quality      hard loss-floor headroom
-            │                      │
-            ▼                      │
-Hermes Topstep operator             │
-  chooses the trade                 │
-            │ strict intent         │
-            └──────────────┬────────┘
+            ├────────────────────────┐
+            ▼                        ▼
+DecisionPacketService         Hard execution calculations
+  current packet               tick and point value
+  issued snapshot lease        stop-aware protected loss
+  sanitized identity           hard contract ceiling
+  explicit data quality        hard loss-floor headroom
+            │                        │
+            ▼                        │
+Hermes Topstep operator               │
+  chooses the trade                   │
+            │ strict intent           │
+            └──────────────┬──────────┘
                            ▼
 ExecutionCoordinator
+  serialized intent handling
   issued-packet identity
-  account/instrument/profile identity
+  account/instrument/profile/prompt identity
   current venue freshness and reconciliation
-  schema and finite values
-  structural geometry
-  current hard account boundaries
-  idempotency and ownership milestones
+  structural geometry and hard boundaries
+  durable outbox and entry-settlement latch
                            │
                            ▼
 ProjectX order mutation
@@ -104,13 +107,59 @@ Glitch owns:
 
 - credentials and provider transport;
 - exact provider identities;
-- parsing and normalization;
+- parsing, normalization, and attributable evidence;
 - tick, point-value, fee, slippage, and bracket calculations;
 - stream health, reconnect generation, and REST reconciliation;
 - hard contract capacity and hard loss-floor survival;
 - order identity, idempotency, ownership, protection, restart recovery, and receipts.
 
-The factual plane must continue to protect existing exposure when Hermes is unavailable. It must also expose every rejection so cognition and learning can review what happened.
+The factual plane must continue to protect existing exposure when Hermes is unavailable. It must expose every rejection and ambiguity so cognition and learning can review what happened.
+
+## Provider evidence boundary
+
+ProjectX evidence is persisted in `projectx-evidence.sqlite` before accepted realtime payloads mutate `VenueStateStore`.
+
+Each event contains:
+
+- monotonic local sequence;
+- local receipt time and provider timestamp when available;
+- REST, user-stream, market-stream, or lifecycle source;
+- connection generation;
+- account, contract, and provider entity identity when available;
+- recursively sanitized raw payload;
+- normalized payload used by Glitch;
+- SHA-256 hash of the stored event content.
+
+If a realtime payload parses but cannot be persisted, Glitch does not silently advance state. The stream becomes degraded and REST reconciliation is requested.
+
+REST account, contract, position, and open-order snapshots are persisted before they replace reconciled state. Raw REST envelopes are not yet retained; this remains an explicit evidence gap.
+
+### Durability and retention
+
+Execution identity and provider telemetry use separate SQLite databases because their failure and retention requirements differ.
+
+`glitch-topstep.sqlite`:
+
+- WAL;
+- `synchronous=FULL`;
+- durable intents, issued packets, outbox states, mutation latches, and receipts;
+- no automatic retention in the execution path.
+
+`projectx-evidence.sqlite`:
+
+- WAL;
+- `synchronous=NORMAL` to avoid blocking the Node event loop for every quote, print, or DOM update;
+- REST, lifecycle, account, position, order, and user-trade evidence retained;
+- only high-frequency `projectx_market_stream` events are bounded by configurable count retention;
+- sequence values remain monotonic across pruning and restart.
+
+The evidence API is authenticated and bounded:
+
+```text
+GET /evidence?limit=100
+```
+
+It exists for acceptance, debugging, replay, and ownership research. It is not injected into Hermes by default.
 
 ## Truthful packets
 
@@ -120,9 +169,10 @@ Packets contain:
 
 - sanitized account alias and contract description;
 - current quote and account state;
-- explicit `data_quality` issues and connection generations;
+- explicit freshness, data-quality issues, and connection generations;
 - policy authority and hard loss-floor headroom;
 - current technical execution capabilities;
+- entry-submission and recovery state;
 - a strict output template.
 
 An incomplete packet may still reach Hermes. The gateway independently rejects order mutation when current execution truth is incomplete or stale.
@@ -136,6 +186,7 @@ Hermes supplies:
 - account alias, not numeric provider account ID;
 - instrument identity, not provider contract ID;
 - `operator_profile: glitch-topstep`;
+- `prompt_version: glitch-topstep-v2`;
 - action and confidence;
 - absolute structural stop and target prices for entries;
 - compact adversarial evidence audit.
@@ -165,18 +216,30 @@ For a short entry, the direction reverses and the executable reference is curren
 
 The gateway recalculates geometry from current venue truth at execution time. The next milestone must prove the actual fill and provider-created stop/target identities, then correct them to exact intended absolute prices when required.
 
-## Persistence and recovery
+## Durable execution and recovery
 
-The current JSONL ledger is evidence for the scaffold, not production recovery. P0 requires SQLite with:
+Execution persistence already includes:
 
-- WAL mode and migrations;
-- monotonic event sequence;
-- unique durable intent identity;
-- atomic outbox persisted before provider mutation;
-- packets, intents, provider orders, fills, order groups, and reconciliations;
-- restart reconstruction;
-- ambiguous transport recovery by provider tag;
-- EOD balance, hard loss-floor, account-stage, and payout history.
+- unique intent identity;
+- durable issued-packet leases;
+- atomic outbox before provider mutation;
+- `prepared`, `submitting`, `submitted`, `rejected`, and `ambiguous` mutation states;
+- serialized intent handling;
+- durable entry-submission settlement latch;
+- orphan-intent, interrupted-outbox, ambiguous-call, and missing-receipt reconstruction;
+- historical custom-tag recovery for entries;
+- authoritative flat-state recovery for closes.
+
+The settlement latch prevents a second entry while a submitted entry has not yet appeared in reconciled ProjectX order or position state. This is execution correctness, not a trading strategy.
+
+Still missing:
+
+- provider order groups;
+- fill-to-entry ownership;
+- provider-created stop/target ownership;
+- exact protective-leg reconstruction and amendments;
+- canonical completed outcomes;
+- EOD balance, account-stage, payout, and session authority.
 
 The companion profile independently persists cognition attempts, outbox, decisions, receipts, frame history, episodes, guidance, and plans. Provider truth remains exclusively in this gateway.
 
