@@ -29,6 +29,10 @@ export interface AppConfig {
   tradingMode: TradingMode;
   policy: TopstepPolicyState;
   risk: RiskSettings;
+  providerEvidence: {
+    marketEventRetention: number;
+    marketPruneInterval: number;
+  };
   dataDir: string;
   reconcileIntervalMs: number;
   packetLeaseMs: number;
@@ -158,6 +162,22 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     throw new Error("GLITCH_HARD_LOSS_FLOOR_USD is required for operator_provided_floor");
   }
 
+  const marketEventRetention = numberValue(
+    environment,
+    "GLITCH_PROVIDER_MARKET_EVENT_RETENTION",
+    500_000,
+    (value) => Number.isInteger(value) && value >= 10_000 && value <= 50_000_000,
+  );
+  const marketPruneInterval = numberValue(
+    environment,
+    "GLITCH_PROVIDER_MARKET_PRUNE_INTERVAL",
+    10_000,
+    (value) => Number.isInteger(value) && value >= 100 && value <= 1_000_000,
+  );
+  if (marketPruneInterval > marketEventRetention) {
+    throw new Error("GLITCH_PROVIDER_MARKET_PRUNE_INTERVAL cannot exceed retention");
+  }
+
   return {
     projectX: {
       username: required(environment, "PROJECTX_USERNAME"),
@@ -198,6 +218,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       maxQuoteAgeMs: numberValue(environment, "GLITCH_MAX_QUOTE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
       maxStateAgeMs: numberValue(environment, "GLITCH_MAX_STATE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
       maxIntentAgeMs: numberValue(environment, "GLITCH_MAX_INTENT_AGE_MS", 300_000, (value) => Number.isInteger(value) && value > 0),
+    },
+    providerEvidence: {
+      marketEventRetention,
+      marketPruneInterval,
     },
     dataDir: optional(environment, "GLITCH_DATA_DIR", "./data"),
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
