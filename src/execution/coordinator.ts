@@ -25,6 +25,8 @@ export interface ExecutionReceipt {
 }
 
 export class ExecutionCoordinator {
+  private executionQueue: Promise<void> = Promise.resolve();
+
   public constructor(
     private readonly config: AppConfig,
     private readonly api: ProjectXApiClient,
@@ -32,9 +34,19 @@ export class ExecutionCoordinator {
     private readonly store: SqliteExecutionStore,
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
+    private readonly invalidateIssuedPackets: () => void,
   ) {}
 
-  public async handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
+  public handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
+    const result = this.executionQueue.then(() => this.handleWireIntentSerial(input));
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
     let intent: TradeIntent;
     try {
       intent = parseTradeIntent(input);
@@ -95,12 +107,17 @@ export class ExecutionCoordinator {
       });
     }
 
-    if (this.store.recoveryStatus().blockingAmbiguity) {
+    const recovery = this.store.recoveryStatus();
+    if (recovery.blockingNewExposure) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
-        code: "execution_recovery_required",
-        detail: "A prior ProjectX mutation remains ambiguous; new exposure is blocked until provider reconciliation proves its outcome.",
+        code: recovery.blockingAmbiguity
+          ? "execution_recovery_required"
+          : "entry_submission_pending",
+        detail: recovery.blockingAmbiguity
+          ? "A prior ProjectX mutation remains ambiguous; new exposure is blocked until provider reconciliation proves its outcome."
+          : "A prior entry submission has not yet appeared in authoritative ProjectX order or position state.",
       });
     }
 
@@ -138,14 +155,14 @@ export class ExecutionCoordinator {
         stopLossBracket: { ticks: validated.stopTicks, type: 4 },
         takeProfitBracket: { ticks: validated.targetTicks, type: 1 },
       };
-      const preparedUtc = new Date().toISOString();
       this.store.prepareMutation(
         intent.intentId,
         "place_order",
         request as unknown as Record<string, unknown>,
         validated.customTag,
-        preparedUtc,
+        new Date().toISOString(),
       );
+      this.invalidateIssuedPackets();
       this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
 
       try {
@@ -162,7 +179,11 @@ export class ExecutionCoordinator {
         return this.recordMutationFailure(intent.intentId, error);
       }
     } catch (error) {
-      const code = error instanceof RiskRejectedError ? error.code : "execution_preparation_failed";
+      const code = error instanceof RiskRejectedError
+        ? error.code
+        : error instanceof Error && error.message.startsWith("entry_submission_pending:")
+          ? "entry_submission_pending"
+          : "execution_preparation_failed";
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -217,6 +238,7 @@ export class ExecutionCoordinator {
       null,
       new Date().toISOString(),
     );
+    this.invalidateIssuedPackets();
     this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
     try {
       await this.api.closePosition(request.accountId, request.contractId);
@@ -238,6 +260,7 @@ export class ExecutionCoordinator {
     const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
     if (this.isAuthoritativeRejection(error)) {
       this.store.markMutationRejected(intentId, detail, new Date().toISOString());
+      this.invalidateIssuedPackets();
       return this.record({
         intentId,
         status: "rejected",
