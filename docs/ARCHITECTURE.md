@@ -50,6 +50,7 @@ Provider evidence boundary
   redact secret-like fields
   persist raw + normalized evidence
   assign sequence + payload hash
+  preserve explicit provider relationships
             │ persistence succeeds
             ▼
 VenueStateStore
@@ -83,6 +84,13 @@ ExecutionCoordinator
                            ▼
 ProjectX order mutation
   entry · close · provider-side protection
+
+Query-only ownership projection
+  durable Glitch intent + submitted provider order ID
+  exact ProjectX order evidence
+  exact ProjectX trade.orderId relationships
+  contradiction reporting
+  protection remains unknown without child/OCO evidence
 ```
 
 ## Cognition and factual execution
@@ -126,9 +134,12 @@ Each event contains:
 - REST, user-stream, market-stream, or lifecycle source;
 - connection generation;
 - account, contract, and provider entity identity when available;
+- an explicit related-provider identity when ProjectX supplies one;
 - recursively sanitized raw payload;
 - normalized payload used by Glitch;
 - SHA-256 hash of the stored event content.
+
+The first explicit relationship is user trade → order. For a normalized `TradeInfo`, `trade.orderId` is stored as `related_provider_entity_id`. The relation is indexed and included in the evidence hash. Older persisted trade events are migrated by reading their normalized `orderId`, backfilling the relation, and recomputing the hash.
 
 If a realtime payload parses but cannot be persisted, Glitch does not silently advance state. The stream becomes degraded and REST reconciliation is requested.
 
@@ -160,6 +171,52 @@ GET /evidence?limit=100
 ```
 
 It exists for acceptance, debugging, replay, and ownership research. It is not injected into Hermes by default.
+
+## Exact order and fill ownership
+
+The ownership view is a read-only projection over the two durable databases. It does not mutate execution state and cannot authorize an order amendment.
+
+```text
+durable Glitch intent
+  + submitted execution_outbox providerOrderId/customTag
+  + exact ProjectX order evidence with that order ID
+  + exact ProjectX trade evidence where trade.orderId matches
+  = attributable entry order and fills
+```
+
+The projection validates:
+
+- configured account and contract against the durable execution request;
+- intent account, instrument, action, side, and quantity;
+- observed order account, contract, custom tag, side, type, and size;
+- fill account, contract, side, positive size, voided state, and cumulative quantity;
+- uniqueness of each provider order ID across durable Glitch intents.
+
+Contradictions produce `status=incomplete` and explicit issues. A provider order acknowledgement without later evidence produces `provider_acknowledged`; an exact order or fill event produces `provider_observed` only when identity remains consistent.
+
+The authenticated view is:
+
+```text
+GET /ownership
+```
+
+It permanently reports:
+
+```text
+protection.status = unknown
+protection.reason = provider_child_order_relation_not_observed
+```
+
+The following are prohibited as ownership evidence:
+
+- price proximity;
+- timing proximity;
+- side similarity;
+- quantity proximity;
+- working-order geometry;
+- aggregate position state alone.
+
+A nearby stop or target is not attributed. `MOVE_STOP`, `MOVE_TP`, bracket correction, and protection reconstruction remain disabled until ProjectX supplies an explicit child-order, OCO, or equivalent relationship that can be reconciled durably.
 
 ## Truthful packets
 
@@ -214,7 +271,7 @@ targetTicks = floor((absoluteTarget - currentAsk) / tickSize)
 
 For a short entry, the direction reverses and the executable reference is current bid.
 
-The gateway recalculates geometry from current venue truth at execution time. The next milestone must prove the actual fill and provider-created stop/target identities, then correct them to exact intended absolute prices when required.
+The gateway recalculates geometry from current venue truth at execution time. The next milestone must identify provider-created stop/target identities through an explicit relation, then correct them to exact intended absolute prices when required.
 
 ## Durable execution and recovery
 
@@ -234,8 +291,9 @@ The settlement latch prevents a second entry while a submitted entry has not yet
 
 Still missing:
 
+- historical order/trade ingestion after offline intervals;
+- aggregate position ownership;
 - provider order groups;
-- fill-to-entry ownership;
 - provider-created stop/target ownership;
 - exact protective-leg reconstruction and amendments;
 - canonical completed outcomes;
