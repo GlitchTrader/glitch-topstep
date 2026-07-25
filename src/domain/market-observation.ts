@@ -20,8 +20,8 @@ export interface DescriptiveMarketFeatures {
   trueRange: number;
   averageTrueRange14: number | null;
   realizedVolatility20Bps: number | null;
-  vwap: number | null;
-  distanceFromVwapBps: number | null;
+  rollingVwap20: number | null;
+  distanceFromRollingVwap20Bps: number | null;
   ema20: number | null;
   ema50: number | null;
   ema200: number | null;
