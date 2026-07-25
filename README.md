@@ -51,7 +51,7 @@ Implemented:
 - current decision packets with durable, bounded issued identities rather than frozen stale packets;
 - strict `glitch.intent.v2` parsing;
 - absolute structural stop/target geometry translated to ProjectX bracket ticks;
-- authenticated loopback API for health, state, packets, provider evidence, and intents;
+- authenticated loopback API for health, state, packets, evidence, ownership, and intents;
 - explicit `disabled`, `shadow`, and acknowledged `armed` operator modes;
 - SQLite WAL execution state with foreign keys and `synchronous=FULL` durable writes;
 - persistent unique intent identity and terminal receipt replay;
@@ -67,6 +67,11 @@ Implemented:
 - normalized REST account, contract, position, and order snapshots persisted before reconciliation replaces state;
 - recursively redacted secret-like fields in persisted evidence;
 - bounded high-frequency market-stream retention while REST, lifecycle, account, position, order, and user-trade evidence remains intact;
+- explicit ProjectX relationship indexing, including `trade.orderId` as the exact fill-to-order relationship;
+- submitted entry-order ownership derived from durable Glitch intent identity and exact ProjectX provider order ID;
+- fill ownership derived only from ProjectX trades whose `orderId` exactly matches that submitted entry order;
+- contradiction detection for account, contract, side, type, quantity, custom tag, overfill, and duplicate provider order identity;
+- protection ownership explicitly reported as `unknown` until ProjectX supplies a verifiable child-order or OCO relationship;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -75,7 +80,9 @@ Still required before live promotion:
 - verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
 - actual process-kill and Windows restart fixtures for every durable execution window;
 - raw REST response envelopes where needed for contract-drift forensics;
-- fill-to-bracket ownership reconciliation;
+- historical order and trade synchronization after offline intervals;
+- provider-created stop and target child identity or another explicit protection relationship;
+- aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
 - exact structural bracket correction after fill;
 - verified `MOVE_STOP` and `MOVE_TP`;
@@ -109,6 +116,17 @@ parse → redact and persist raw/normalized evidence → mutate VenueStateStore
 
 If evidence persistence fails, state does not silently advance.
 
+Ownership follows only explicit identities:
+
+```text
+Glitch intent
+  → durable submitted ProjectX providerOrderId and customTag
+  → exact ProjectX order evidence with that order ID
+  → exact ProjectX trade evidence where trade.orderId equals that order ID
+```
+
+Price proximity, timing proximity, side similarity, working-order geometry, and aggregate position state are not ownership evidence. A nearby stop or target remains unrelated until ProjectX exposes an explicit child-order or OCO relationship.
+
 ## Requirements
 
 - Node.js 22+
@@ -132,12 +150,13 @@ GET  /health              no authentication; truthful operational, recovery, and
 GET  /state               bearer token required
 GET  /packet              bearer token required
 GET  /evidence?limit=100  bearer token required; maximum 1000 events
+GET  /ownership           bearer token required; exact entry/fill identity, protection remains unknown
 POST /intent              bearer token required; strict glitch.intent.v2
 ```
 
 ```bash
 curl -H "Authorization: Bearer $GLITCH_LOCAL_TOKEN" \
-  "http://127.0.0.1:8790/evidence?limit=100"
+  "http://127.0.0.1:8790/ownership"
 ```
 
 Execution and telemetry use separate stores:

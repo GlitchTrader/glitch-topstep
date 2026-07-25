@@ -14,7 +14,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] stop-aware protected-loss calculation
 - [x] per-contract fee and slippage reserves
 - [x] strict operator-profile and prompt-version intent identity
-- [x] loopback health, state, packet, evidence, and intent API
+- [x] loopback health, state, packet, evidence, ownership, and intent API
 - [x] explicit stream, payload, reconnect-generation, and reconciliation truth
 - [x] shared freshness truth across health, packet, and execution
 - [x] account-wide conservative PnL with missing evidence made explicit
@@ -59,6 +59,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] compare all account positions and conservative PnL with TopstepX UI
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
 - [ ] prove historical order search and custom-tag retention
+- [ ] prove historical trade search and `trade.orderId` retention
 - [ ] measure quote, print, and DOM event rates on the target machine
 - [ ] validate evidence retention against actual disk growth
 
@@ -76,6 +77,8 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] separate execution `FULL` durability from telemetry `NORMAL` durability
 - [x] bounded market-stream event retention
 - [x] preserve REST, lifecycle, account, position, order, and user-trade evidence during market pruning
+- [x] explicit related-provider identity field and index
+- [x] backward-compatible relation migration and trade-order backfill
 - [ ] persist raw REST response envelopes where contract-drift forensics require them
 - [ ] deterministic state rebuild from the event corpus
 - [ ] correction and contradiction semantics during replay
@@ -84,9 +87,19 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 
 ## R4 — provider order and protection ownership
 
-- [ ] reconcile entry order and actual fills
-- [ ] identify provider-created stop and target orders from observed evidence
-- [ ] prove side, quantity, contract, and parent-intent ownership
+- [x] query-only ownership projection over execution and evidence databases
+- [x] durable submitted entry identity from intent, custom tag, and provider order ID
+- [x] exact user-stream order ownership by provider order ID
+- [x] exact REST open-order ownership by provider order ID
+- [x] exact fill ownership only when `trade.orderId` matches the submitted entry
+- [x] voided-fill handling and latest trade correction by provider trade ID
+- [x] detect account, contract, side, type, size, custom-tag, overfill, and duplicate-order contradictions
+- [x] authenticated `/ownership` inspection
+- [x] keep protection status `unknown` without explicit child/OCO relation
+- [x] prohibit ownership inference from price, timing, side similarity, or working-order geometry
+- [ ] synchronize historical orders and trades after offline intervals
+- [ ] identify provider-created stop and target orders from an explicit relationship
+- [ ] prove aggregate open-position ownership without proximity inference
 - [ ] persist order groups and protective-leg identity
 - [ ] correct tick-distance brackets to exact intended absolute prices
 - [ ] fail visibly and reduce risk when protection cannot be proven
@@ -170,5 +183,5 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - no fixed strategy, indicator trigger, quantity schedule, risk percentage, profit quota, grid, or martingale rule in Glitch;
 - no credentials or numeric provider identifiers in Hermes;
 - no hidden cognition gate based on packet quality, capacity, policy, or minimum history;
-- no bracket ownership inferred only from price and timing;
+- no order, fill, position, stop, target, or OCO ownership inferred only from price, timing, side similarity, or geometry;
 - no profitability, payout, unattended-operation, funded-stage, or live-readiness claim inferred from tests or architecture.

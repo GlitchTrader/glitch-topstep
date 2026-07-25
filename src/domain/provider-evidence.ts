@@ -13,6 +13,12 @@ export interface ProviderEvidenceEvent {
   accountId: number | null;
   contractId: string | null;
   providerEntityId: string | null;
+  /**
+   * An explicit relationship supplied by ProjectX, such as TradeInfo.orderId.
+   * Absence is represented as null after persistence. Price/time proximity is
+   * never a substitute for this field.
+   */
+  relatedProviderEntityId?: string | null;
   rawPayload: unknown;
   normalizedPayload: unknown;
 }
@@ -20,6 +26,18 @@ export interface ProviderEvidenceEvent {
 export interface StoredProviderEvidenceEvent extends ProviderEvidenceEvent {
   sequence: number;
   payloadHash: string;
+  relatedProviderEntityId: string | null;
+}
+
+export interface ProviderEvidenceQuery {
+  source?: ProviderEvidenceSource;
+  eventType?: string;
+  accountId?: number;
+  contractId?: string;
+  providerEntityId?: string;
+  relatedProviderEntityId?: string;
+  afterSequence?: number;
+  limit?: number;
 }
 
 export interface ProviderEvidenceStatus {

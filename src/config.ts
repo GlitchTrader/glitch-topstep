@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type {
   RiskSettings,
   TopstepLossModel,
@@ -25,6 +26,14 @@ export interface AppConfig {
     host: string;
     port: number;
     token: string;
+    ownership?: {
+      executionDatabasePath: string;
+      evidenceDatabasePath: string;
+      accountId: number;
+      accountName: string;
+      contractId: string;
+      instrument: string;
+    };
   };
   tradingMode: TradingMode;
   policy: TopstepPolicyState;
@@ -178,6 +187,17 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     throw new Error("GLITCH_PROVIDER_MARKET_PRUNE_INTERVAL cannot exceed retention");
   }
 
+  const accountId = numberValue(
+    environment,
+    "GLITCH_ACCOUNT_ID",
+    undefined,
+    (value) => Number.isInteger(value) && value > 0,
+  );
+  const accountName = required(environment, "GLITCH_ACCOUNT_NAME");
+  const contractId = required(environment, "GLITCH_CONTRACT_ID");
+  const instrument = required(environment, "GLITCH_INSTRUMENT").toUpperCase();
+  const dataDir = optional(environment, "GLITCH_DATA_DIR", "./data");
+
   return {
     projectX: {
       username: required(environment, "PROJECTX_USERNAME"),
@@ -187,16 +207,29 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       marketHubUrl: optional(environment, "PROJECTX_MARKET_HUB_URL", "https://rtc.topstepx.com/hubs/market"),
     },
     scope: {
-      accountId: numberValue(environment, "GLITCH_ACCOUNT_ID", undefined, (value) => Number.isInteger(value) && value > 0),
-      accountName: required(environment, "GLITCH_ACCOUNT_NAME"),
-      contractId: required(environment, "GLITCH_CONTRACT_ID"),
-      instrument: required(environment, "GLITCH_INSTRUMENT").toUpperCase(),
+      accountId,
+      accountName,
+      contractId,
+      instrument,
       liveMarketData: booleanValue(environment, "GLITCH_LIVE_MARKET_DATA", false),
     },
     localGateway: {
       host: optional(environment, "GLITCH_LOCAL_HOST", "127.0.0.1"),
-      port: numberValue(environment, "GLITCH_LOCAL_PORT", 8790, (value) => Number.isInteger(value) && value >= 1024 && value <= 65_535),
+      port: numberValue(
+        environment,
+        "GLITCH_LOCAL_PORT",
+        8790,
+        (value) => Number.isInteger(value) && value >= 1024 && value <= 65_535,
+      ),
       token: localToken,
+      ownership: {
+        executionDatabasePath: join(dataDir, "glitch-topstep.sqlite"),
+        evidenceDatabasePath: join(dataDir, "projectx-evidence.sqlite"),
+        accountId,
+        accountName,
+        contractId,
+        instrument,
+      },
     },
     tradingMode,
     policy: {
@@ -223,7 +256,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       marketEventRetention,
       marketPruneInterval,
     },
-    dataDir: optional(environment, "GLITCH_DATA_DIR", "./data"),
+    dataDir,
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
     packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 300_000, (value) => Number.isInteger(value) && value >= 1_000),
   };
