@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { VenueStateStore } from "../src/state/venue-state.js";
 
+const stamp = "2026-07-21T12:00:00Z";
+
 function readyState(): VenueStateStore {
   const state = new VenueStateStore();
-  const stamp = "2026-07-21T12:00:00Z";
   state.registerContracts([{
     id: "MNQ",
     name: "MNQ",
@@ -85,5 +86,60 @@ describe("venue state truth", () => {
     assert.equal(snapshot.stateComplete, false);
     assert.equal(snapshot.operational.userStream.state, "degraded");
     assert.match(snapshot.operational.userStream.lastError ?? "", /contract mismatch/);
+  });
+
+  it("never assumes zero PnL for another open account position", () => {
+    const state = readyState();
+    state.registerContracts([{
+      id: "MES",
+      name: "MES",
+      description: "MES",
+      tickSize: 0.25,
+      tickValue: 1.25,
+      activeContract: true,
+      symbolId: "F.US.MES",
+    }]);
+    state.replacePositions([
+      {
+        id: 2,
+        accountId: 1,
+        contractId: "MNQ",
+        creationTimestamp: stamp,
+        type: 1,
+        size: 2,
+        averagePrice: 20_000,
+      },
+      {
+        id: 3,
+        accountId: 1,
+        contractId: "MES",
+        creationTimestamp: stamp,
+        type: 2,
+        size: 1,
+        averagePrice: 5_000,
+      },
+    ], stamp);
+
+    let snapshot = state.buildSnapshot(1, "MNQ");
+    assert.equal(snapshot.stateComplete, false);
+    assert.ok(snapshot.stateIssues.includes("position_quote_missing:MES"));
+    assert.equal(snapshot.unrealizedPnl, 40);
+
+    state.applyQuote({
+      contractId: "MES",
+      symbol: "F.US.MES",
+      lastPrice: 5_000.75,
+      bestBid: 5_000.5,
+      bestAsk: 5_001,
+      open: 4_990,
+      high: 5_010,
+      low: 4_980,
+      volume: 2_000,
+      timestamp: stamp,
+    }, stamp);
+    snapshot = state.buildSnapshot(1, "MNQ");
+    assert.equal(snapshot.stateComplete, true);
+    assert.equal(snapshot.unrealizedPnl, 35);
+    assert.equal(snapshot.conservativeEquity, 135);
   });
 });
