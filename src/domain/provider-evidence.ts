@@ -29,4 +29,6 @@ export interface ProviderEvidenceStatus {
   latestSequence: number | null;
   latestReceivedUtc: string | null;
   marketEventRetention: number;
+  marketPruneInterval: number;
+  maximumMarketEventsBetweenPrunes: number;
 }
