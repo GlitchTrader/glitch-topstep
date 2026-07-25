@@ -25,10 +25,16 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Normalized REST reconciliation evidence | Implemented | Raw REST envelopes remain an explicit gap |
 | Bounded market-event retention | Implemented | Tune retention from observed quote/print/DOM rates |
 | Authenticated evidence inspection | Implemented | Operator acceptance and replay tooling |
-| Fill-to-bracket ownership | Missing, P0 | Entry, fill, stop, and target provider events |
-| Exact structural bracket correction | Missing, P0 | Provider child-order identity and amendment proof |
+| Explicit provider relationship index | Implemented | Validate `trade.orderId` retention on real payloads |
+| Submitted entry-order ownership | Implemented from durable provider order ID | Historical order sync after offline intervals |
+| Fill ownership | Implemented only from exact `trade.orderId` relation | Historical trade sync and real partial/voided fill fixtures |
+| Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
+| Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
+| Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
+| Provider-created stop/target ownership | Missing, P0 | Explicit child-order, OCO, or equivalent provider relation |
+| Exact structural bracket correction | Missing, P0 | Protective child identity and amendment proof |
 | `MOVE_STOP` / `MOVE_TP` | Missing | Exact-leg mutation and sibling non-interference |
-| Multiple independent entry tranches | Missing | Per-tranche ownership and restart reconstruction |
+| Multiple independent entry tranches | Missing | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Missing | State rebuild and correction semantics from journal |
 | Multi-timeframe normalized market evidence | Missing | Integrated 1m/5m/15m/60m ProjectX series |
@@ -44,13 +50,14 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 
 1. **Authority, runtime truth, durable intent identity, and mutation recovery — implemented in software.**
 2. **Integrated ProjectX evidence journal — implemented in software.**
-3. Real ProjectX read-only, payload-rate, disconnect, and crash-window acceptance.
-4. Deterministic state replay and provider bracket ownership.
-5. Protection reconstruction and exact amendments.
-6. Canonical outcomes and Hermes learning input.
-7. Multi-timeframe and order-flow evidence.
-8. Automatic Topstep policy and session truth.
-9. One-account shadow evaluation, promotion review, and payout lifecycle.
+3. **Exact submitted-entry and fill ownership from explicit provider IDs — implemented in software.**
+4. Real ProjectX read-only, payload-rate, disconnect, offline-sync, and crash-window acceptance.
+5. Deterministic state replay and explicit protective-child ownership discovery.
+6. Protection reconstruction and exact amendments.
+7. Canonical outcomes and Hermes learning input.
+8. Multi-timeframe and order-flow evidence.
+9. Automatic Topstep policy and session truth.
+10. One-account shadow evaluation, promotion review, and payout lifecycle.
 
 ## Promotion rule
 
