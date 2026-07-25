@@ -12,7 +12,8 @@
     "test": "node --test dist/tests/*.test.js",
     "check": "npm run build && npm test",
     "dev": "npm run build && npm start",
-    "start": "node --enable-source-maps dist/src/index.js"
+    "start": "node --enable-source-maps dist/src/index.js",
+    "replay:evidence": "npm run build && node --enable-source-maps dist/src/cli/replay-provider-evidence.js"
   },
   "dependencies": {
     "@microsoft/signalr": "^8.0.7"
