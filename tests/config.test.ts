@@ -22,6 +22,8 @@ describe("configuration authority", () => {
     assert.equal(config.scope.instrument, "MNQ");
     assert.equal(config.policy.authority, "operator_configured");
     assert.equal(config.policy.lossModel, "express_funded_eod");
+    assert.equal(config.providerEvidence.marketEventRetention, 500_000);
+    assert.equal(config.providerEvidence.marketPruneInterval, 10_000);
     assert.equal("requireSimulatedAccount" in config, false);
     assert.equal("maxRiskFractionOfBuffer" in config.risk, false);
     assert.equal("entryWindowOpen" in config.policy, false);
@@ -48,5 +50,25 @@ describe("configuration authority", () => {
       GLITCH_ARMED_ACK: "I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY",
     });
     assert.equal(config.tradingMode, "armed");
+  });
+
+  it("validates bounded market evidence retention", () => {
+    const configured = loadConfig({
+      ...environment(),
+      GLITCH_PROVIDER_MARKET_EVENT_RETENTION: "25000",
+      GLITCH_PROVIDER_MARKET_PRUNE_INTERVAL: "500",
+    });
+    assert.equal(configured.providerEvidence.marketEventRetention, 25_000);
+    assert.equal(configured.providerEvidence.marketPruneInterval, 500);
+
+    assert.throws(() => loadConfig({
+      ...environment(),
+      GLITCH_PROVIDER_MARKET_EVENT_RETENTION: "9999",
+    }), /GLITCH_PROVIDER_MARKET_EVENT_RETENTION/);
+    assert.throws(() => loadConfig({
+      ...environment(),
+      GLITCH_PROVIDER_MARKET_EVENT_RETENTION: "10000",
+      GLITCH_PROVIDER_MARKET_PRUNE_INTERVAL: "10001",
+    }), /cannot exceed retention/);
   });
 });
