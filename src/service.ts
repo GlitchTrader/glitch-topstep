@@ -13,19 +13,21 @@ import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
+import { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
 
 export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
   private readonly executionStore: SqliteExecutionStore;
+  private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
-  private storeClosed = false;
+  private storesClosed = false;
 
   public constructor(private readonly config: AppConfig) {
     this.api = new ProjectXApiClient({
@@ -36,6 +38,9 @@ export class GlitchTopstepService {
     this.ledger = new JsonlEventStore(config.dataDir);
     this.executionStore = new SqliteExecutionStore(
       join(config.dataDir, "glitch-topstep.sqlite"),
+    );
+    this.providerEvidenceStore = new SqliteProviderEvidenceStore(
+      join(config.dataDir, "projectx-evidence.sqlite"),
     );
   }
 
@@ -60,10 +65,28 @@ export class GlitchTopstepService {
       throw new Error(`configured_contract_not_found:${this.config.scope.contractId}`);
     }
 
+    const receivedAt = new Date().toISOString();
+    this.recordRestSnapshot("accounts_snapshot", receivedAt, accounts, this.config.scope.accountId, null);
+    this.recordRestSnapshot("contracts_snapshot", receivedAt, contracts, null, this.config.scope.contractId);
+    this.recordRestSnapshot(
+      "positions_snapshot",
+      receivedAt,
+      positions,
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    this.recordRestSnapshot(
+      "open_orders_snapshot",
+      receivedAt,
+      orders,
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+
     this.state.registerContracts(contracts);
-    this.state.replaceAccounts(accounts);
-    this.state.replacePositions(positions);
-    this.state.replaceOrders(orders);
+    this.state.replaceAccounts(accounts, receivedAt);
+    this.state.replacePositions(positions, receivedAt);
+    this.state.replaceOrders(orders, receivedAt);
     const initialRecovery = await recoverExecutionMutations(
       this.executionStore,
       this.api,
@@ -92,6 +115,7 @@ export class GlitchTopstepService {
         token: () => this.api.sessionToken,
         accountId: this.config.scope.accountId,
         contractId: this.config.scope.contractId,
+        evidence: this.providerEvidenceStore,
         onReconnected: async () => {
           this.packets?.invalidateAll();
           await this.reconcile();
@@ -144,6 +168,7 @@ export class GlitchTopstepService {
             operational: current.operational,
           },
           execution_recovery: executionRecovery,
+          provider_evidence: this.providerEvidenceStore.status(),
         };
       },
       snapshot,
@@ -153,6 +178,7 @@ export class GlitchTopstepService {
         }
         return this.packets.current();
       },
+      (limit) => this.providerEvidenceStore.recent(limit),
       coordinator,
     );
     await this.gateway.start();
@@ -178,6 +204,7 @@ export class GlitchTopstepService {
         trading_mode: this.config.tradingMode,
         policy_authority: this.config.policy.authority,
         execution_recovery: this.executionStore.recoveryStatus(),
+        provider_evidence: this.providerEvidenceStore.status(),
       },
     });
   }
@@ -198,9 +225,10 @@ export class GlitchTopstepService {
     this.gateway = null;
     this.realtime = null;
     this.packets = null;
-    if (!this.storeClosed) {
+    if (!this.storesClosed) {
+      this.providerEvidenceStore.close();
       this.executionStore.close();
-      this.storeClosed = true;
+      this.storesClosed = true;
     }
   }
 
@@ -220,7 +248,24 @@ export class GlitchTopstepService {
       if (!account || account.name !== this.config.scope.accountName) {
         throw new Error("configured_account_disappeared_or_changed");
       }
+
       const receivedAt = new Date().toISOString();
+      this.recordRestSnapshot("accounts_snapshot", receivedAt, accounts, this.config.scope.accountId, null);
+      this.recordRestSnapshot(
+        "positions_snapshot",
+        receivedAt,
+        positions,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      this.recordRestSnapshot(
+        "open_orders_snapshot",
+        receivedAt,
+        orders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+
       this.state.replaceAccounts(accounts, receivedAt);
       this.state.replacePositions(positions, receivedAt);
       this.state.replaceOrders(orders, receivedAt);
@@ -253,6 +298,27 @@ export class GlitchTopstepService {
     } finally {
       this.reconciliationInFlight = false;
     }
+  }
+
+  private recordRestSnapshot(
+    eventType: string,
+    receivedUtc: string,
+    normalizedPayload: unknown,
+    accountId: number | null,
+    contractId: string | null,
+  ): void {
+    this.providerEvidenceStore.append({
+      receivedUtc,
+      providerTimestampUtc: null,
+      source: "projectx_rest",
+      eventType,
+      generation: this.state.operationalStatus().generation,
+      accountId,
+      contractId,
+      providerEntityId: null,
+      rawPayload: null,
+      normalizedPayload,
+    });
   }
 
   private reconcileEntrySubmissionLatch(
