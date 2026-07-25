@@ -42,7 +42,7 @@ const TERMINAL_ORDER_STATUSES = new Set([2, 3, 4, 5]);
 export class ProjectXEvidenceReplayService {
   private readonly database: DatabaseSync;
 
-  public constructor(private readonly evidenceDatabasePath: string) {
+  public constructor(evidenceDatabasePath: string) {
     this.database = new DatabaseSync(evidenceDatabasePath);
     this.database.exec("PRAGMA query_only=ON");
     this.database.exec("PRAGMA busy_timeout=5000");
@@ -179,7 +179,9 @@ export function replayProviderEvidence(
   const originalSequences = events.map((event) => event.sequence);
   const sorted = [...events]
     .filter((event) => requestedThroughSequence === null || event.sequence <= requestedThroughSequence)
-    .sort((left, right) => left.sequence - right.sequence || left.payloadHash.localeCompare(right.payloadHash));
+    .sort((left, right) => (
+      left.sequence - right.sequence || left.payloadHash.localeCompare(right.payloadHash)
+    ));
   const reducer = new ProjectXEvidenceReplayReducer(requestedThroughSequence);
   if (!isStrictlyAscending(originalSequences)) {
     reducer.addIssue("input_not_strictly_sequence_ordered");
@@ -228,18 +230,20 @@ class ProjectXEvidenceReplayReducer {
 
     switch (event.eventType) {
       case "accounts_snapshot":
-        this.applySnapshot(event, isAccountInfo, (values) => replaceMap(this.accounts, values, (value) => value.id));
+        this.applySnapshot(event, isAccountInfo, (values) => {
+          replaceMap(this.accounts, values, (value) => value.id);
+        });
         return;
       case "contracts_snapshot":
-        this.applySnapshot(event, isContractInfo, (values) => replaceMap(this.contracts, values, (value) => value.id));
+        this.applySnapshot(event, isContractInfo, (values) => {
+          replaceMap(this.contracts, values, (value) => value.id);
+        });
         return;
       case "positions_snapshot":
         this.applySnapshot(event, isPositionInfo, (values) => {
           this.positions.clear();
           for (const value of values) {
-            if (value.type !== 0 && value.size !== 0) {
-              this.positions.set(value.id, value);
-            }
+            this.applyPosition(value);
           }
         });
         return;
@@ -247,10 +251,7 @@ class ProjectXEvidenceReplayReducer {
         this.applySnapshot(event, isOrderInfo, (values) => {
           this.openOrders.clear();
           for (const value of values) {
-            this.orderHistory.set(value.id, value);
-            if (!TERMINAL_ORDER_STATUSES.has(value.status)) {
-              this.openOrders.set(value.id, value);
-            }
+            this.applyOrder(value);
           }
         });
         return;
@@ -258,26 +259,11 @@ class ProjectXEvidenceReplayReducer {
         this.applySingle(event, isAccountInfo, (value) => this.accounts.set(value.id, value));
         return;
       case "position":
-        this.applySingle(event, isPositionInfo, (value) => {
-          if (value.type === 0 || value.size === 0) {
-            this.positions.delete(value.id);
-          } else {
-            this.positions.set(value.id, value);
-          }
-        });
+        this.applySingle(event, isPositionInfo, (value) => this.applyPosition(value));
         return;
       case "order":
-        this.applySingle(event, isOrderInfo, (value) => {
-          this.orderHistory.set(value.id, value);
-          if (TERMINAL_ORDER_STATUSES.has(value.status)) {
-            this.openOrders.delete(value.id);
-          } else {
-            this.openOrders.set(value.id, value);
-          }
-        });
-        return;
       case "historical_order":
-        this.applySingle(event, isOrderInfo, (value) => this.orderHistory.set(value.id, value));
+        this.applySingle(event, isOrderInfo, (value) => this.applyOrder(value));
         return;
       case "trade":
       case "historical_trade":
@@ -287,7 +273,11 @@ class ProjectXEvidenceReplayReducer {
         this.applySingle(event, isQuoteInfo, (value) => this.quotes.set(value.contractId, value));
         return;
       case "market_trade":
-        this.applySingle(event, isMarketTradeInfo, (value) => this.marketTrades.set(value.contractId, value));
+        this.applySingle(
+          event,
+          isMarketTradeInfo,
+          (value) => this.marketTrades.set(value.contractId, value),
+        );
         return;
       case "depth":
         this.applySingle(event, isMarketDepthInfo, (value) => {
@@ -295,12 +285,10 @@ class ProjectXEvidenceReplayReducer {
         });
         return;
       default:
-        if (event.source === "projectx_lifecycle") {
-          this.eventsIgnored += 1;
-          return;
-        }
         this.eventsIgnored += 1;
-        this.issues.push(`unsupported_event_type:${event.sequence}:${event.eventType}`);
+        if (event.source !== "projectx_lifecycle") {
+          this.issues.push(`unsupported_event_type:${event.sequence}:${event.eventType}`);
+        }
     }
   }
 
@@ -311,7 +299,10 @@ class ProjectXEvidenceReplayReducer {
     const openOrders = sortedValues(this.openOrders, (left, right) => left.id - right.id);
     const orderHistory = sortedValues(this.orderHistory, (left, right) => left.id - right.id);
     const trades = sortedValues(this.trades, (left, right) => left.id - right.id);
-    const quotes = sortedValues(this.quotes, (left, right) => left.contractId.localeCompare(right.contractId));
+    const quotes = sortedValues(
+      this.quotes,
+      (left, right) => left.contractId.localeCompare(right.contractId),
+    );
     const latestMarketTrades = sortedValues(
       this.marketTrades,
       (left, right) => left.contractId.localeCompare(right.contractId),
@@ -351,7 +342,9 @@ class ProjectXEvidenceReplayReducer {
       truncated,
       evidence_complete: evidenceComplete,
       sequence_gaps: [...this.sequenceGaps],
-      event_counts: Object.fromEntries([...this.eventCounts.entries()].sort(([left], [right]) => left.localeCompare(right))),
+      event_counts: Object.fromEntries(
+        [...this.eventCounts.entries()].sort(([left], [right]) => left.localeCompare(right)),
+      ),
       accounts,
       contracts,
       positions,
@@ -365,6 +358,23 @@ class ProjectXEvidenceReplayReducer {
       state_hash: stateHash,
       evidence_hash: this.evidenceHasher.digest("hex"),
     };
+  }
+
+  private applyPosition(value: PositionInfo): void {
+    if (value.type === 0 || value.size === 0) {
+      this.positions.delete(value.id);
+    } else {
+      this.positions.set(value.id, value);
+    }
+  }
+
+  private applyOrder(value: OrderInfo): void {
+    this.orderHistory.set(value.id, value);
+    if (TERMINAL_ORDER_STATUSES.has(value.status)) {
+      this.openOrders.delete(value.id);
+    } else {
+      this.openOrders.set(value.id, value);
+    }
   }
 
   private observeSequence(sequence: number): void {
@@ -574,7 +584,11 @@ function isOrderInfo(value: unknown): value is OrderInfo {
     && isNullableFiniteNumber(value.stopPrice)
     && (value.fillVolume === undefined || isFiniteNumber(value.fillVolume))
     && isNullableFiniteNumber(value.filledPrice)
-    && (value.customTag === undefined || value.customTag === null || typeof value.customTag === "string");
+    && (
+      value.customTag === undefined
+      || value.customTag === null
+      || typeof value.customTag === "string"
+    );
 }
 
 function isTradeInfo(value: unknown): value is TradeInfo {
