@@ -213,7 +213,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
   const overlapMinutes = numberValue(
     environment,
     "GLITCH_PROVIDER_HISTORY_OVERLAP_MINUTES",
-    10,
+    1_440,
     (value) => Number.isInteger(value) && value >= 1 && value <= 1_440,
   );
   const windowMinutes = numberValue(
