@@ -41,6 +41,10 @@ export class GlitchTopstepService {
     );
     this.providerEvidenceStore = new SqliteProviderEvidenceStore(
       join(config.dataDir, "projectx-evidence.sqlite"),
+      {
+        marketEventRetention: config.providerEvidence.marketEventRetention,
+        marketPruneInterval: config.providerEvidence.marketPruneInterval,
+      },
     );
   }
 
