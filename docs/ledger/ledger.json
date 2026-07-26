@@ -1,0 +1,600 @@
+{
+  "schema_version": "1.0",
+  "project": "glitch-topstep",
+  "updated": "2026-07-26",
+  "roadmap_ref": "docs/ROADMAP.md",
+  "items": [
+    {
+      "id": "TS-R1-01",
+      "title": "Process-kill recovery fixtures across outbox and provider lifecycle",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "tests",
+      "acceptance": [
+        "Actual process-kill fixture before outbox creation proves durable recovery without duplicate exposure.",
+        "Actual process-kill fixture before provider call proves outbox replay without duplicate submission.",
+        "Actual process-kill fixture during ambiguous transport proves reconciliation before retry.",
+        "Actual process-kill fixture after provider response but before receipt proves terminal state recovery."
+      ],
+      "depends_on": [],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+      ]
+    },
+    {
+      "id": "TS-R1-02",
+      "title": "Windows machine-restart persistence fixture",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "tests",
+      "acceptance": [
+        "Windows machine-restart persistence fixture proves execution identity, outbox, and recovery state survive reboot.",
+        "Recovery health blocks new exposure until ambiguity and settlement are cleared after restart."
+      ],
+      "depends_on": [],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+      ]
+    },
+    {
+      "id": "TS-R1-03",
+      "title": "Bounded recovery flatten for owned unresolved exposure",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Owned but unresolved exposure triggers bounded recovery flatten rather than silent retry or duplicate entry.",
+        "Flatten outcome is journaled with explicit ownership and ambiguity evidence."
+      ],
+      "depends_on": [],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+      ]
+    },
+    {
+      "id": "TS-R1-04",
+      "title": "Zero duplicate entries in real ProjectX acceptance session",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "tests",
+      "acceptance": [
+        "A real ProjectX acceptance session with kill, reconnect, and retry scenarios produces zero duplicate entries.",
+        "Duplicate detection is evidenced from durable intent, custom tag, and provider order identity."
+      ],
+      "depends_on": [
+        "TS-R2-01",
+        "TS-R1-01"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires real TopstepX ProjectX credentials and TS-R1-01 process-kill fixtures.",
+      "sources": [
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+      ]
+    },
+    {
+      "id": "TS-R2-01",
+      "title": "Authenticate with real TopstepX ProjectX key in shadow mode",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Gateway authenticates using a real TopstepX ProjectX key in shadow mode without submitting live risk.",
+        "Login and validate responses match observed or official contracts; parsers are not loosened to suppress errors."
+      ],
+      "depends_on": [],
+      "evidence": [],
+      "blocked_reason": "No ProjectX API subscription or credentials available in the initial scaffold.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "docs/HANDOFF.md#1-verify-projectx-payload-contracts"
+      ]
+    },
+    {
+      "id": "TS-R2-02",
+      "title": "Capture sanitized official ProjectX payload fixtures",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Sanitized fixtures captured for login, validate, account search, available contracts, open positions, and open orders.",
+        "Each SignalR user-hub and market-hub event type has at least one sanitized fixture.",
+        "Secret-like fields are recursively redacted in stored fixtures."
+      ],
+      "depends_on": [
+        "TS-R2-01"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires successful TS-R2-01 authentication against a real ProjectX session.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "docs/HANDOFF.md#1-verify-projectx-payload-contracts"
+      ]
+    },
+    {
+      "id": "TS-R2-03",
+      "title": "Reconcile account, contract, positions, and conservative PnL with TopstepX UI",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Selected account and active contract reconcile between local state and TopstepX UI.",
+        "All account positions and conservative PnL match TopstepX UI within documented tolerance.",
+        "Local hard loss-floor evidence matches authoritative dashboard or account state."
+      ],
+      "depends_on": [
+        "TS-R2-01"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires successful TS-R2-01 authentication and a configured Topstep account.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+      ]
+    },
+    {
+      "id": "TS-R2-04",
+      "title": "Prove user-hub and market stream subscriptions",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Every required user-hub subscription is proven with live or recorded evidence.",
+        "Quote, print, and DOM subscriptions are proven on the target machine.",
+        "Connection health fields include userHubConnected, marketHubConnected, lastUserEventAt, lastMarketEventAt, and reconciliationGeneration."
+      ],
+      "depends_on": [
+        "TS-R2-01"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires successful TS-R2-01 authentication and active market data entitlement.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"
+      ]
+    },
+    {
+      "id": "TS-R2-05",
+      "title": "Prove disconnect, reconnect, generation invalidation, and REST reconciliation",
+      "status": "blocked",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Disconnect invalidates current entry packets and increments reconciliation generation.",
+        "Reconnect performs REST reconciliation before publishing a new executable packet.",
+        "Generation invalidation and post-reconnect state are evidenced in health and packet APIs."
+      ],
+      "depends_on": [
+        "TS-R2-04"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires proven live stream subscriptions from TS-R2-04.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"
+      ]
+    },
+    {
+      "id": "TS-R2-06",
+      "title": "Prove historical order and trade search with identity retention",
+      "status": "blocked",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Historical order search retains custom tags and full order identity.",
+        "Historical trade search retains trade.orderId linkage to submitted entries."
+      ],
+      "depends_on": [
+        "TS-R2-01"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires successful TS-R2-01 authentication and account history.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+      ]
+    },
+    {
+      "id": "TS-R2-07",
+      "title": "Measure stream event rates and evidence disk growth",
+      "status": "blocked",
+      "priority": "P1",
+      "owner_role": "tests",
+      "acceptance": [
+        "Quote, print, and DOM event rates are measured on the target Windows machine.",
+        "Evidence retention policy is validated against actual disk growth under sustained streaming."
+      ],
+      "depends_on": [
+        "TS-R2-04"
+      ],
+      "evidence": [],
+      "blocked_reason": "Requires sustained live market streams from TS-R2-04.",
+      "sources": [
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+      ]
+    },
+    {
+      "id": "TS-R3-01",
+      "title": "REST envelope persistence and deterministic event-corpus replay",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Raw REST response envelopes persist where contract-drift forensics require them.",
+        "Deterministic state rebuild from the integrated provider-event journal reproduces canonical state.",
+        "Correction and contradiction semantics are defined and tested during replay."
+      ],
+      "depends_on": [
+        "TS-R2-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r3--provider-evidence-and-replay-foundation"
+      ]
+    },
+    {
+      "id": "TS-R3-02",
+      "title": "Evidence archive, export, and disk-full acceptance",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "tests",
+      "acceptance": [
+        "Evidence archive and export workflow is bounded, authenticated, and redacts secrets.",
+        "Real disk-full and write-failure acceptance proves execution durability degrades safely without silent loss."
+      ],
+      "depends_on": [
+        "TS-R2-07"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r3--provider-evidence-and-replay-foundation"
+      ]
+    },
+    {
+      "id": "TS-R4-01",
+      "title": "Historical sync and explicit provider bracket identification",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Historical orders and trades synchronize after offline intervals without ownership drift.",
+        "Provider-created stop and target orders are identified from an explicit relationship, not proximity inference.",
+        "Order groups and protective-leg identity persist durably.",
+        "Aggregate open-position ownership is proven without price, timing, or geometry inference."
+      ],
+      "depends_on": [
+        "TS-R2-06",
+        "TS-R3-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
+        "docs/HANDOFF.md#4-implement-provider-bracket-ownership-proof"
+      ]
+    },
+    {
+      "id": "TS-R4-02",
+      "title": "Bracket correction, fail-closed protection, and restart reconstruction",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Tick-distance brackets correct to exact intended absolute prices.",
+        "Protection failure is visible and triggers risk reduction; armed acceptance remains disabled until proof passes.",
+        "Protection reconstructs correctly after gateway restart from durable evidence."
+      ],
+      "depends_on": [
+        "TS-R4-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
+        "docs/HANDOFF.md#4-implement-provider-bracket-ownership-proof"
+      ]
+    },
+    {
+      "id": "TS-R4-03",
+      "title": "MOVE_STOP, MOVE_TP, and exact-leg mutation",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "MOVE_STOP mutates only the intended protective leg without sibling interference.",
+        "MOVE_TP mutates only the intended protective leg without sibling interference.",
+        "Exact-leg mutation preserves unrelated working orders and sibling protection geometry."
+      ],
+      "depends_on": [
+        "TS-R4-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership"
+      ]
+    },
+    {
+      "id": "TS-R4-04",
+      "title": "Multi-tranche protected additions and full exit cleanup",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Independently protected additions and multiple tranches maintain per-tranche ownership.",
+        "Full exit ownership is proven and residual protective orders are cleaned up."
+      ],
+      "depends_on": [
+        "TS-R4-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership"
+      ]
+    },
+    {
+      "id": "TS-R5-01",
+      "title": "Canonical completed trade outcomes and learning evidence",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Canonical completed Topstep outcomes derive from provider fills with stable intent and outcome identity.",
+        "After-fee realized result, MFE, MAE, duration, exit cause, and planned versus realized risk and reward are recorded.",
+        "Account-policy effects and attribution confidence are explicit.",
+        "Incomplete or contradictory outcomes are labeled explicitly rather than inferred from balance drift.",
+        "Rejection and transport episodes are reviewable without becoming false trade outcomes."
+      ],
+      "depends_on": [
+        "TS-R4-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r5--canonical-outcomes-and-learning-evidence",
+        "docs/HANDOFF.md#6-publish-canonical-completed-outcomes"
+      ]
+    },
+    {
+      "id": "TS-R5-02",
+      "title": "Gateway outcome publication to glitch-topstep Hermes profile",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Gateway publishes glitch.topstep.trade_outcome.v1 to the companion Hermes profile.",
+        "Profile learning worker accepts only canonical outcomes; no balance or position-disappearance inference."
+      ],
+      "depends_on": [
+        "TS-R5-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r5--canonical-outcomes-and-learning-evidence",
+        "docs/HANDOFF.md#6-publish-canonical-completed-outcomes"
+      ]
+    },
+    {
+      "id": "TS-R6-01",
+      "title": "Versioned Topstep policy state machine",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Canonical product and account-stage record replaces manual environment inputs.",
+        "Provider and dashboard source provenance and hashes are recorded.",
+        "EOD balance, hard loss-floor history, and floor correction workflow are versioned locally.",
+        "Trading Combine and Express Funded lifecycle states are modeled explicitly.",
+        "Payout eligibility, pending, processed, and post-payout reconciliation are tracked.",
+        "Scaling tier and authoritative contract ceiling are sourced and reconciled.",
+        "Contradiction and stale-source handling fail visibly."
+      ],
+      "depends_on": [
+        "TS-R2-03"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r6--topstep-policy-and-session-authority",
+        "docs/HANDOFF.md#5-implement-automatic-policy-state"
+      ]
+    },
+    {
+      "id": "TS-R6-02",
+      "title": "Session calendar, flat deadlines, and timezone truth",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Session flat deadlines are enforced from canonical policy state.",
+        "Holiday, early-close, timezone, and DST rules are explicit and tested.",
+        "Manual entry-window environment overrides are removed in favor of reconciled policy state."
+      ],
+      "depends_on": [
+        "TS-R6-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r6--topstep-policy-and-session-authority",
+        "docs/HANDOFF.md#5-implement-automatic-policy-state"
+      ]
+    },
+    {
+      "id": "TS-R7-01",
+      "title": "Contract discovery, rollover, and instrument metadata",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Active Topstep contract discovery and rollover evidence are recorded.",
+        "Native tick, point value, session, and fee metadata are integrated without hard-coded assumptions."
+      ],
+      "depends_on": [
+        "TS-R2-03"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
+      ]
+    },
+    {
+      "id": "TS-R7-02",
+      "title": "Multi-timeframe OHLCV normalization with provenance",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Integrated 1m, 5m, 15m, and 60m OHLCV normalization is deterministic.",
+        "Gap, partial-bar, and timestamp provenance are explicit.",
+        "Session and prior-session structure features are available without a coded entry strategy."
+      ],
+      "depends_on": [
+        "TS-R7-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
+      ]
+    },
+    {
+      "id": "TS-R7-03",
+      "title": "Tape, delta, depth, and descriptive feature engine",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence are normalized.",
+        "Volatility, trend, range, and location evidence are descriptive features only.",
+        "Acceptance is demonstrated on at least two Topstep-supported products."
+      ],
+      "depends_on": [
+        "TS-R2-04",
+        "TS-R7-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
+      ]
+    },
+    {
+      "id": "TS-R8-01",
+      "title": "Provider event replay and deterministic decision replay",
+      "status": "backlog",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Raw provider events replay into canonical state and packets deterministically.",
+        "Decision and receipt replay is deterministic on identical evidence.",
+        "Simulated fills, fees, and slippage are configurable and bounded."
+      ],
+      "depends_on": [
+        "TS-R3-01",
+        "TS-R7-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r8--replay-and-comparative-evaluation"
+      ]
+    },
+    {
+      "id": "TS-R8-02",
+      "title": "Comparative cognition evaluation framework",
+      "status": "backlog",
+      "priority": "P2",
+      "owner_role": "pm-glitch",
+      "acceptance": [
+        "Cognition versions are compared on identical evidence with frozen inclusion, exclusion, regime, and missing-data rules.",
+        "Reports include expectancy, drawdown, MFE/MAE capture, churn, rejection, rule survival, and uncertainty.",
+        "One sample cannot silently become hard-coded strategy policy."
+      ],
+      "depends_on": [
+        "TS-R8-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r8--replay-and-comparative-evaluation"
+      ]
+    },
+    {
+      "id": "TS-R9-01",
+      "title": "Installed Hermes profile integration acceptance",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "tests",
+      "acceptance": [
+        "glitch-topstep-hermes-profile installs with the gateway in shadow mode using a shared local bearer token.",
+        "Profile setup confirms both jobs start paused.",
+        "/topstep_status and /trade respond with expected shadow behavior.",
+        "A five-frame flat cycle produces one strict intent and a shadow receipt.",
+        "A positioned packet permits only HOLD or EXIT each minute.",
+        "/pause_trading stops model calls and /flatten_all produces a strict risk-reducing EXIT receipt."
+      ],
+      "depends_on": [
+        "TS-R2-05",
+        "TS-R5-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/HANDOFF.md#7-perform-installed-profile-integration"
+      ]
+    },
+    {
+      "id": "TS-R9-02",
+      "title": "One-account market-readiness evidence bundle",
+      "status": "backlog",
+      "priority": "P0",
+      "owner_role": "pm-glitch",
+      "acceptance": [
+        "Actual Windows and Hermes installation acceptance is recorded.",
+        "One configured Topstep account runs with zero duplicate entries and zero unexplained unprotected exposure.",
+        "Complete reconnect, restart recovery, and attribution are evidenced.",
+        "Reconciled after-fee shadow sample and explicit operator promotion review are recorded.",
+        "First complete account and payout lifecycle evidence is captured."
+      ],
+      "depends_on": [
+        "TS-R9-01",
+        "TS-R1-04",
+        "TS-R4-02",
+        "TS-R6-01"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r9--one-account-market-readiness-evidence"
+      ]
+    },
+    {
+      "id": "TS-R10-01",
+      "title": "Scale instruments, account stages, and correlated exposure",
+      "status": "backlog",
+      "priority": "P2",
+      "owner_role": "pm-glitch",
+      "acceptance": [
+        "Additional Topstep-supported instruments are onboarded with evidence.",
+        "Additional account products and stages are supported with reconciled policy.",
+        "Portfolio-level correlated exposure evidence is recorded.",
+        "Topstep-native account or copy capabilities are used only when officially supported and reconciled."
+      ],
+      "depends_on": [
+        "TS-R9-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r10--scale-only-after-evidence"
+      ]
+    },
+    {
+      "id": "TS-R10-02",
+      "title": "Extract venue-neutral contracts after Topstep proof",
+      "status": "backlog",
+      "priority": "P2",
+      "owner_role": "coder",
+      "acceptance": [
+        "Reusable venue-neutral contracts are extracted only after the Topstep implementation is proven.",
+        "No Apex or NinjaTrader assumptions leak into the Topstep core during extraction."
+      ],
+      "depends_on": [
+        "TS-R9-02"
+      ],
+      "evidence": [],
+      "sources": [
+        "docs/ROADMAP.md#r10--scale-only-after-evidence",
+        "docs/ROADMAP.md#permanent-boundaries"
+      ]
+    }
+  ]
+}
