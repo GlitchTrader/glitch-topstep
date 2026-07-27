@@ -28,7 +28,7 @@ ProjectX owns venue truth.
 Topstep owns final account-rule authority.
 ```
 
-Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, and capacity are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
+Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, capacity, tape, and depth are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
 
 See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
 
@@ -85,6 +85,12 @@ Implemented:
 - strategy-neutral ATR, realized volatility, rolling VWAP, EMA levels/slopes/distances, range location, candle anatomy, and volume z-score;
 - preservation of the last successful observation when a later bar refresh fails;
 - exact market-observation state included in decision packet identity without becoming an execution eligibility gate;
+- rolling 15-second, 60-second, and 300-second ProjectX Buy/Sell tape windows from the local evidence journal;
+- rolling volume, delta, delta ratio, VWAP, trade rate, average/max size, and price-path descriptions;
+- bounded DOM reconstruction using official Ask/Bid/Best/NewBest, `currentVolume`, zero-volume removal, and Reset semantics;
+- explicit DOM reconstruction basis, query coverage, truncation, invalid/ignored event counts, spread ticks, top-level volumes, and imbalance;
+- `book_complete=false` by design until real ProjectX evidence proves a full-book reconstruction contract;
+- exact order-flow state included in decision packet identity without becoming an execution eligibility gate;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -97,6 +103,7 @@ Still required before live promotion:
 - real partial-fill, correction, void, and late-update acceptance;
 - replay comparison with live TopstepX state and explicit correction semantics for every observed payload variant;
 - numerical comparison of native bar series and features with independent TopstepX/chart fixtures;
+- real tape/DOM comparison, Reset behavior, event rates, retention coverage, and high-rate truncation acceptance;
 - provider-created stop and target child identity or another explicit protection relationship;
 - aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
@@ -105,7 +112,7 @@ Still required before live promotion:
 - independently protected additions and multiple tranches;
 - canonical completed outcomes for Hermes learning;
 - authoritative account-stage, loss-floor, payout, scaling, session, holiday, and special-close reconciliation;
-- session/prior-session structure and deterministic order-flow aggregation;
+- session and prior-session structure;
 - acceptance on at least two Topstep-supported products;
 - frozen after-fee shadow evidence, first complete account lifecycle, and payout evidence.
 
@@ -167,7 +174,7 @@ npm run replay:evidence -- \
 
 Replay reports gaps and truncation rather than pretending retained evidence is complete. It is an analysis and verification surface, not an execution or cognition authority.
 
-Multi-timeframe bars are also evidence, not a coded strategy:
+Multi-timeframe bars are evidence, not a coded strategy:
 
 ```text
 1m  immediate path and timing context
@@ -177,6 +184,16 @@ Multi-timeframe bars are also evidence, not a coded strategy:
 ```
 
 No agreement stack is required. Partial bars remain explicitly incomplete; gaps remain unexplained unless session evidence proves their cause. A bar-source failure is visible in `market_observation.last_error` but does not alter `new_exposure_technically_supported`.
+
+Order flow is rolling and descriptive:
+
+```text
+15s / 60s / 300s tape windows
+Buy volume - Sell volume = rolling_delta
+bounded recent DOM = partial depth evidence
+```
+
+Rolling delta is not session cumulative delta. Positive delta, negative delta, depth imbalance, thin liquidity, or a DOM Reset do not themselves authorize or forbid a trade. `book_complete` remains false; truncation, missing lookback coverage, and invalid events remain explicit. An order-flow failure is visible in `order_flow.last_error` but does not alter `new_exposure_technically_supported`.
 
 ## Requirements
 
@@ -197,9 +214,9 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health              no authentication; truthful operational, recovery, evidence, history, and market-observation status
+GET  /health              no authentication; truthful operational, recovery, evidence, history, bar, and order-flow status
 GET  /state               bearer token required
-GET  /packet              bearer token required; includes exact market observation state
+GET  /packet              bearer token required; includes exact market observation and order-flow state
 GET  /evidence?limit=100  bearer token required; maximum 1000 events
 GET  /ownership           bearer token required; exact entry/fill identity, protection remains unknown
 POST /intent              bearer token required; strict glitch.intent.v2

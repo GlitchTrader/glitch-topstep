@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { MarketObservationState } from "../domain/market-observation.js";
+import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type {
   AccountVenueSnapshot,
   RiskSettings,
@@ -58,6 +59,7 @@ export interface DirectDecisionPacket {
     volume: number | null;
   };
   market_observation: MarketObservationState;
+  order_flow: ProjectXOrderFlowState;
   data_quality: {
     state_complete: boolean;
     issues: string[];
@@ -109,12 +111,22 @@ export function emptyMarketObservationState(): MarketObservationState {
   };
 }
 
+export function emptyOrderFlowState(): ProjectXOrderFlowState {
+  return {
+    last_attempt_utc: null,
+    last_succeeded_utc: null,
+    last_error: null,
+    observation: null,
+  };
+}
+
 export function canonicalDecisionState(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
   recovery: ExecutionRecoveryStatus,
   quality: SnapshotDataQuality,
   marketObservation: MarketObservationState = emptyMarketObservationState(),
+  orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
 ): Record<string, unknown> {
   return {
     account: snapshot.account,
@@ -132,6 +144,7 @@ export function canonicalDecisionState(
       issues: quality.issues,
     },
     marketObservation,
+    orderFlow,
     policy,
     recovery,
   };
@@ -143,6 +156,7 @@ export function decisionStateHash(
   recovery: ExecutionRecoveryStatus,
   quality: SnapshotDataQuality,
   marketObservation: MarketObservationState = emptyMarketObservationState(),
+  orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
 ): string {
   return createHash("sha256")
     .update(JSON.stringify(canonicalDecisionState(
@@ -151,6 +165,7 @@ export function decisionStateHash(
       recovery,
       quality,
       marketObservation,
+      orderFlow,
     )))
     .digest("hex");
 }
@@ -165,6 +180,7 @@ export function buildDecisionPacket(
   leaseMs: number,
   now = new Date(),
   marketObservation: MarketObservationState = emptyMarketObservationState(),
+  orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -179,6 +195,7 @@ export function buildDecisionPacket(
     recovery,
     quality,
     marketObservation,
+    orderFlow,
   );
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
 
@@ -226,6 +243,7 @@ export function buildDecisionPacket(
       volume: quote?.volume ?? null,
     },
     market_observation: structuredClone(marketObservation),
+    order_flow: structuredClone(orderFlow),
     data_quality: {
       state_complete: quality.stateComplete,
       issues: [...quality.issues],
