@@ -28,7 +28,7 @@ ProjectX owns venue truth.
 Topstep owns final account-rule authority.
 ```
 
-Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, and capacity are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
+Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, capacity, tape, and depth are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
 
 See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
 
@@ -72,6 +72,25 @@ Implemented:
 - fill ownership derived only from ProjectX trades whose `orderId` exactly matches that submitted entry order;
 - contradiction detection for account, contract, side, type, quantity, custom tag, overfill, and duplicate provider order identity;
 - protection ownership explicitly reported as `unknown` until ProjectX supplies a verifiable child-order or OCO relationship;
+- durable order/trade history synchronization on startup, reconnect, and a configurable cadence;
+- bounded timestamp windows with a durable cursor advanced only after complete order and trade retrieval;
+- configurable correction overlap with unchanged historical evidence suppressed across restart;
+- changed provider records retained as new versions while strictly older versions cannot replace a newer durable head;
+- historical order and fill evidence consumed by `/ownership` through the same exact provider-ID rules;
+- history synchronization status exposed through `/health` and the service-start ledger;
+- deterministic offline replay of retained ProjectX evidence into canonical account, contract, position, order, trade, quote, print, and depth state;
+- stable replay state/evidence hashes, sequence-gap detection, invalid-payload reporting, through-sequence replay, and bounded/truncated scans;
+- native ProjectX 1m, 5m, 15m, and 60m bar retrieval on startup, reconnect, and every minute;
+- OHLCV validation, duplicate timestamp replacement, rejected-bar counts, gaps, and partial-bar provenance;
+- strategy-neutral ATR, realized volatility, rolling VWAP, EMA levels/slopes/distances, range location, candle anatomy, and volume z-score;
+- preservation of the last successful observation when a later bar refresh fails;
+- exact market-observation state included in decision packet identity without becoming an execution eligibility gate;
+- rolling 15-second, 60-second, and 300-second ProjectX Buy/Sell tape windows from the local evidence journal;
+- rolling volume, delta, delta ratio, VWAP, trade rate, average/max size, and price-path descriptions;
+- bounded DOM reconstruction using official Ask/Bid/Best/NewBest, `currentVolume`, zero-volume removal, and Reset semantics;
+- explicit DOM reconstruction basis, query coverage, truncation, invalid/ignored event counts, spread ticks, top-level volumes, and imbalance;
+- `book_complete=false` by design until real ProjectX evidence proves a full-book reconstruction contract;
+- exact order-flow state included in decision packet identity without becoming an execution eligibility gate;
 - append-only JSONL execution evidence mirrored after SQLite commits;
 - dedicated Hermes operator and learning profile.
 
@@ -80,7 +99,11 @@ Still required before live promotion:
 - verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
 - actual process-kill and Windows restart fixtures for every durable execution window;
 - raw REST response envelopes where needed for contract-drift forensics;
-- historical order and trade synchronization after offline intervals;
+- verified ProjectX timestamp-boundary semantics and any undocumented history or bar result limits or pagination behavior;
+- real partial-fill, correction, void, and late-update acceptance;
+- replay comparison with live TopstepX state and explicit correction semantics for every observed payload variant;
+- numerical comparison of native bar series and features with independent TopstepX/chart fixtures;
+- real tape/DOM comparison, Reset behavior, event rates, retention coverage, and high-rate truncation acceptance;
 - provider-created stop and target child identity or another explicit protection relationship;
 - aggregate open-position ownership without inferring it from account-level position proximity;
 - full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
@@ -89,7 +112,8 @@ Still required before live promotion:
 - independently protected additions and multiple tranches;
 - canonical completed outcomes for Hermes learning;
 - authoritative account-stage, loss-floor, payout, scaling, session, holiday, and special-close reconciliation;
-- instrument-general observation features and acceptance beyond the initial configured contract;
+- session and prior-session structure;
+- acceptance on at least two Topstep-supported products;
 - frozen after-fee shadow evidence, first complete account lifecycle, and payout evidence.
 
 The current parity and promotion ledger is [`docs/PARITY.md`](docs/PARITY.md).
@@ -127,6 +151,50 @@ Glitch intent
 
 Price proximity, timing proximity, side similarity, working-order geometry, and aggregate position state are not ownership evidence. A nearby stop or target remains unrelated until ProjectX exposes an explicit child-order or OCO relationship.
 
+Historical continuity follows:
+
+```text
+durable cursor - correction overlap
+  → bounded ProjectX order/trade window
+  → persist changed provider records
+  → advance cursor only after both retrievals succeed
+```
+
+A history failure degrades evidence health but does not become a hidden trading strategy gate. The next scheduled or reconnect run resumes from the last completed cursor.
+
+Replay is offline and query-only:
+
+```bash
+npm run replay:evidence -- \
+  --database ./data/projectx-evidence.sqlite \
+  --through-sequence 100000 \
+  --max-events 1000000 \
+  --batch-size 5000
+```
+
+Replay reports gaps and truncation rather than pretending retained evidence is complete. It is an analysis and verification surface, not an execution or cognition authority.
+
+Multi-timeframe bars are evidence, not a coded strategy:
+
+```text
+1m  immediate path and timing context
+5m  local structure
+15m broader structure and volatility
+60m location and regime
+```
+
+No agreement stack is required. Partial bars remain explicitly incomplete; gaps remain unexplained unless session evidence proves their cause. A bar-source failure is visible in `market_observation.last_error` but does not alter `new_exposure_technically_supported`.
+
+Order flow is rolling and descriptive:
+
+```text
+15s / 60s / 300s tape windows
+Buy volume - Sell volume = rolling_delta
+bounded recent DOM = partial depth evidence
+```
+
+Rolling delta is not session cumulative delta. Positive delta, negative delta, depth imbalance, thin liquidity, or a DOM Reset do not themselves authorize or forbid a trade. `book_complete` remains false; truncation, missing lookback coverage, and invalid events remain explicit. An order-flow failure is visible in `order_flow.last_error` but does not alter `new_exposure_technically_supported`.
+
 ## Requirements
 
 - Node.js 22+
@@ -146,9 +214,9 @@ npm start
 The local gateway binds to `127.0.0.1:8790` by default.
 
 ```text
-GET  /health              no authentication; truthful operational, recovery, and evidence status
+GET  /health              no authentication; truthful operational, recovery, evidence, history, bar, and order-flow status
 GET  /state               bearer token required
-GET  /packet              bearer token required
+GET  /packet              bearer token required; includes exact market observation and order-flow state
 GET  /evidence?limit=100  bearer token required; maximum 1000 events
 GET  /ownership           bearer token required; exact entry/fill identity, protection remains unknown
 POST /intent              bearer token required; strict glitch.intent.v2
@@ -156,14 +224,14 @@ POST /intent              bearer token required; strict glitch.intent.v2
 
 ```bash
 curl -H "Authorization: Bearer $GLITCH_LOCAL_TOKEN" \
-  "http://127.0.0.1:8790/ownership"
+  "http://127.0.0.1:8790/packet"
 ```
 
 Execution and telemetry use separate stores:
 
 ```text
 data/glitch-topstep.sqlite     execution identity and recovery; WAL/FULL
-data/projectx-evidence.sqlite  provider evidence; WAL/NORMAL; bounded market-event retention
+data/projectx-evidence.sqlite  provider evidence/history; WAL/NORMAL; bounded market-event retention
 ```
 
 ## Hermes profile

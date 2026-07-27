@@ -26,8 +26,11 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Bounded market-event retention | Implemented | Tune retention from observed quote/print/DOM rates |
 | Authenticated evidence inspection | Implemented | Operator acceptance and replay tooling |
 | Explicit provider relationship index | Implemented | Validate `trade.orderId` retention on real payloads |
-| Submitted entry-order ownership | Implemented from durable provider order ID | Historical order sync after offline intervals |
-| Fill ownership | Implemented only from exact `trade.orderId` relation | Historical trade sync and real partial/voided fill fixtures |
+| Durable historical order/trade cursor | Implemented | Real ProjectX timestamp-boundary and restart acceptance |
+| Bounded history windows and correction overlap | Implemented | Verify undocumented result caps or pagination behavior |
+| Historical provider-version deduplication | Implemented | Real correction, void, and late-update payload fixtures |
+| Submitted entry-order ownership | Implemented from durable provider order ID | Real offline interval and order-correction acceptance |
+| Fill ownership | Implemented only from exact `trade.orderId` relation | Real partial, corrected, and voided fill fixtures |
 | Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
 | Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
@@ -36,13 +39,21 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | `MOVE_STOP` / `MOVE_TP` | Missing | Exact-leg mutation and sibling non-interference |
 | Multiple independent entry tranches | Missing | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
-| Deterministic provider replay | Missing | State rebuild and correction semantics from journal |
-| Multi-timeframe normalized market evidence | Missing | Integrated 1m/5m/15m/60m ProjectX series |
-| Tape, delta, depth, and liquidity features | Raw streams journaled | Deterministic aggregation and replay fixtures |
+| Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
+| Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
+| Native 1m/5m/15m/60m ProjectX bars | Implemented | Verify real History API boundaries, ordering, limits, and partial bars |
+| Multi-timeframe normalization, gaps, and partial-bar provenance | Implemented | Compare against TopstepX chart output |
+| Strategy-neutral ATR, volatility, VWAP, EMA, location, candle, and volume features | Implemented | Validate numerical parity against independent fixtures |
+| Market observation packet identity | Implemented without execution gating | Real Hermes observation and cost/latency acceptance |
+| Rolling 15s/60s/300s Buy/Sell tape and delta | Implemented from official TradeLogType | Compare against real TopstepX tape fixtures |
+| Rolling tape VWAP, trade rate, size, and price path | Implemented | Validate high-rate and quiet-market behavior |
+| Bounded DOM reconstruction with Reset/currentVolume semantics | Implemented, always `book_complete=false` | Prove full-book reconstruction contract on real payloads |
+| Depth spread, top-level volume, and imbalance | Implemented as descriptive partial evidence | Compare against real DOM snapshots and resets |
+| Order-flow packet identity and health | Implemented without execution gating | Real Hermes latency and retention acceptance |
 | Instrument-general Topstep support | Configurable single contract | At least two Topstep-supported contracts |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
 | Session, holiday, and early-close truth | Missing | Authoritative calendar and failure visibility |
-| Replay and comparative evaluation | Missing | Identical evidence corpus across cognition versions |
+| Replay and comparative cognition evaluation | Replay foundation implemented | Identical evidence corpus across cognition versions |
 | Hermes autonomous cognition | Implemented in companion profile | Actual Windows/Hermes acceptance |
 | First complete payout lifecycle | Missing | Reconciled account progression and payout evidence |
 
@@ -51,13 +62,16 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 1. **Authority, runtime truth, durable intent identity, and mutation recovery — implemented in software.**
 2. **Integrated ProjectX evidence journal — implemented in software.**
 3. **Exact submitted-entry and fill ownership from explicit provider IDs — implemented in software.**
-4. Real ProjectX read-only, payload-rate, disconnect, offline-sync, and crash-window acceptance.
-5. Deterministic state replay and explicit protective-child ownership discovery.
-6. Protection reconstruction and exact amendments.
-7. Canonical outcomes and Hermes learning input.
-8. Multi-timeframe and order-flow evidence.
-9. Automatic Topstep policy and session truth.
-10. One-account shadow evaluation, promotion review, and payout lifecycle.
+4. **Durable offline order/trade history continuity — implemented in software.**
+5. **Deterministic offline provider replay — implemented in software.**
+6. **Native multi-timeframe ProjectX market evidence — implemented in software.**
+7. **Rolling tape and bounded depth evidence — implemented in software.**
+8. Real ProjectX read-only, payload-rate, bar/history/order-flow boundary, disconnect, correction, replay comparison, and crash-window acceptance.
+9. Explicit protective-child ownership discovery and protection reconstruction.
+10. Exact amendments and multiple protected tranches.
+11. Canonical outcomes and Hermes learning input.
+12. Session structure and automatic Topstep policy/session truth.
+13. One-account shadow evaluation, promotion review, and payout lifecycle.
 
 ## Promotion rule
 

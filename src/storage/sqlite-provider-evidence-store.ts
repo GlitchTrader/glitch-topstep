@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import type { ProviderHistorySyncStatus } from "../domain/provider-history.js";
 import type {
   ProviderEvidenceEvent,
   ProviderEvidenceQuery,
@@ -25,9 +26,25 @@ interface EvidenceRow {
   normalized_payload_json: string;
 }
 
+interface PreparedEvidence {
+  event: ProviderEvidenceEvent;
+  relatedProviderEntityId: string | null;
+  rawPayload: unknown;
+  normalizedPayload: unknown;
+  rawPayloadJson: string;
+  normalizedPayloadJson: string;
+  payloadHash: string;
+  contentHash: string;
+}
+
 export interface ProviderEvidenceStoreOptions {
   marketEventRetention?: number;
   marketPruneInterval?: number;
+}
+
+export interface AppendIfChangedResult {
+  appended: boolean;
+  event: StoredProviderEvidenceEvent | null;
 }
 
 const DEFAULT_MARKET_EVENT_RETENTION = 500_000;
@@ -83,71 +100,59 @@ export class SqliteProviderEvidenceStore {
   }
 
   public append(event: ProviderEvidenceEvent): StoredProviderEvidenceEvent {
-    const rawPayload = redactSecrets(event.rawPayload ?? null);
-    const normalizedPayload = redactSecrets(event.normalizedPayload ?? null);
-    const relatedProviderEntityId = event.relatedProviderEntityId ?? null;
-    const rawPayloadJson = safeJson(rawPayload);
-    const normalizedPayloadJson = safeJson(normalizedPayload);
-    const payloadHash = evidencePayloadHash({
-      receivedUtc: event.receivedUtc,
-      providerTimestampUtc: event.providerTimestampUtc,
-      source: event.source,
-      eventType: event.eventType,
-      generation: event.generation,
-      accountId: event.accountId,
-      contractId: event.contractId,
-      providerEntityId: event.providerEntityId,
-      relatedProviderEntityId,
-      rawPayload,
-      normalizedPayload,
-    });
+    const prepared = prepareEvidence(event);
+    const stored = this.insertPrepared(prepared);
+    this.maybePruneMarketEvent(event.source);
+    return stored;
+  }
 
-    const result = this.database.prepare(`
-      INSERT INTO provider_events (
-        received_utc,
-        provider_timestamp_utc,
-        source,
-        event_type,
-        generation,
-        account_id,
-        contract_id,
-        provider_entity_id,
-        related_provider_entity_id,
-        payload_hash,
-        raw_payload_json,
-        normalized_payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      event.receivedUtc,
-      event.providerTimestampUtc,
-      event.source,
-      event.eventType,
-      event.generation,
-      event.accountId,
-      event.contractId,
-      event.providerEntityId,
-      relatedProviderEntityId,
-      payloadHash,
-      rawPayloadJson,
-      normalizedPayloadJson,
-    );
-
-    if (event.source === "projectx_market_stream") {
-      this.marketEventsSincePrune += 1;
-      if (this.marketEventsSincePrune >= this.marketPruneInterval) {
-        this.pruneMarketEvents();
-        this.marketEventsSincePrune = 0;
-      }
+  public appendIfChanged(
+    identityKey: string,
+    event: ProviderEvidenceEvent,
+  ): AppendIfChangedResult {
+    if (identityKey.length < 1 || identityKey.length > 512) {
+      throw new Error("provider_evidence_identity_key_invalid");
     }
+    const prepared = prepareEvidence(event);
+    return this.inTransaction(() => {
+      const head = this.database.prepare(`
+        SELECT content_hash, provider_timestamp_utc
+        FROM provider_evidence_heads
+        WHERE identity_key = ?
+      `).get(identityKey) as {
+        content_hash: string;
+        provider_timestamp_utc: string | null;
+      } | undefined;
+      if (head?.content_hash === prepared.contentHash) {
+        return { appended: false, event: null };
+      }
+      if (isStrictlyOlder(event.providerTimestampUtc, head?.provider_timestamp_utc ?? null)) {
+        return { appended: false, event: null };
+      }
 
-    return {
-      ...event,
-      sequence: Number(result.lastInsertRowid),
-      payloadHash,
-      relatedProviderEntityId,
-      rawPayload,
-      normalizedPayload,
-    };
+      const stored = this.insertPrepared(prepared);
+      this.database.prepare(`
+        INSERT INTO provider_evidence_heads (
+          identity_key,
+          content_hash,
+          provider_timestamp_utc,
+          latest_sequence,
+          updated_utc
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(identity_key) DO UPDATE SET
+          content_hash = excluded.content_hash,
+          provider_timestamp_utc = excluded.provider_timestamp_utc,
+          latest_sequence = excluded.latest_sequence,
+          updated_utc = excluded.updated_utc
+      `).run(
+        identityKey,
+        prepared.contentHash,
+        event.providerTimestampUtc,
+        stored.sequence,
+        event.receivedUtc,
+      );
+      return { appended: true, event: stored };
+    });
   }
 
   public recent(limit = 100): StoredProviderEvidenceEvent[] {
@@ -232,6 +237,162 @@ export class SqliteProviderEvidenceStore {
     return rows.map((row) => this.fromRow(row));
   }
 
+  public historySyncStatus(syncKey: string): ProviderHistorySyncStatus {
+    const row = this.database.prepare(`
+      SELECT
+        sync_key,
+        cursor_utc,
+        last_attempt_utc,
+        last_succeeded_utc,
+        last_window_start_utc,
+        last_window_end_utc,
+        last_error,
+        last_orders_seen,
+        last_trades_seen,
+        last_events_appended
+      FROM provider_history_sync
+      WHERE sync_key = ?
+    `).get(syncKey) as {
+      sync_key: string;
+      cursor_utc: string | null;
+      last_attempt_utc: string | null;
+      last_succeeded_utc: string | null;
+      last_window_start_utc: string | null;
+      last_window_end_utc: string | null;
+      last_error: string | null;
+      last_orders_seen: number | bigint;
+      last_trades_seen: number | bigint;
+      last_events_appended: number | bigint;
+    } | undefined;
+    if (!row) {
+      return {
+        syncKey,
+        cursorUtc: null,
+        lastAttemptUtc: null,
+        lastSucceededUtc: null,
+        lastWindowStartUtc: null,
+        lastWindowEndUtc: null,
+        lastError: null,
+        lastOrdersSeen: 0,
+        lastTradesSeen: 0,
+        lastEventsAppended: 0,
+      };
+    }
+    return {
+      syncKey: row.sync_key,
+      cursorUtc: row.cursor_utc,
+      lastAttemptUtc: row.last_attempt_utc,
+      lastSucceededUtc: row.last_succeeded_utc,
+      lastWindowStartUtc: row.last_window_start_utc,
+      lastWindowEndUtc: row.last_window_end_utc,
+      lastError: row.last_error,
+      lastOrdersSeen: Number(row.last_orders_seen),
+      lastTradesSeen: Number(row.last_trades_seen),
+      lastEventsAppended: Number(row.last_events_appended),
+    };
+  }
+
+  public recordHistorySyncAttempt(
+    syncKey: string,
+    attemptedUtc: string,
+    windowStartUtc: string,
+    windowEndUtc: string,
+  ): void {
+    this.database.prepare(`
+      INSERT INTO provider_history_sync (
+        sync_key,
+        cursor_utc,
+        last_attempt_utc,
+        last_succeeded_utc,
+        last_window_start_utc,
+        last_window_end_utc,
+        last_error,
+        last_orders_seen,
+        last_trades_seen,
+        last_events_appended
+      ) VALUES (?, NULL, ?, NULL, ?, ?, NULL, 0, 0, 0)
+      ON CONFLICT(sync_key) DO UPDATE SET
+        last_attempt_utc = excluded.last_attempt_utc,
+        last_window_start_utc = excluded.last_window_start_utc,
+        last_window_end_utc = excluded.last_window_end_utc,
+        last_error = NULL
+    `).run(syncKey, attemptedUtc, windowStartUtc, windowEndUtc);
+  }
+
+  public recordHistorySyncSuccess(
+    syncKey: string,
+    cursorUtc: string,
+    succeededUtc: string,
+    windowStartUtc: string,
+    windowEndUtc: string,
+    ordersSeen: number,
+    tradesSeen: number,
+    eventsAppended: number,
+  ): void {
+    this.database.prepare(`
+      INSERT INTO provider_history_sync (
+        sync_key,
+        cursor_utc,
+        last_attempt_utc,
+        last_succeeded_utc,
+        last_window_start_utc,
+        last_window_end_utc,
+        last_error,
+        last_orders_seen,
+        last_trades_seen,
+        last_events_appended
+      ) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+      ON CONFLICT(sync_key) DO UPDATE SET
+        cursor_utc = excluded.cursor_utc,
+        last_attempt_utc = excluded.last_attempt_utc,
+        last_succeeded_utc = excluded.last_succeeded_utc,
+        last_window_start_utc = excluded.last_window_start_utc,
+        last_window_end_utc = excluded.last_window_end_utc,
+        last_error = NULL,
+        last_orders_seen = excluded.last_orders_seen,
+        last_trades_seen = excluded.last_trades_seen,
+        last_events_appended = excluded.last_events_appended
+    `).run(
+      syncKey,
+      cursorUtc,
+      succeededUtc,
+      succeededUtc,
+      windowStartUtc,
+      windowEndUtc,
+      ordersSeen,
+      tradesSeen,
+      eventsAppended,
+    );
+  }
+
+  public recordHistorySyncFailure(
+    syncKey: string,
+    failedUtc: string,
+    windowStartUtc: string,
+    windowEndUtc: string,
+    error: string,
+  ): void {
+    this.database.prepare(`
+      INSERT INTO provider_history_sync (
+        sync_key,
+        cursor_utc,
+        last_attempt_utc,
+        last_succeeded_utc,
+        last_window_start_utc,
+        last_window_end_utc,
+        last_error,
+        last_orders_seen,
+        last_trades_seen,
+        last_events_appended
+      ) VALUES (?, NULL, ?, NULL, ?, ?, ?, 0, 0, 0)
+      ON CONFLICT(sync_key) DO UPDATE SET
+        last_attempt_utc = excluded.last_attempt_utc,
+        last_window_start_utc = excluded.last_window_start_utc,
+        last_window_end_utc = excluded.last_window_end_utc,
+        last_error = excluded.last_error
+    `).run(syncKey, failedUtc, windowStartUtc, windowEndUtc, error);
+  }
+
   public status(): ProviderEvidenceStatus {
     const row = this.database.prepare(`
       SELECT
@@ -259,6 +420,58 @@ export class SqliteProviderEvidenceStore {
       maximumMarketEventsBetweenPrunes:
         this.marketEventRetention + this.marketPruneInterval - 1,
     };
+  }
+
+  private insertPrepared(prepared: PreparedEvidence): StoredProviderEvidenceEvent {
+    const event = prepared.event;
+    const result = this.database.prepare(`
+      INSERT INTO provider_events (
+        received_utc,
+        provider_timestamp_utc,
+        source,
+        event_type,
+        generation,
+        account_id,
+        contract_id,
+        provider_entity_id,
+        related_provider_entity_id,
+        payload_hash,
+        raw_payload_json,
+        normalized_payload_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      event.receivedUtc,
+      event.providerTimestampUtc,
+      event.source,
+      event.eventType,
+      event.generation,
+      event.accountId,
+      event.contractId,
+      event.providerEntityId,
+      prepared.relatedProviderEntityId,
+      prepared.payloadHash,
+      prepared.rawPayloadJson,
+      prepared.normalizedPayloadJson,
+    );
+    return {
+      ...event,
+      sequence: Number(result.lastInsertRowid),
+      payloadHash: prepared.payloadHash,
+      relatedProviderEntityId: prepared.relatedProviderEntityId,
+      rawPayload: prepared.rawPayload,
+      normalizedPayload: prepared.normalizedPayload,
+    };
+  }
+
+  private maybePruneMarketEvent(source: string): void {
+    if (source !== "projectx_market_stream") {
+      return;
+    }
+    this.marketEventsSincePrune += 1;
+    if (this.marketEventsSincePrune >= this.marketPruneInterval) {
+      this.pruneMarketEvents();
+      this.marketEventsSincePrune = 0;
+    }
   }
 
   private pruneMarketEvents(): void {
@@ -339,13 +552,44 @@ export class SqliteProviderEvidenceStore {
       CREATE INDEX IF NOT EXISTS idx_provider_events_source_sequence
         ON provider_events(source, sequence);
 
+      CREATE TABLE IF NOT EXISTS provider_evidence_heads (
+        identity_key TEXT PRIMARY KEY,
+        content_hash TEXT NOT NULL,
+        provider_timestamp_utc TEXT,
+        latest_sequence INTEGER NOT NULL,
+        updated_utc TEXT NOT NULL
+      ) STRICT;
+
+      CREATE TABLE IF NOT EXISTS provider_history_sync (
+        sync_key TEXT PRIMARY KEY,
+        cursor_utc TEXT,
+        last_attempt_utc TEXT,
+        last_succeeded_utc TEXT,
+        last_window_start_utc TEXT,
+        last_window_end_utc TEXT,
+        last_error TEXT,
+        last_orders_seen INTEGER NOT NULL DEFAULT 0,
+        last_trades_seen INTEGER NOT NULL DEFAULT 0,
+        last_events_appended INTEGER NOT NULL DEFAULT 0
+      ) STRICT;
+
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     `);
+
+    const headColumns = this.database.prepare(`PRAGMA table_info(provider_evidence_heads)`).all() as unknown as Array<{
+      name: string;
+    }>;
+    if (!headColumns.some((column) => column.name === "provider_timestamp_utc")) {
+      this.database.exec(`ALTER TABLE provider_evidence_heads ADD COLUMN provider_timestamp_utc TEXT`);
+    }
+
     this.backfillTradeRelations();
     this.database.exec(`
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+      INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
+      VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     `);
   }
 
@@ -401,6 +645,18 @@ export class SqliteProviderEvidenceStore {
       update.run(relatedProviderEntityId, payloadHash, Number(row.sequence));
     }
   }
+
+  private inTransaction<T>(action: () => T): T {
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = action();
+      this.database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
 }
 
 export function redactSecrets(value: unknown): unknown {
@@ -413,13 +669,46 @@ export function redactSecrets(value: unknown): unknown {
   const input = value as Record<string, unknown>;
   const output: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(input)) {
-    if (isSecretKey(key)) {
-      output[key] = "[REDACTED]";
-      continue;
-    }
-    output[key] = redactSecrets(item);
+    output[key] = isSecretKey(key) ? "[REDACTED]" : redactSecrets(item);
   }
   return output;
+}
+
+function prepareEvidence(event: ProviderEvidenceEvent): PreparedEvidence {
+  const rawPayload = redactSecrets(event.rawPayload ?? null);
+  const normalizedPayload = redactSecrets(event.normalizedPayload ?? null);
+  const relatedProviderEntityId = event.relatedProviderEntityId ?? null;
+  const rawPayloadJson = safeJson(rawPayload);
+  const normalizedPayloadJson = safeJson(normalizedPayload);
+  const payloadHash = evidencePayloadHash({
+    ...event,
+    relatedProviderEntityId,
+    rawPayload,
+    normalizedPayload,
+  });
+  const contentHash = createHash("sha256")
+    .update(stableJson({
+      source: event.source,
+      eventType: event.eventType,
+      accountId: event.accountId,
+      contractId: event.contractId,
+      providerEntityId: event.providerEntityId,
+      relatedProviderEntityId,
+      providerTimestampUtc: event.providerTimestampUtc,
+      rawPayload,
+      normalizedPayload,
+    }))
+    .digest("hex");
+  return {
+    event,
+    relatedProviderEntityId,
+    rawPayload,
+    normalizedPayload,
+    rawPayloadJson,
+    normalizedPayloadJson,
+    payloadHash,
+    contentHash,
+  };
 }
 
 function evidencePayloadHash(value: {
@@ -438,12 +727,39 @@ function evidencePayloadHash(value: {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+function stableJson(value: unknown): string {
+  return JSON.stringify(stableValue(value) ?? null) ?? "null";
+}
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableValue);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const output: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    output[key] = stableValue((value as Record<string, unknown>)[key]);
+  }
+  return output;
+}
+
 function relatedOrderId(value: unknown): number | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   const orderId = (value as Record<string, unknown>).orderId;
   return typeof orderId === "number" && Number.isInteger(orderId) ? orderId : null;
+}
+
+function isStrictlyOlder(candidate: string | null, current: string | null): boolean {
+  if (candidate === null || current === null) {
+    return false;
+  }
+  const candidateMs = Date.parse(candidate);
+  const currentMs = Date.parse(current);
+  return Number.isFinite(candidateMs) && Number.isFinite(currentMs) && candidateMs < currentMs;
 }
 
 function isSecretKey(key: string): boolean {

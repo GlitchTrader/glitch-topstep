@@ -58,12 +58,15 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] prove disconnect, reconnect, generation invalidation, and REST reconciliation
 - [ ] compare all account positions and conservative PnL with TopstepX UI
 - [ ] compare local hard loss-floor evidence with authoritative dashboard/account state
-- [ ] prove historical order search and custom-tag retention
-- [ ] prove historical trade search and `trade.orderId` retention
+- [ ] prove historical order search, timestamp boundaries, and custom-tag retention
+- [ ] prove historical trade search, timestamp boundaries, and `trade.orderId` retention
+- [ ] prove History/retrieveBars ordering, timeframe, limit, and partial-bar semantics
+- [ ] determine any undocumented order/trade or bar result cap or pagination requirement
+- [ ] compare deterministic replay with the same TopstepX account state
 - [ ] measure quote, print, and DOM event rates on the target machine
 - [ ] validate evidence retention against actual disk growth
 
-## R3 — provider evidence and replay foundation
+## R3 — provider evidence, history, and replay foundation
 
 - [x] one integrated monotonic provider-event journal
 - [x] dedicated `projectx-evidence.sqlite` WAL store
@@ -79,11 +82,25 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] preserve REST, lifecycle, account, position, order, and user-trade evidence during market pruning
 - [x] explicit related-provider identity field and index
 - [x] backward-compatible relation migration and trade-order backfill
+- [x] durable historical order/trade cursor
+- [x] bounded timestamp windows with cursor advancement only after complete window retrieval
+- [x] configurable correction overlap
+- [x] persistent content/version heads across process restart
+- [x] suppress unchanged historical overlap evidence
+- [x] append changed provider versions
+- [x] reject strictly older provider versions without blocking same-timestamp corrections
+- [x] coalesce concurrent sync runs and wait for active work during shutdown
+- [x] expose history status through `/health` and the service-start ledger
+- [x] deterministic query-only state rebuild from retained evidence
+- [x] stable canonical state and evidence hashes
+- [x] through-sequence replay and bounded batched SQLite scans
+- [x] explicit sequence-gap, invalid-payload, unsupported-event, and truncation reporting
+- [x] terminal order, flat position, correction, and voided-trade replay semantics
+- [x] offline replay CLI; no large replay on the trading gateway event loop
 - [ ] persist raw REST response envelopes where contract-drift forensics require them
-- [ ] deterministic state rebuild from the event corpus
-- [ ] correction and contradiction semantics during replay
 - [ ] evidence archive/export workflow
 - [ ] real disk-full and write-failure acceptance
+- [ ] compare replay against live state across every observed ProjectX payload variant
 
 ## R4 — provider order and protection ownership
 
@@ -91,13 +108,14 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [x] durable submitted entry identity from intent, custom tag, and provider order ID
 - [x] exact user-stream order ownership by provider order ID
 - [x] exact REST open-order ownership by provider order ID
+- [x] exact historical-order ownership by provider order ID
 - [x] exact fill ownership only when `trade.orderId` matches the submitted entry
+- [x] historical-fill continuity after offline intervals
 - [x] voided-fill handling and latest trade correction by provider trade ID
 - [x] detect account, contract, side, type, size, custom-tag, overfill, and duplicate-order contradictions
 - [x] authenticated `/ownership` inspection
 - [x] keep protection status `unknown` without explicit child/OCO relation
 - [x] prohibit ownership inference from price, timing, side similarity, or working-order geometry
-- [ ] synchronize historical orders and trades after offline intervals
 - [ ] identify provider-created stop and target orders from an explicit relationship
 - [ ] prove aggregate open-position ownership without proximity inference
 - [ ] persist order groups and protective-leg identity
@@ -138,18 +156,29 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 ## R7 — instrument-general observation engine
 
 - [ ] active Topstep contract discovery and rollover evidence
-- [ ] native tick, point value, session, and fee metadata
-- [ ] integrated 1m, 5m, 15m, and 60m OHLCV normalization
-- [ ] gap, partial-bar, and timestamp provenance
+- [x] configured contract tick and point-value metadata
+- [x] native 1m, 5m, 15m, and 60m ProjectX bar retrieval
+- [x] OHLCV validation, chronological normalization, and duplicate timestamp replacement
+- [x] rejected-bar counts, timestamp gaps, and live partial-bar provenance
+- [x] ATR-14 and realized-volatility evidence
+- [x] rolling VWAP-20 and distance evidence
+- [x] EMA-20, EMA-50, EMA-200, distances, and slopes
+- [x] range location, candle body/wicks, close location, and volume z-score
+- [x] preserve the last successful observation during source failure
+- [x] refresh on startup, reconnect, and every minute with coalescing and shutdown waiting
+- [x] include exact observation state in packet identity
+- [x] publish observation degradation without turning it into an execution gate
+- [x] prohibit signal, score, action, or strategy eligibility fields in the feature contract
 - [ ] session and prior-session structure
-- [ ] volatility, trend, range, and location evidence
-- [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence
-- [ ] descriptive normalized features without a coded entry strategy
+- [ ] trade-tape, aggressor volume, cumulative delta, depth, and liquidity aggregation
 - [ ] acceptance on at least two Topstep-supported products
 
 ## R8 — replay and comparative evaluation
 
-- [ ] replay raw provider events into canonical state and packets
+- [x] replay retained provider events into canonical state
+- [x] replay exact orders, trades, quote, print, depth, and REST snapshot corrections
+- [x] report incomplete retained corpora rather than claiming full truth
+- [ ] reconstruct canonical packets from replayed state and policy evidence
 - [ ] deterministic decision and receipt replay
 - [ ] simulated fills, fees, and slippage
 - [ ] compare cognition versions on identical evidence
@@ -182,6 +211,6 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - no Apex or NinjaTrader implementation assumptions in the Topstep core;
 - no fixed strategy, indicator trigger, quantity schedule, risk percentage, profit quota, grid, or martingale rule in Glitch;
 - no credentials or numeric provider identifiers in Hermes;
-- no hidden cognition gate based on packet quality, capacity, policy, or minimum history;
+- no hidden cognition gate based on packet quality, capacity, policy, bars, features, or minimum history;
 - no order, fill, position, stop, target, or OCO ownership inferred only from price, timing, side similarity, or geometry;
 - no profitability, payout, unattended-operation, funded-stage, or live-readiness claim inferred from tests or architecture.
