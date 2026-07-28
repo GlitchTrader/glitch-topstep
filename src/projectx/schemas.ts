@@ -225,8 +225,11 @@ function normalizeMarketPayload(
     if (value.length >= 2 && typeof value[0] === "string" && isRecord(value[1])) {
       return { contractId: value[0], ...value[1] };
     }
-    if (value.length >= 1 && isRecord(value[0])) {
-      return { contractId, ...value[0] };
+    if (value.length >= 1) {
+      const firstRecord = value.find((entry) => isRecord(entry));
+      if (firstRecord) {
+        return { contractId, ...firstRecord };
+      }
     }
     const mapped = mapPrimitiveMarketArray(value, kind);
     if (mapped) {
@@ -240,8 +243,11 @@ function normalizeMarketPayload(
   }
 
   const nested = value.data ?? value.payload;
-  if (Array.isArray(nested) && nested.length >= 1 && isRecord(nested[0])) {
-    return { contractId, ...nested[0] };
+  if (Array.isArray(nested)) {
+    const firstRecord = nested.find((entry) => isRecord(entry));
+    if (firstRecord) {
+      return { contractId, ...firstRecord };
+    }
   }
   if (isRecord(nested)) {
     return { contractId, ...nested };
