@@ -17,7 +17,6 @@ import {
   recordProviderLifecycleEvent,
 } from "./provider-event-recorder.js";
 import {
-  isRecord,
   parseAccount,
   parseDepth,
   parseMarketTrade,
@@ -25,6 +24,7 @@ import {
   parsePosition,
   parseQuote,
   parseTrade,
+  unwrapMarketStreamArgs,
 } from "./schemas.js";
 
 export interface ProjectXRealtimeOptions {
@@ -198,15 +198,18 @@ export class ProjectXRealtimeClient {
       );
     });
     this.marketConnection.on("GatewayTrade", (contractId: unknown, input: unknown) => {
-      if (typeof contractId !== "string") {
-        this.payloadFault("market", new Error("trade_contract_id_invalid"));
+      let resolved: { contractId: string; payload: unknown };
+      try {
+        resolved = unwrapMarketStreamArgs(contractId, input);
+      } catch (error) {
+        this.payloadFault("market", error);
         return;
       }
       this.recordAndApply(
         "market",
         "market_trade",
-        { contractId, payload: input },
-        () => parseMarketTrade(contractId, input),
+        { contractId: resolved.contractId, payload: resolved.payload },
+        () => parseMarketTrade(resolved.contractId, resolved.payload),
         (value) => ({
           accountId: null,
           contractId: value.contractId,
@@ -217,18 +220,18 @@ export class ProjectXRealtimeClient {
       );
     });
     this.marketConnection.on("GatewayDepth", (contractId: unknown, input: unknown) => {
-      if (typeof contractId !== "string") {
-        this.payloadFault("market", new Error("depth_contract_id_invalid"));
-        return;
-      }
-      if (!isRecord(input)) {
+      let resolved: { contractId: string; payload: unknown };
+      try {
+        resolved = unwrapMarketStreamArgs(contractId, input);
+      } catch (error) {
+        this.payloadFault("market", error);
         return;
       }
       this.recordAndApply(
         "market",
         "depth",
-        { contractId, payload: input },
-        () => parseDepth(contractId, input),
+        { contractId: resolved.contractId, payload: resolved.payload },
+        () => parseDepth(resolved.contractId, resolved.payload),
         (value) => ({
           accountId: null,
           contractId: value.contractId,

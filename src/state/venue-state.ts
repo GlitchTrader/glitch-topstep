@@ -161,6 +161,7 @@ export class VenueStateStore {
     stream.state = "connected";
     stream.generation = this.generation;
     stream.lastEventAt = at;
+    stream.lastError = null;
   }
 
   public markPayloadFault(kind: VenueStreamKind, error: unknown, at = nowUtc()): void {

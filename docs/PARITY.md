@@ -1,6 +1,8 @@
 # Glitch Topstep parity ledger
 
-This ledger maps useful behavioural contracts from the NinjaTrader edition into a Topstep-first implementation. Donor repositories are read-only. A row is complete only when implementation, deterministic tests, and required runtime evidence agree.
+This ledger tracks promotion and runtime evidence for the Topstep-native gateway. It maps useful behavioural contracts from other Glitch editions where they still apply. **It is not an NT port checklist** — see [`TOPSTEP-NATIVE.md`](TOPSTEP-NATIVE.md) for design principles.
+
+Donor repositories are read-only. A row is complete only when implementation, deterministic tests, and required runtime evidence agree.
 
 | Capability | Topstep state | Remaining acceptance evidence |
 |---|---|---|

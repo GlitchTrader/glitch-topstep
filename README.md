@@ -15,7 +15,7 @@ Hermes Topstep operator  →  glitch.intent.v2  →  Glitch Topstep → ProjectX
 
 Companion cognition: [`GlitchTrader/glitch-topstep-hermes-profile`](https://github.com/GlitchTrader/glitch-topstep-hermes-profile).
 
-**Status:** Experimental, **shadow by default**, not live-ready. Promotion gates: [`docs/PARITY.md`](docs/PARITY.md). Current work: [`docs/ledger/ledger.json`](docs/ledger/ledger.json).
+**Status:** Experimental, **shadow by default**, not live-ready. Promotion gates: [`docs/PARITY.md`](docs/PARITY.md). Native design: [`docs/TOPSTEP-NATIVE.md`](docs/TOPSTEP-NATIVE.md). Current work: [`docs/ledger/ledger.json`](docs/ledger/ledger.json).
 
 **Authority:** Hermes decides. Glitch verifies. ProjectX owns venue truth. See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
 
@@ -41,7 +41,7 @@ npm install
 npm run check
 ```
 
-`npm run check` runs `tsc` and the full test suite (91 tests). **Run it before every push** — same gate as [CI](.github/workflows/ci.yml).
+`npm run check` runs `tsc` and the full test suite. **Run it before every push** — same gate as [CI](.github/workflows/ci.yml).
 
 ### Minimum `.env` (code-only / no ProjectX)
 
@@ -187,8 +187,11 @@ Ambiguous provider transport stays **nonterminal** until reconciliation — no w
 |-----|---------|
 | [`docs/AUTHORITY.md`](docs/AUTHORITY.md) | Roles, permitted rejection, forbidden policy |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design |
+| [`docs/TOPSTEP-NATIVE.md`](docs/TOPSTEP-NATIVE.md) | Topstep-native design principles (not NT parity) |
+| [`docs/TOPSTEP-POLICY.md`](docs/TOPSTEP-POLICY.md) | Loss-floor models and policy evidence |
 | [`docs/PARITY.md`](docs/PARITY.md) | Capability matrix and promotion gates |
 | [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Shadow acceptance, armed ack, incidents |
+| [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) | Trust boundaries |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Evidence-gated roadmap |
 | [`docs/ledger/ledger.json`](docs/ledger/ledger.json) | Current work authority |
 | [`docs/HANDOFF.md`](docs/HANDOFF.md) | Historical Codex handoff notes |

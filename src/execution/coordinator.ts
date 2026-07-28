@@ -9,6 +9,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { gatewayModePermitsLiveOrders } from "./gateway-mode.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
@@ -78,8 +79,10 @@ export class ExecutionCoordinator {
       });
     }
 
-    const issuedPacket = this.resolveIssuedPacket(intent.snapshotHash);
-    if (!issuedPacket) {
+    const issuedPacket = intent.action === "NOTHING" || intent.action === "HOLD"
+      ? null
+      : this.resolveIssuedPacket(intent.snapshotHash);
+    if (issuedPacket === null && intent.action !== "NOTHING" && intent.action !== "HOLD") {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -100,6 +103,14 @@ export class ExecutionCoordinator {
         intentId: intent.intentId,
         status: "ignored",
         code: "no_execution_action",
+      });
+    }
+
+    if (!issuedPacket) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "decision_packet_unknown_or_expired",
       });
     }
 
@@ -144,6 +155,15 @@ export class ExecutionCoordinator {
           expectedSnapshotHash: issuedPacket.market.snapshot_hash,
         },
       );
+
+      if (!gatewayModePermitsLiveOrders(issuedPacket.execution.gateway_mode)) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "shadowed",
+          code: "entry_verified_not_submitted",
+          detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)};stop_ticks=${validated.stopTicks};target_ticks=${validated.targetTicks}`,
+        });
+      }
 
       if (this.config.tradingMode === "shadow") {
         return this.record({
@@ -226,6 +246,13 @@ export class ExecutionCoordinator {
         intentId: intent.intentId,
         status: "ignored",
         code: "position_already_flat",
+      });
+    }
+    if (!gatewayModePermitsLiveOrders(issuedPacket.execution.gateway_mode)) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "shadowed",
+        code: "exit_verified_not_submitted",
       });
     }
     if (this.config.tradingMode === "shadow") {

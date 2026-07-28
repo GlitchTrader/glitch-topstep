@@ -8,6 +8,10 @@ import type {
   TopstepPolicyState,
 } from "../domain/models.js";
 import {
+  resolveGatewayMode,
+  type EffectiveGatewayMode,
+} from "../execution/gateway-mode.js";
+import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "../domain/operator.js";
@@ -87,7 +91,9 @@ export interface DirectDecisionPacket {
     max_contracts: number;
   };
   execution: {
-    gateway_mode: "disabled" | "shadow" | "armed";
+    gateway_mode: EffectiveGatewayMode;
+    gateway_mode_configured: "disabled" | "shadow" | "armed";
+    gateway_mode_downgrade_reason: string | null;
     new_exposure_technically_supported: boolean;
     maximum_additional_contracts: number;
     recovery_blocked: boolean;
@@ -198,6 +204,13 @@ export function buildDecisionPacket(
     orderFlow,
   );
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
+  const gatewayMode = resolveGatewayMode(
+    tradingMode,
+    snapshot,
+    risk,
+    orderFlow,
+    now,
+  );
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -271,7 +284,9 @@ export function buildDecisionPacket(
       max_contracts: policy.maxContracts,
     },
     execution: {
-      gateway_mode: tradingMode,
+      gateway_mode: gatewayMode.effective,
+      gateway_mode_configured: gatewayMode.configured,
+      gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
       new_exposure_technically_supported:
         tradingMode !== "disabled"
         && quality.stateComplete
