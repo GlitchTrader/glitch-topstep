@@ -21,18 +21,18 @@ function policy(overrides: Partial<TopstepPolicyState> = {}): TopstepPolicyState
 }
 
 describe("Topstep hard loss-floor model", () => {
-  it("starts an Express Funded account at the negative maximum loss", () => {
-    assert.equal(calculateLiquidationFloor(policy()), -2_000);
+  it("starts an Express Funded account one maximum loss below the starting balance", () => {
+    assert.equal(calculateLiquidationFloor(policy()), 48_000);
   });
 
-  it("trails the Express Funded floor toward zero from highest EOD balance", () => {
-    assert.equal(calculateLiquidationFloor(policy({ highestEndOfDayBalance: 1_250 })), -750);
-    assert.equal(calculateLiquidationFloor(policy({ highestEndOfDayBalance: 3_000 })), 0);
+  it("trails the Express Funded floor toward breakeven from highest EOD balance", () => {
+    assert.equal(calculateLiquidationFloor(policy({ highestEndOfDayBalance: 1_250 })), 49_250);
+    assert.equal(calculateLiquidationFloor(policy({ highestEndOfDayBalance: 3_000 })), 50_000);
   });
 
-  it("locks the floor at zero after the configured lock or payout", () => {
-    assert.equal(calculateLiquidationFloor(policy({ lossFloorLockedAtZero: true })), 0);
-    assert.equal(calculateLiquidationFloor(policy({ payoutProcessed: true })), 0);
+  it("locks the floor at breakeven after the configured lock or payout", () => {
+    assert.equal(calculateLiquidationFloor(policy({ lossFloorLockedAtZero: true })), 50_000);
+    assert.equal(calculateLiquidationFloor(policy({ payoutProcessed: true })), 50_000);
   });
 
   it("models a Trading Combine floor from starting balance and EOD gains", () => {
@@ -52,10 +52,31 @@ describe("Topstep hard loss-floor model", () => {
   });
 
   it("reports the full hard-floor headroom without inventing a strategy budget", () => {
-    const result = calculateRiskBudget(1_000, policy());
-    assert.equal(result.liquidationFloor, -2_000);
+    const result = calculateRiskBudget(51_000, policy());
+    assert.equal(result.liquidationFloor, 48_000);
     assert.equal(result.currentBuffer, 3_000);
     assert.equal("allowedRiskUsd" in result, false);
     assert.equal("riskFractionBudget" in result, false);
+  });
+
+  it("expresses every loss model in the absolute frame of conservative equity", () => {
+    // Regression guard: conservativeEquity is a ProjectX account balance plus
+    // unrealized PnL. A floor returned relative to the starting balance would
+    // overstate headroom by roughly the starting balance and effectively disable
+    // the hard_loss_floor_breach rejection.
+    const untouchedEquity = 50_000;
+    for (const model of ["express_funded_eod", "trading_combine_eod"] as const) {
+      const budget = calculateRiskBudget(untouchedEquity, policy({ lossModel: model }));
+      assert.equal(
+        budget.currentBuffer,
+        2_000,
+        `${model} must report one maximum-loss allowance of headroom at the starting balance`,
+      );
+    }
+  });
+
+  it("reports zero headroom once conservative equity reaches the floor", () => {
+    const budget = calculateRiskBudget(48_000, policy());
+    assert.equal(budget.currentBuffer, 0);
   });
 });

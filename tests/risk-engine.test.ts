@@ -106,6 +106,39 @@ describe("factual execution safety", () => {
     assert.doesNotThrow(() => validateEntryRisk(intent(), live, policy, settings, context));
   });
 
+  it("prices protected risk from the submitted bracket, not the requested stop level", () => {
+    // An off-tick reference price forces stopTicks to round away from the stop,
+    // so the account bears more risk than the requested stop level implies.
+    const offTick = snapshot();
+    offTick.quote = { ...offTick.quote!, bestAsk: 20_000.3 };
+    const result = validateEntryRisk(intent(), offTick, policy, settings, context);
+
+    assert.equal(result.stopTicks, 81);
+    // 81 ticks * $0.50 + 2 slippage ticks * $0.50 + $2.50 fees.
+    assert.equal(result.riskUsd, 44);
+    const requestedStopRisk = Math.abs(20_000.3 - 19_980.25) * 2 + 1 + 2.5;
+    assert.ok(
+      result.riskUsd > requestedStopRisk,
+      "submitted-bracket risk must never understate the requested-stop estimate",
+    );
+  });
+
+  it("rejects a decision older than the configured intent age", () => {
+    const stale = intent();
+    stale.createdUtc = "2026-07-21T11:50:05Z";
+    assert.throws(
+      () => validateEntryRisk(stale, snapshot(), policy, settings, context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "intent_stale",
+    );
+
+    const malformed = intent();
+    malformed.createdUtc = "not-a-timestamp";
+    assert.throws(
+      () => validateEntryRisk(malformed, snapshot(), policy, settings, context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "intent_timestamp_invalid",
+    );
+  });
+
   it("rejects stale or incomplete venue truth", () => {
     const stale = snapshot();
     stale.capturedAt = "2026-07-21T11:59:00Z";

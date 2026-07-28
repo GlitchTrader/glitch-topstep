@@ -221,6 +221,8 @@ export interface ValidatedEntry {
   intent: TradeIntent;
   account: AccountInfo;
   contract: ContractInfo;
+  /** Validated contract count; always a positive integer. */
+  quantity: number;
   referencePrice: number;
   riskUsd: number;
   riskBudget: RiskBudget;

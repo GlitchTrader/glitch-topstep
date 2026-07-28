@@ -39,6 +39,16 @@ export function validateEntryRisk(
     throw new RiskRejectedError("entry_action_required");
   }
 
+  // Decision-identity expiry. This rejects a stale decision at intake; it is not
+  // authority to resubmit or terminalize an already-submitted intent.
+  const intentAgeMs = now.getTime() - Date.parse(intent.createdUtc);
+  if (!Number.isFinite(intentAgeMs)) {
+    throw new RiskRejectedError("intent_timestamp_invalid");
+  }
+  if (intentAgeMs > settings.maxIntentAgeMs) {
+    throw new RiskRejectedError("intent_stale", String(intentAgeMs));
+  }
+
   const quality = evaluateSnapshotDataQuality(snapshot, settings, now);
   if (!quality.stateComplete) {
     if (quality.issues.includes("quote_stale")) {
@@ -120,8 +130,11 @@ export function validateEntryRisk(
     snapshot.contract.tickSize,
   );
 
-  const pointValue = snapshot.contract.tickValue / snapshot.contract.tickSize;
-  const rawRisk = Math.abs(referencePrice - stopLoss) * pointValue * quantity;
+  // Protected downside must be measured from the bracket that is actually
+  // submitted. `stopTicks` is rounded away from the reference price, so pricing
+  // the requested stop level instead would understate the risk the account bears
+  // whenever the reference price is not tick-aligned.
+  const rawRisk = brackets.stopTicks * snapshot.contract.tickValue * quantity;
   const slippageReserve = settings.slippageReserveTicks * snapshot.contract.tickValue * quantity;
   const feeReserve = settings.estimatedRoundTurnFeesUsd * quantity;
   const riskUsd = rawRisk + slippageReserve + feeReserve;
@@ -140,6 +153,7 @@ export function validateEntryRisk(
     intent,
     account: snapshot.account,
     contract: snapshot.contract,
+    quantity,
     referencePrice,
     riskUsd,
     riskBudget,

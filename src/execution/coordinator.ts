@@ -179,7 +179,7 @@ export class ExecutionCoordinator {
         contractId: validated.contract.id,
         type: 2,
         side: intent.action === "ENTER_LONG" ? 0 : 1,
-        size: intent.quantity ?? 0,
+        size: validated.quantity,
         customTag: validated.customTag,
         stopLossBracket: { ticks: validated.stopTicks, type: 4 },
         takeProfitBracket: { ticks: validated.targetTicks, type: 1 },
