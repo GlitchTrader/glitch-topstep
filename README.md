@@ -1,258 +1,194 @@
 # Glitch Topstep
 
-A Topstep-first AI trading gateway built directly on the official ProjectX / TopstepX API.
+Topstep-first AI trading gateway on the official ProjectX / TopstepX API.
 
 ```text
 ProjectX market and account truth
              │
              ▼
-Glitch Topstep
+Glitch Topstep (this repo)
   normalize · persist evidence · calculate · verify · execute · reconcile · recover
              │ sanitized evidence packet
              ▼
-Hermes Topstep operator
-  observe · reason · decide · review · learn
-             │ strict glitch.intent.v2
-             ▼
-Glitch Topstep → ProjectX orders and provider-side protection
+Hermes Topstep operator  →  glitch.intent.v2  →  Glitch Topstep → ProjectX orders
 ```
 
-The dedicated cognition package is maintained in [`GlitchTrader/glitch-topstep-hermes-profile`](https://github.com/GlitchTrader/glitch-topstep-hermes-profile).
+Companion cognition: [`GlitchTrader/glitch-topstep-hermes-profile`](https://github.com/GlitchTrader/glitch-topstep-hermes-profile).
 
-## Authority
+**Status:** Experimental, **shadow by default**, not live-ready. Promotion gates: [`docs/PARITY.md`](docs/PARITY.md). Current work: [`docs/ledger/ledger.json`](docs/ledger/ledger.json).
 
-```text
-Hermes decides.
-Glitch verifies factual execution safety, translates, reconciles, journals, and protects.
-ProjectX owns venue truth.
-Topstep owns final account-rule authority.
-```
+**Authority:** Hermes decides. Glitch verifies. ProjectX owns venue truth. See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
 
-Glitch is not a second deterministic trading strategy. Market observations, data quality, account stage, hard loss-floor headroom, capacity, tape, and depth are evidence for Hermes. Glitch rejects order mutation only when identity, venue truth, geometry, ownership, transport, protection, or an authoritative hard account boundary cannot be proven.
+---
 
-See [`docs/AUTHORITY.md`](docs/AUTHORITY.md).
+## Prerequisites
 
-## Status
+- **Windows** personal machine (Topstep requirement; no VPS)
+- **Node.js 22+**
+- **Git** + GitHub access to `GlitchTrader/glitch-topstep`
+- **TopstepX + ProjectX API subscription** — required for real shadow integration; optional for offline dev
+- **Hermes 0.18.2+** — only if running autonomous cognition via the companion profile
 
-**Experimental, shadow by default, not yet live-ready.**
+---
 
-Implemented:
+## Clone and install
 
-- ProjectX API-key authentication and session validation;
-- official REST surfaces for accounts, contracts, bars, orders, positions, and trades;
-- official SignalR subscriptions for account, order, position, trade, quote, print, and DOM updates;
-- explicit user-stream, market-stream, connection-generation, and REST-reconciliation truth;
-- malformed realtime payloads surfaced as degraded state rather than silently ignored;
-- account-wide conservative bid/ask marking, with missing contract or quote evidence made explicit;
-- configured Topstep hard loss-floor models and stop-aware protected-loss calculations;
-- fees and slippage reserves applied per contract;
-- account, contract, instrument, operator-profile, prompt-version, packet, and snapshot identity binding;
-- one factual freshness contract shared by `/health`, decision packets, and execution validation;
-- current decision packets with durable, bounded issued identities rather than frozen stale packets;
-- strict `glitch.intent.v2` parsing;
-- absolute structural stop/target geometry translated to ProjectX bracket ticks;
-- authenticated loopback API for health, state, packets, evidence, ownership, and intents;
-- explicit `disabled`, `shadow`, and acknowledged `armed` operator modes;
-- SQLite WAL execution state with foreign keys and `synchronous=FULL` durable writes;
-- persistent unique intent identity and terminal receipt replay;
-- outbox-before-submit for ProjectX entry and close mutations;
-- explicit `prepared`, `submitting`, `submitted`, `rejected`, and `ambiguous` mutation states;
-- startup and recurring reconciliation of orphan intents, interrupted outbox states, ambiguous submissions, and terminal states missing receipts;
-- entry recovery only from one historical ProjectX order matching custom tag, account, contract, side, type, and quantity;
-- close recovery only when current ProjectX position state proves the configured contract is flat;
-- serialized mutation handling and a durable entry-submission settlement latch;
-- new exposure blocked while an earlier provider mutation is ambiguous or unsettled;
-- a separate `projectx-evidence.sqlite` journal with monotonic sequence numbers and payload hashes;
-- realtime evidence persisted before accepted payloads mutate venue state;
-- normalized REST account, contract, position, and order snapshots persisted before reconciliation replaces state;
-- recursively redacted secret-like fields in persisted evidence;
-- bounded high-frequency market-stream retention while REST, lifecycle, account, position, order, and user-trade evidence remains intact;
-- explicit ProjectX relationship indexing, including `trade.orderId` as the exact fill-to-order relationship;
-- submitted entry-order ownership derived from durable Glitch intent identity and exact ProjectX provider order ID;
-- fill ownership derived only from ProjectX trades whose `orderId` exactly matches that submitted entry order;
-- contradiction detection for account, contract, side, type, quantity, custom tag, overfill, and duplicate provider order identity;
-- protection ownership explicitly reported as `unknown` until ProjectX supplies a verifiable child-order or OCO relationship;
-- durable order/trade history synchronization on startup, reconnect, and a configurable cadence;
-- bounded timestamp windows with a durable cursor advanced only after complete order and trade retrieval;
-- configurable correction overlap with unchanged historical evidence suppressed across restart;
-- changed provider records retained as new versions while strictly older versions cannot replace a newer durable head;
-- historical order and fill evidence consumed by `/ownership` through the same exact provider-ID rules;
-- history synchronization status exposed through `/health` and the service-start ledger;
-- deterministic offline replay of retained ProjectX evidence into canonical account, contract, position, order, trade, quote, print, and depth state;
-- stable replay state/evidence hashes, sequence-gap detection, invalid-payload reporting, through-sequence replay, and bounded/truncated scans;
-- native ProjectX 1m, 5m, 15m, and 60m bar retrieval on startup, reconnect, and every minute;
-- OHLCV validation, duplicate timestamp replacement, rejected-bar counts, gaps, and partial-bar provenance;
-- strategy-neutral ATR, realized volatility, rolling VWAP, EMA levels/slopes/distances, range location, candle anatomy, and volume z-score;
-- preservation of the last successful observation when a later bar refresh fails;
-- exact market-observation state included in decision packet identity without becoming an execution eligibility gate;
-- rolling 15-second, 60-second, and 300-second ProjectX Buy/Sell tape windows from the local evidence journal;
-- rolling volume, delta, delta ratio, VWAP, trade rate, average/max size, and price-path descriptions;
-- bounded DOM reconstruction using official Ask/Bid/Best/NewBest, `currentVolume`, zero-volume removal, and Reset semantics;
-- explicit DOM reconstruction basis, query coverage, truncation, invalid/ignored event counts, spread ticks, top-level volumes, and imbalance;
-- `book_complete=false` by design until real ProjectX evidence proves a full-book reconstruction contract;
-- exact order-flow state included in decision packet identity without becoming an execution eligibility gate;
-- append-only JSONL execution evidence mirrored after SQLite commits;
-- dedicated Hermes operator and learning profile.
-
-Still required before live promotion:
-
-- verified authentication and sanitized payload acceptance from a real TopstepX API subscription;
-- actual process-kill and Windows restart fixtures for every durable execution window;
-- raw REST response envelopes where needed for contract-drift forensics;
-- verified ProjectX timestamp-boundary semantics and any undocumented history or bar result limits or pagination behavior;
-- real partial-fill, correction, void, and late-update acceptance;
-- replay comparison with live TopstepX state and explicit correction semantics for every observed payload variant;
-- numerical comparison of native bar series and features with independent TopstepX/chart fixtures;
-- real tape/DOM comparison, Reset behavior, event rates, retention coverage, and high-rate truncation acceptance;
-- provider-created stop and target child identity or another explicit protection relationship;
-- aggregate open-position ownership without inferring it from account-level position proximity;
-- full reconstruction of AI-owned entries, fills, stops, targets, and open positions;
-- exact structural bracket correction after fill;
-- verified `MOVE_STOP` and `MOVE_TP`;
-- independently protected additions and multiple tranches;
-- canonical completed outcomes for Hermes learning;
-- authoritative account-stage, loss-floor, payout, scaling, session, holiday, and special-close reconciliation;
-- session and prior-session structure;
-- acceptance on at least two Topstep-supported products;
-- frozen after-fee shadow evidence, first complete account lifecycle, and payout evidence.
-
-The current parity and promotion ledger is [`docs/PARITY.md`](docs/PARITY.md).
-
-## Factual safety posture
-
-The model never receives ProjectX credentials and never chooses numeric provider account or contract IDs. Those values are configured locally and rechecked before execution.
-
-The gateway defaults to:
-
-```text
-GLITCH_TRADING_MODE=shadow
-```
-
-`shadow` verifies and journals decisions without calling ProjectX order mutations. `armed` requires an explicit operator acknowledgement, but that acknowledgement is not a readiness claim.
-
-Before an armed mutation, Glitch durably commits intent and outbox identity. It never blindly retries an ambiguous ProjectX request. If provider evidence cannot prove what happened, health becomes degraded and new exposure remains blocked.
-
-Accepted realtime events follow:
-
-```text
-parse → redact and persist raw/normalized evidence → mutate VenueStateStore
-```
-
-If evidence persistence fails, state does not silently advance.
-
-Ownership follows only explicit identities:
-
-```text
-Glitch intent
-  → durable submitted ProjectX providerOrderId and customTag
-  → exact ProjectX order evidence with that order ID
-  → exact ProjectX trade evidence where trade.orderId equals that order ID
-```
-
-Price proximity, timing proximity, side similarity, working-order geometry, and aggregate position state are not ownership evidence. A nearby stop or target remains unrelated until ProjectX exposes an explicit child-order or OCO relationship.
-
-Historical continuity follows:
-
-```text
-durable cursor - correction overlap
-  → bounded ProjectX order/trade window
-  → persist changed provider records
-  → advance cursor only after both retrievals succeed
-```
-
-A history failure degrades evidence health but does not become a hidden trading strategy gate. The next scheduled or reconnect run resumes from the last completed cursor.
-
-Replay is offline and query-only:
-
-```bash
-npm run replay:evidence -- \
-  --database ./data/projectx-evidence.sqlite \
-  --through-sequence 100000 \
-  --max-events 1000000 \
-  --batch-size 5000
-```
-
-Replay reports gaps and truncation rather than pretending retained evidence is complete. It is an analysis and verification surface, not an execution or cognition authority.
-
-Multi-timeframe bars are evidence, not a coded strategy:
-
-```text
-1m  immediate path and timing context
-5m  local structure
-15m broader structure and volatility
-60m location and regime
-```
-
-No agreement stack is required. Partial bars remain explicitly incomplete; gaps remain unexplained unless session evidence proves their cause. A bar-source failure is visible in `market_observation.last_error` but does not alter `new_exposure_technically_supported`.
-
-Order flow is rolling and descriptive:
-
-```text
-15s / 60s / 300s tape windows
-Buy volume - Sell volume = rolling_delta
-bounded recent DOM = partial depth evidence
-```
-
-Rolling delta is not session cumulative delta. Positive delta, negative delta, depth imbalance, thin liquidity, or a DOM Reset do not themselves authorize or forbid a trade. `book_complete` remains false; truncation, missing lookback coverage, and invalid events remain explicit. An order-flow failure is visible in `order_flow.last_error` but does not alter `new_exposure_technically_supported`.
-
-## Requirements
-
-- Node.js 22+
-- A TopstepX-linked ProjectX API subscription and API key for real integration work
-- A personal local device compatible with current Topstep API requirements
-- A separately installed Hermes runtime and the `glitch-topstep` profile for autonomous cognition
-
-## Local setup
-
-```bash
+```powershell
+git clone https://github.com/GlitchTrader/glitch-topstep.git
+cd glitch-topstep
 cp .env.example .env
 npm install
 npm run check
+```
+
+`npm run check` runs `tsc` and the full test suite (91 tests). **Run it before every push** — same gate as [CI](.github/workflows/ci.yml).
+
+### Minimum `.env` (code-only / no ProjectX)
+
+```text
+GLITCH_LOCAL_TOKEN=<long-random-string>
+GLITCH_TRADING_MODE=shadow
+GLITCH_DATA_DIR=./data
+```
+
+### Shadow integration (real account)
+
+Fill `PROJECTX_USERNAME`, `PROJECTX_API_KEY`, `GLITCH_ACCOUNT_ID`, `GLITCH_ACCOUNT_NAME`, `GLITCH_CONTRACT_ID`, `GLITCH_INSTRUMENT` from [`.env.example`](.env.example). Keep `GLITCH_TRADING_MODE=shadow` until [`docs/OPERATIONS.md`](docs/OPERATIONS.md) acceptance is complete.
+
+---
+
+## Run
+
+```powershell
 npm start
 ```
 
-The local gateway binds to `127.0.0.1:8790` by default.
+Binds `http://127.0.0.1:8790` (loopback only — never expose to LAN/internet).
+
+```powershell
+curl http://127.0.0.1:8790/health
+curl -H "Authorization: Bearer $env:GLITCH_LOCAL_TOKEN" http://127.0.0.1:8790/packet
+```
+
+### Local API
+
+| Endpoint | Auth | Purpose |
+|----------|------|---------|
+| `GET /health` | none | Operational, recovery, evidence, history, bar, order-flow status |
+| `GET /state` | bearer | Current venue snapshot |
+| `GET /packet` | bearer | Decision packet + market observation + order flow |
+| `GET /evidence` | bearer | Provider evidence journal (`limit` ≤ 1000) |
+| `GET /ownership` | bearer | Entry/fill identity (protection ownership still P0) |
+| `POST /intent` | bearer | Strict `glitch.intent.v2` execution |
+
+### Data stores
 
 ```text
-GET  /health              no authentication; truthful operational, recovery, evidence, history, bar, and order-flow status
-GET  /state               bearer token required
-GET  /packet              bearer token required; includes exact market observation and order-flow state
-GET  /evidence?limit=100  bearer token required; maximum 1000 events
-GET  /ownership           bearer token required; exact entry/fill identity, protection remains unknown
-POST /intent              bearer token required; strict glitch.intent.v2
+data/glitch-topstep.sqlite      execution identity and recovery (WAL, FULL sync)
+data/projectx-evidence.sqlite   provider evidence/history (bounded market retention)
 ```
 
-```bash
-curl -H "Authorization: Bearer $GLITCH_LOCAL_TOKEN" \
-  "http://127.0.0.1:8790/packet"
-```
+Offline replay: `npm run replay:evidence -- --help`
 
-Execution and telemetry use separate stores:
+---
 
-```text
-data/glitch-topstep.sqlite     execution identity and recovery; WAL/FULL
-data/projectx-evidence.sqlite  provider evidence/history; WAL/NORMAL; bounded market-event retention
-```
+## Hermes profile (optional)
 
-## Hermes profile
-
-Install the companion profile after the gateway is running in shadow mode:
+Start the gateway in **shadow** first, then in the [companion profile repo](https://github.com/GlitchTrader/glitch-topstep-hermes-profile):
 
 ```powershell
 hermes profile install github.com/GlitchTrader/glitch-topstep-hermes-profile --alias
 hermes -p glitch-topstep auth add openai-codex --type oauth
-powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\hermes\profiles\glitch-topstep\setup.ps1"
+notepad "$env:LOCALAPPDATA\hermes\profiles\glitch-topstep\.env"
 ```
 
-Use the same local bearer token in the gateway and profile `.env`. The profile never receives ProjectX credentials.
+Set `GLITCH_TOPSTEP_LOCAL_TOKEN` to the **same** value as gateway `GLITCH_LOCAL_TOKEN`. Run `setup.ps1`, then `/topstep_status` and `/trade` in Hermes.
+
+The profile never receives ProjectX credentials.
+
+---
+
+## Contributing (Cursor or any editor)
+
+### Read first
+
+1. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) — what Glitch may and may not enforce
+2. [`docs/PARITY.md`](docs/PARITY.md) — capability matrix and promotion rule
+3. [`docs/ledger/ledger.json`](docs/ledger/ledger.json) — canonical work queue (`TS-*` ids)
+
+`docs/ROADMAP.md` is durable intent; the **ledger** is current task state.
+
+### Edit → verify → commit → push
+
+```powershell
+# edit src/ or tests/
+npm run check
+git checkout -b agent/your-topic    # optional; main also accepts direct pushes if team agrees
+git add <files>
+git commit -m "feat: short description"
+git push -u origin agent/your-topic
+gh pr create                        # or push main
+```
+
+### Where to edit
+
+| Area | Path |
+|------|------|
+| Intent parsing | `src/domain/intents.ts` |
+| UUID + body-hash ownership | `src/domain/intent-body-hash.ts`, `src/storage/sqlite-execution-store.ts` |
+| Execution / receipts | `src/execution/coordinator.ts`, `src/execution/recovery.ts` |
+| ProjectX client / streams | `src/projectx/` |
+| Evidence journal | `src/projectx/provider-event-recorder.ts`, `src/storage/sqlite-provider-evidence-store.ts` |
+| Decision packets | `src/hermes/packet-builder.ts` |
+| Tape / depth / MTF | `src/market/` |
+| Tests | `tests/*.test.ts` — add coverage for every behavior change |
+
+### Never commit
+
+`.env`, API keys, JWTs, `data/` runtime stores, or sanitized fixtures containing secrets.
+
+### Suggested next work (ledger)
+
+| ID | Title | Status |
+|----|-------|--------|
+| TS-R4-00 | Nonterminal intents until native bracket proof | ready |
+| TS-R1-01 | Process-kill recovery fixtures | ready |
+| TS-R4-01 | Provider bracket ownership from explicit IDs | backlog (P0) |
+| TS-R2-01 | Real ProjectX auth in shadow | blocked (needs API subscription) |
+
+Recent NT parity shipped: **TS-R1-05** atomic UUID + body-hash claim.
+
+---
+
+## Safety rules
+
+1. Default **`GLITCH_TRADING_MODE=shadow`** — no live orders without operator approval and runtime evidence.
+2. **`armed`** requires `GLITCH_ARMED_ACK=I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY` — not a readiness claim.
+3. Bind **127.0.0.1** only.
+4. **ProjectX credentials stay in this repo's `.env`** — never in Hermes, logs, or git.
+5. **Green tests ≠ live-ready.** See promotion rule in [`docs/PARITY.md`](docs/PARITY.md).
+6. **Not NinjaTrader** — do not import CopyEngine, Apex, or replication code. Behavioral contracts only via PARITY.
+
+### Core execution doctrine
+
+```text
+parse → redact and persist evidence → mutate state   (never the reverse)
+
+Glitch intent → providerOrderId + customTag → order evidence → trade.orderId match
+```
+
+Ambiguous provider transport stays **nonterminal** until reconciliation — no wall-clock resubmission. Duplicate intent UUID retries replay immutable receipts; same UUID with different body returns `intent_body_conflict`.
+
+---
 
 ## Documentation
 
-- [`docs/AUTHORITY.md`](docs/AUTHORITY.md)
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- [`docs/TOPSTEP-POLICY.md`](docs/TOPSTEP-POLICY.md)
-- [`docs/PARITY.md`](docs/PARITY.md)
-- [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
-- [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md)
-- [`docs/HANDOFF.md`](docs/HANDOFF.md)
-- [`docs/ROADMAP.md`](docs/ROADMAP.md)
+| Doc | Purpose |
+|-----|---------|
+| [`docs/AUTHORITY.md`](docs/AUTHORITY.md) | Roles, permitted rejection, forbidden policy |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design |
+| [`docs/PARITY.md`](docs/PARITY.md) | Capability matrix and promotion gates |
+| [`docs/OPERATIONS.md`](docs/OPERATIONS.md) | Shadow acceptance, armed ack, incidents |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Evidence-gated roadmap |
+| [`docs/ledger/ledger.json`](docs/ledger/ledger.json) | Current work authority |
+| [`docs/HANDOFF.md`](docs/HANDOFF.md) | Historical Codex handoff notes |

@@ -1,5 +1,8 @@
 # Codex handoff
 
+> **Contributor onboarding moved to [`README.md`](../README.md)** (install, run, dev loop, push, safety).
+> This file retains historical implementation notes for Codex sessions.
+
 ## Current state
 
 The repository contains a compiling and tested direct ProjectX scaffold. No external API call was executed during the initial implementation because no credentials or API sandbox were available.
