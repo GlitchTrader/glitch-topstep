@@ -44,15 +44,33 @@ floor = min(S, S - D + max(0, H - S))
 
 ### Express Funded end-of-day trail
 
-```text
-floor = min(0, -D + max(0, H))
-```
-
-When authoritative evidence says the floor is locked at zero or a payout has established the zero floor:
+Expressed relative to the starting balance, where `H` is the highest qualifying
+end-of-day **profit**:
 
 ```text
-floor = 0
+relativeFloor = min(0, -D + max(0, H))
 ```
+
+When authoritative evidence says the floor is locked at breakeven or a payout has
+established that floor:
+
+```text
+relativeFloor = 0
+```
+
+### Frame
+
+Both trailing models are converted into the same absolute frame as
+`conservativeEquity` before use:
+
+```text
+floor = S + relativeFloor
+```
+
+This conversion is mandatory. `conservativeEquity` is a ProjectX account balance
+plus unrealized PnL, so returning a relative floor to that consumer overstates
+hard headroom by roughly the starting balance and effectively disables the
+`hard_loss_floor_breach` rejection. `tests/mll.test.ts` pins the frame.
 
 ### Explicit reconciled floor
 
@@ -77,9 +95,14 @@ Conservative equity marks longs at bid and shorts at ask.
 ## Protected trade calculation
 
 ```text
-rawRisk = abs(currentExecutablePrice - stopPrice) * pointValue * quantity
+rawRisk = submittedStopTicks * tickValue * quantity
 protectedRisk = rawRisk + slippageReserve + feeReserve
 ```
+
+`submittedStopTicks` is the tick distance actually sent on the ProjectX bracket.
+It is rounded away from the reference price, so pricing the requested stop level
+instead would understate the risk the account bears whenever the reference price
+is not tick-aligned.
 
 Glitch rejects entry only when the current protected loss would reach or cross the hard loss floor, or when another factual execution invariant fails.
 

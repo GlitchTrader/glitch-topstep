@@ -669,6 +669,126 @@
         "docs/ROADMAP.md#r10--scale-only-after-evidence",
         "docs/ROADMAP.md#permanent-boundaries"
       ]
+    },
+    {
+      "id": "TS-AUDIT-01",
+      "title": "Correct the hard loss-floor frame, bracket-derived risk, and dead decision expiry",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "calculateLiquidationFloor returns a floor in the same absolute frame as conservativeEquity for every loss model.",
+        "Protected risk is priced from the tick distance actually submitted on the ProjectX bracket.",
+        "GLITCH_MAX_INTENT_AGE_MS rejects a stale entry decision at intake instead of being parsed and ignored.",
+        "Regression tests pin the absolute floor frame and the submitted-bracket risk basis."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-28 audit: express_funded_eod returned a floor relative to the starting balance (-D) while calculateRiskBudget consumed an absolute conservativeEquity (ProjectX balance + unrealized PnL). On a $50k Express Funded account this reported current_buffer_usd of about $52,000 instead of $2,000, so hard_loss_floor_breach could not fire and Hermes received a false headroom in policy.current_buffer_usd. The shared lossFloorLockedAtZero/payoutProcessed early return had the same defect.",
+        "2026-07-28 fix src/risk/mll.ts: trailingFloorRelativeToStart() models both trailing models relative to the starting balance; calculateLiquidationFloor() returns startingBalance + relativeFloor. operator_provided_floor stays absolute. Existing trading_combine (49,000) and operator_provided (48,250) expectations are unchanged.",
+        "2026-07-28 audit: risk-engine priced rawRisk from the requested stop level while the order submits stopTicks rounded away from the reference price, so a non-tick-aligned reference price understated the risk actually borne. Reference price tick alignment is never validated.",
+        "2026-07-28 fix src/risk/risk-engine.ts: rawRisk = brackets.stopTicks * tickValue * quantity. Identical for tick-aligned references, strictly more conservative otherwise.",
+        "2026-07-28 audit: RiskSettings.maxIntentAgeMs was parsed, validated, and typed but never read in src/, so GLITCH_MAX_INTENT_AGE_MS was silent no-op safety config.",
+        "2026-07-28 fix src/risk/risk-engine.ts: entry intents older than maxIntentAgeMs are rejected as intent_stale; unparseable created_utc is rejected as intent_timestamp_invalid. Entry-only, so it cannot strand an exit.",
+        "2026-07-28 hardening src/execution/coordinator.ts: PlaceOrderRequest.size uses ValidatedEntry.quantity instead of intent.quantity ?? 0, removing a path that could submit a zero-size order.",
+        "2026-07-28 docs/TOPSTEP-POLICY.md records the mandatory absolute-frame conversion and the submitted-bracket risk basis.",
+        "2026-07-28 verification: npm run check green, 104 tests pass (100 before this change, 4 added)."
+      ],
+      "sources": [
+        "src/risk/mll.ts",
+        "src/risk/risk-engine.ts",
+        "src/execution/coordinator.ts",
+        "tests/mll.test.ts",
+        "tests/risk-engine.test.ts",
+        "docs/TOPSTEP-POLICY.md"
+      ],
+      "stop_line": "Software contract only. The corrected buffer is still operator_configured policy; it is not provider-reconciled truth and proves no live readiness."
+    },
+    {
+      "id": "TS-AUDIT-02",
+      "title": "Stop the entry armed gate from stranding an exit",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "An identity-valid EXIT on proven attributable exposure is not blocked by an entry-only armed downgrade.",
+        "Operator trading disabled remains a hard block for every mutation including EXIT.",
+        "Account, contract, instrument identity and native ownership validation remain mandatory for EXIT.",
+        "Exit permission is a distinct, named decision from entry permission in both code and the decision packet.",
+        "supported_actions and any exit-permission field agree with what the coordinator will actually submit.",
+        "Fixtures cover exit during quote staleness, quiet tape, reconciliation lag, and recovery-blocked state."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-28 audit src/execution/coordinator.ts handleExit: EXIT returns shadowed/exit_verified_not_submitted whenever gatewayModePermitsLiveOrders(packet.execution.gateway_mode) is false.",
+        "2026-07-28 audit src/execution/gateway-mode.ts armedGateReasons: armed degrades on quote_stale, reconciliation_not_current, and order_flow_no_trades_60s.",
+        "Net effect: an open position cannot be closed by Hermes exactly when quotes thin out, the tape goes quiet, or reconciliation lags. On an account with a hard trailing loss floor that is the wrong failure direction.",
+        "docs/AUTHORITY.md permits deterministic rejection for factual execution invalidity; a quiet tape or a stale quote does not make closing an existing position factually invalid.",
+        "The sibling NinjaTrader rail already carries this contract: GL-AI-08 requires that an identity-valid attributable EXIT bypass entry-only license, compliance, session, and new-risk gates while AI-disabled stays a hard block.",
+        "packet.execution.supported_actions always advertises EXIT, so the packet currently overstates what the gateway will submit."
+      ],
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/execution/gateway-mode.ts",
+        "src/hermes/packet-builder.ts",
+        "docs/AUTHORITY.md"
+      ],
+      "stop_line": "This widens live-order authority. It requires explicit operator approval before implementation, and bounded shadow proof before any armed run."
+    },
+    {
+      "id": "TS-AUDIT-03",
+      "title": "Move the quiet-tape armed gate out of Glitch or justify it as a venue boundary",
+      "status": "ready",
+      "priority": "P1",
+      "owner_role": "architect",
+      "acceptance": [
+        "order_flow_no_trades_60s is either removed from the armed gate and published as pure evidence, or documented as an authoritative venue/account boundary with a named source.",
+        "The decision is recorded against the docs/AUTHORITY.md change test with an explicit answer to each of its four questions.",
+        "Whatever remains in the gate is proven not to block an exit, per TS-AUDIT-02.",
+        "Hermes still receives the full rolling tape so it can decline a thin market by judgment."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-28 audit src/execution/gateway-mode.ts: a 60s window with trade_count <= 0 downgrades armed to degraded_armed and suppresses live orders.",
+        "docs/AUTHORITY.md forbids Glitch from encoding a fixed strategy, indicator trigger, setup checklist, or entry score, and its change test says a rule whose removal would merely let Hermes exercise judgment belongs in cognition.",
+        "A quiet tape is a market condition, not a factual execution error: quantity, identity, protection geometry, and account capacity are all still provable with zero prints in the window.",
+        "docs/TOPSTEP-NATIVE.md already states new_exposure_technically_supported reflects venue completeness rather than model conviction, which this gate contradicts.",
+        "Absent market-hub prints are separately visible through market_stream_state and the order_flow observation, so removing the gate loses no evidence."
+      ],
+      "sources": [
+        "src/execution/gateway-mode.ts",
+        "docs/AUTHORITY.md",
+        "docs/TOPSTEP-NATIVE.md"
+      ],
+      "stop_line": "Doctrine decision for the operator. Do not silently relax the gate as part of unrelated work."
+    },
+    {
+      "id": "TS-AUDIT-04",
+      "title": "Reconcile instrument scoping across the entry admission guards",
+      "status": "backlog",
+      "priority": "P2",
+      "owner_role": "coder",
+      "acceptance": [
+        "Position and working-order admission guards use one documented scope, or each states why its scope differs.",
+        "Any narrowing is justified against provable ownership rather than convenience.",
+        "The account-wide Topstep contract ceiling stays account-wide.",
+        "Fixtures cover a working order on a second contract in the same account."
+      ],
+      "depends_on": [
+        "TS-R4-01"
+      ],
+      "evidence": [
+        "2026-07-28 audit src/risk/risk-engine.ts: position_addition_not_implemented tests snapshot.instrumentOpenContracts (instrument-scoped) while working_order_ownership_unresolved tests snapshot.openOrders.length, which venue-state builds filtered by accountId only and not by contractId.",
+        "A working order on any other contract in the account therefore blocks entry on the configured contract, while an open position on that other contract does not.",
+        "Latent under the current single-contract acceptance scope; it becomes live behaviour as soon as a second Topstep contract is configured, which docs/TOPSTEP-NATIVE.md treats as a configuration change rather than an architecture change.",
+        "Narrowing the order guard would loosen a safety admission check, so it needs proven per-contract ownership first."
+      ],
+      "sources": [
+        "src/risk/risk-engine.ts",
+        "src/state/venue-state.ts",
+        "docs/TOPSTEP-NATIVE.md"
+      ],
+      "stop_line": "Do not loosen the working-order guard before per-contract ownership is provable."
     }
   ]
 }

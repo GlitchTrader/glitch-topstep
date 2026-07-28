@@ -95,7 +95,7 @@ export function snapshot(): AccountVenueSnapshot {
     account: {
       id: 101,
       name: "TEST_ACCOUNT",
-      balance: 1_000,
+      balance: 51_000,
       canTrade: true,
       isVisible: true,
       simulated: true,
@@ -126,7 +126,8 @@ export function snapshot(): AccountVenueSnapshot {
     totalOpenContracts: 0,
     instrumentOpenContracts: 0,
     unrealizedPnl: 0,
-    conservativeEquity: 1_000,
+    // Absolute ProjectX account frame: a $50k Express Funded account $1k in profit.
+    conservativeEquity: 51_000,
     operational: operational(),
     stateIssues: [],
     stateComplete: true,
