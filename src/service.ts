@@ -13,6 +13,7 @@ import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
+import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
@@ -280,6 +281,13 @@ export class GlitchTopstepService {
           last_error: "order_flow_service_unavailable",
           observation: null,
         };
+        const gatewayMode = resolveGatewayMode(
+          this.config.tradingMode,
+          current,
+          this.config.risk,
+          orderFlow,
+          recordedAt,
+        );
         return {
           schema_version: "glitch.direct.health.v2",
           status:
@@ -291,6 +299,8 @@ export class GlitchTopstepService {
               ? "ok"
               : "degraded",
           trading_mode: this.config.tradingMode,
+          gateway_mode: gatewayMode.effective,
+          gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
           recorded_utc: recordedAt.toISOString(),
           data_quality: {
             state_complete: quality.stateComplete,

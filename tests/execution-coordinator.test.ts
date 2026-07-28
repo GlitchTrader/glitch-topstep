@@ -10,7 +10,7 @@ import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { snapshot } from "./fixtures.js";
+import { snapshot, orderFlowWithTrades } from "./fixtures.js";
 
 function config(dataDir: string): AppConfig {
   return {
@@ -128,6 +128,8 @@ describe("execution coordinator serialization", () => {
         appConfig.tradingMode,
         appConfig.packetLeaseMs,
         now,
+        undefined,
+        orderFlowWithTrades(3),
       );
       store.recordIssuedPacket(firstPacket);
 
@@ -178,6 +180,8 @@ describe("execution coordinator serialization", () => {
         appConfig.tradingMode,
         appConfig.packetLeaseMs,
         new Date(),
+        undefined,
+        orderFlowWithTrades(3),
       );
       store.recordIssuedPacket(pendingPacket);
       const third = await coordinator.handleWireIntent(intent(
@@ -220,6 +224,8 @@ describe("execution coordinator serialization", () => {
         appConfig.tradingMode,
         appConfig.packetLeaseMs,
         now,
+        undefined,
+        orderFlowWithTrades(3),
       );
       store.recordIssuedPacket(packet);
       const coordinator = new ExecutionCoordinator(
@@ -274,6 +280,8 @@ describe("execution coordinator serialization", () => {
         appConfig.tradingMode,
         appConfig.packetLeaseMs,
         now,
+        undefined,
+        orderFlowWithTrades(3),
       );
       store.recordIssuedPacket(packet);
       let placeOrderCalls = 0;
@@ -305,6 +313,54 @@ describe("execution coordinator serialization", () => {
       assert.equal(placeOrderCalls, 1);
       assert.equal(receipts.every((receipt) => receipt.status === "submitted"), true);
       assert.equal(new Set(receipts.map((receipt) => receipt.receipt_id)).size, 1);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts NOTHING without an issued decision packet", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-nothing-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      appConfig.tradingMode = "shadow";
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        { placeOrder: async () => 9001, closePosition: async () => undefined } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => snapshot(),
+        () => null,
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-000000000501",
+        created_utc: new Date().toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "NOTHING",
+        confidence: 0.4,
+        snapshot_hash: "expired-or-unknown-hash",
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "No trade this cycle.",
+        decision_audit: {
+          bull_case: "Bull case.",
+          bear_case: "Bear case.",
+          flat_case: "Flat case.",
+          aggressive_case: "Aggressive case.",
+          conservative_case: "Conservative case.",
+          decisive_evidence: "Evidence.",
+          disconfirming_evidence: "Counter evidence.",
+          change_condition: "Change condition.",
+          final_choice: "NOTHING",
+        },
+      });
+      assert.equal(receipt.status, "ignored");
+      assert.equal(receipt.code, "no_execution_action");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
