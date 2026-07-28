@@ -107,5 +107,18 @@ describe("market stream payload normalization", () => {
     ]);
     assert.equal(arrayDepth.type, 4);
     assert.equal(arrayDepth.price, 28010.75);
+
+    const batchDepth = parseDepth(CONTRACT, {
+      contractId: CONTRACT,
+      payload: [{
+        price: 28010.25,
+        volume: 5,
+        currentVolume: 3,
+        type: 6,
+        timestamp: "2026-07-28T03:08:20.4448161+00:00",
+      }],
+    });
+    assert.equal(batchDepth.type, 6);
+    assert.equal(batchDepth.currentVolume, 3);
   });
 });
