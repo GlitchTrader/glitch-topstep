@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
-import { resolveGatewayMode } from "../src/execution/gateway-mode.js";
+import { buildExecutionGates, resolveGatewayMode } from "../src/execution/gateway-mode.js";
 import { snapshot, orderFlowWithTrades } from "./fixtures.js";
 import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
@@ -108,5 +108,87 @@ describe("armed runtime gate", () => {
     assert.equal(packet.execution.gateway_mode_configured, "armed");
     assert.equal(packet.execution.gateway_mode, "armed");
     assert.equal(packet.execution.gateway_mode_downgrade_reason, null);
+  });
+
+  it("exposes structured execution gates on decision packets", () => {
+    const current = snapshot();
+    const now = new Date("2026-07-21T12:00:05Z");
+    current.capturedAt = now.toISOString();
+    current.quote = { ...current.quote!, timestamp: now.toISOString() };
+    const appConfig = config("armed");
+    const packet = buildDecisionPacket(
+      current,
+      appConfig.policy,
+      appConfig.risk,
+      healthyRecovery(),
+      appConfig.scope.instrument,
+      appConfig.tradingMode,
+      appConfig.packetLeaseMs,
+      now,
+      undefined,
+      orderFlowWithTrades(3),
+    );
+    const gateIds = packet.execution.gates.map((gate) => gate.id);
+    assert.deepEqual(gateIds, [
+      "state_complete",
+      "quote_stale",
+      "reconciliation_current",
+      "order_flow_trades_60s",
+      "new_exposure_technically_supported",
+    ]);
+    assert.ok(packet.execution.gates.every((gate) => gate.passed));
+    assert.equal(packet.execution.new_exposure_technically_supported, true);
+  });
+});
+
+describe("buildExecutionGates", () => {
+  it("reports quote_stale with quote_age_ms detail", () => {
+    const current = snapshot();
+    const now = new Date("2026-07-21T12:00:10Z");
+    current.capturedAt = now.toISOString();
+    current.quote = { ...current.quote!, timestamp: "2026-07-21T12:00:00Z" };
+    const appConfig = config("armed");
+    const gates = buildExecutionGates(
+      current,
+      appConfig.risk,
+      orderFlowWithTrades(2),
+      healthyRecovery(),
+      appConfig.tradingMode,
+      appConfig.policy.maxContracts,
+      now,
+    );
+    const quoteGate = gates.find((gate) => gate.id === "quote_stale");
+    assert.equal(quoteGate?.passed, false);
+    assert.match(quoteGate?.detail ?? "", /quote_age_ms=10000 max=5000/);
+  });
+
+  it("reports new_exposure sub-reasons when blocked", () => {
+    const current = snapshot();
+    current.openOrders = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      type: 1,
+      side: 0,
+      size: 1,
+      limitPrice: 20_000,
+      stopPrice: null,
+      status: 1,
+      creationTimestamp: "2026-07-21T12:00:00Z",
+      updateTimestamp: "2026-07-21T12:00:00Z",
+    }];
+    const appConfig = config("shadow");
+    const gates = buildExecutionGates(
+      current,
+      appConfig.risk,
+      orderFlowWithTrades(2),
+      healthyRecovery(),
+      appConfig.tradingMode,
+      appConfig.policy.maxContracts,
+      new Date("2026-07-21T12:00:05Z"),
+    );
+    const exposureGate = gates.find((gate) => gate.id === "new_exposure_technically_supported");
+    assert.equal(exposureGate?.passed, false);
+    assert.match(exposureGate?.detail ?? "", /no_open_orders/);
   });
 });

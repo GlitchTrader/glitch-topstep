@@ -8,8 +8,10 @@ import type {
   TopstepPolicyState,
 } from "../domain/models.js";
 import {
+  buildExecutionGates,
   resolveGatewayMode,
   type EffectiveGatewayMode,
+  type ExecutionGate,
 } from "../execution/gateway-mode.js";
 import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
@@ -94,6 +96,7 @@ export interface DirectDecisionPacket {
     gateway_mode: EffectiveGatewayMode;
     gateway_mode_configured: "disabled" | "shadow" | "armed";
     gateway_mode_downgrade_reason: string | null;
+    gates: ExecutionGate[];
     new_exposure_technically_supported: boolean;
     maximum_additional_contracts: number;
     recovery_blocked: boolean;
@@ -211,6 +214,16 @@ export function buildDecisionPacket(
     orderFlow,
     now,
   );
+  const executionGates = buildExecutionGates(
+    snapshot,
+    risk,
+    orderFlow,
+    recovery,
+    tradingMode,
+    policy.maxContracts,
+    now,
+  );
+  const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -287,14 +300,8 @@ export function buildDecisionPacket(
       gateway_mode: gatewayMode.effective,
       gateway_mode_configured: gatewayMode.configured,
       gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
-      new_exposure_technically_supported:
-        tradingMode !== "disabled"
-        && quality.stateComplete
-        && snapshot.account.canTrade
-        && snapshot.instrumentOpenContracts === 0
-        && snapshot.openOrders.length === 0
-        && remainingCapacity > 0
-        && !recovery.blockingNewExposure,
+      gates: executionGates,
+      new_exposure_technically_supported: newExposureGate?.passed ?? false,
       maximum_additional_contracts: remainingCapacity,
       recovery_blocked: recovery.blockingNewExposure,
       entry_submission_pending: recovery.entrySubmissionPending,
