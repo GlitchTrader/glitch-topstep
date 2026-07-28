@@ -8,7 +8,7 @@ import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
 import { ProjectXOrderFlowService } from "./market/projectx-order-flow-service.js";
-import { ProjectXApiClient } from "./projectx/client.js";
+import { ProjectXApiClient, ProjectXApiError } from "./projectx/client.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
@@ -99,12 +99,7 @@ export class GlitchTopstepService {
 
   public async start(): Promise<void> {
     await this.api.login();
-    const [accounts, contracts, positions, orders] = await Promise.all([
-      this.api.searchAccounts(true),
-      this.api.listAvailableContracts(this.config.scope.liveMarketData),
-      this.api.searchOpenPositions(this.config.scope.accountId),
-      this.api.searchOpenOrders(this.config.scope.accountId),
-    ]);
+    const [accounts, contracts, positions, orders] = await this.fetchStartupScope();
 
     const account = accounts.find((candidate) => candidate.id === this.config.scope.accountId);
     if (!account) {
@@ -206,7 +201,9 @@ export class GlitchTopstepService {
         onReconnected: async () => {
           this.packets?.invalidateAll();
           await Promise.all([
-            this.reconcile(),
+            this.reconcile().catch((error: unknown) => {
+              console.error("ProjectX reconciliation failed after reconnect", error);
+            }),
             this.historySync.sync(),
             this.marketObservation.refresh(),
             this.orderFlow?.refresh() ?? Promise.resolve(null),
@@ -215,13 +212,21 @@ export class GlitchTopstepService {
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
-          await this.reconcile();
+          try {
+            await this.reconcile();
+          } catch (error: unknown) {
+            console.error("ProjectX reconciliation failed after state invalidation", error);
+          }
         },
       },
       this.state,
     );
     await this.realtime.start();
-    await this.reconcile();
+    try {
+      await this.reconcile();
+    } catch (error: unknown) {
+      console.error("ProjectX reconciliation failed during service start", error);
+    }
 
     this.reconciliationTimer = setInterval(() => {
       void this.reconcile().catch((error: unknown) => {
@@ -382,6 +387,41 @@ export class GlitchTopstepService {
       this.executionStore.close();
       this.storesClosed = true;
     }
+  }
+
+  private async fetchStartupScope(): Promise<
+    [Awaited<ReturnType<ProjectXApiClient["searchAccounts"]>>,
+      Awaited<ReturnType<ProjectXApiClient["listAvailableContracts"]>>,
+      Awaited<ReturnType<ProjectXApiClient["searchOpenPositions"]>>,
+      Awaited<ReturnType<ProjectXApiClient["searchOpenOrders"]>>]
+  > {
+    const retryDelaysMs = [0, 30_000, 60_000];
+    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+      const delayMs = retryDelaysMs[attempt] ?? 0;
+      if (delayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      try {
+        return await Promise.all([
+          this.api.searchAccounts(true),
+          this.api.listAvailableContracts(this.config.scope.liveMarketData),
+          this.api.searchOpenPositions(this.config.scope.accountId),
+          this.api.searchOpenOrders(this.config.scope.accountId),
+        ]);
+      } catch (error: unknown) {
+        const rateLimited = error instanceof ProjectXApiError && error.status === 429;
+        const nextDelayMs = retryDelaysMs[attempt + 1];
+        if (rateLimited && nextDelayMs !== undefined) {
+          console.error(
+            `ProjectX startup fetch rate limited; retrying in ${nextDelayMs / 1000}s`,
+            error,
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error("startup_scope_fetch_exhausted");
   }
 
   private async reconcile(): Promise<void> {

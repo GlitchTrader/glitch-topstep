@@ -21,6 +21,8 @@ export interface ProjectXClientOptions {
   username: string;
   apiKey: string;
   requestTimeoutMs?: number;
+  /** ponytail: test-only override; production uses ProjectXApiClient default backoff */
+  rateLimitRetryMs?: readonly number[];
 }
 
 export interface PlaceOrderRequest {
@@ -78,9 +80,12 @@ interface ApiEnvelope {
 export class ProjectXApiClient {
   private token: string | null = null;
   private readonly requestTimeoutMs: number;
+  private readonly rateLimitRetryMs: readonly number[];
+  private static readonly defaultRateLimitRetryMs = [0, 5_000, 15_000, 30_000] as const;
 
   public constructor(private readonly options: ProjectXClientOptions) {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+    this.rateLimitRetryMs = options.rateLimitRetryMs ?? ProjectXApiClient.defaultRateLimitRetryMs;
   }
 
   public get sessionToken(): string {
@@ -199,6 +204,34 @@ export class ProjectXApiClient {
   }
 
   private async post(path: string, body: unknown, authenticated = true): Promise<unknown> {
+    let lastError: unknown;
+    const maxAttempts = Math.max(1, this.rateLimitRetryMs.length);
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      if (attempt > 0) {
+        const delayMs = this.rateLimitRetryMs[attempt]
+          ?? this.rateLimitRetryMs.at(-1)
+          ?? 30_000;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      try {
+        return await this.postOnce(path, body, authenticated);
+      } catch (error: unknown) {
+        lastError = error;
+        if (
+          error instanceof ProjectXApiError
+          && error.status === 429
+          && attempt < maxAttempts - 1
+        ) {
+          console.error(`ProjectX ${path} rate limited; retrying (${attempt + 1})`);
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  private async postOnce(path: string, body: unknown, authenticated = true): Promise<unknown> {
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",

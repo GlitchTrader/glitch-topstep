@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "project": "glitch-topstep",
-  "updated": "2026-07-27",
+  "updated": "2026-07-28",
   "roadmap_ref": "docs/ROADMAP.md",
   "items": [
     {
@@ -122,6 +122,8 @@
         "docs/AUTHORITY.md"
       ]
     },
+    {
+      "id": "TS-R2-01",
       "title": "Authenticate with real TopstepX ProjectX key in shadow mode",
       "status": "blocked",
       "priority": "P0",
@@ -514,6 +516,32 @@
       ],
       "evidence": [],
       "sources": [
+        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
+      ]
+    },
+    {
+      "id": "TS-R7-04",
+      "title": "Entry-oriented decision packet enrichment for Hermes cognition",
+      "status": "ready",
+      "priority": "P1",
+      "owner_role": "coder",
+      "acceptance": [
+        "Decision packets expose session_context from ProjectX quotes (change, change_percent, session high/low/open, quote_age_ms) without hidden strategy gates.",
+        "Decision packets expose liquidity evidence (spread_ticks, top-of-book bid/ask size or imbalance when depth is partial) with explicit completeness flags.",
+        "Decision packets expose execution_context summary (working order count, entry-pending signal, last_fill_utc or flat-confirmed) derived from reconciled venue state only.",
+        "No numeric provider account IDs, contract IDs, credentials, or deterministic enter/hold/forbid signals are added to the packet.",
+        "Packet schema changes are versioned, tested, and documented in docs/PARITY.md without turning observation degradation into an execution veto."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-28: live ProjectX quotes carry lastUpdated, change, and nullable lastPrice; gateway previously projected stale session timestamp into packet market.quote_timestamp.",
+        "2026-07-28: PR #11 fixes quote freshness parsing; entry decisions still lack session_context, liquidity, and open-order summaries in glitch.direct.decision_packet.v2."
+      ],
+      "sources": [
+        "src/hermes/packet-builder.ts",
+        "src/market/projectx-order-flow-service.ts",
+        "docs/AUTHORITY.md",
+        "docs/PARITY.md",
         "docs/ROADMAP.md#r7--instrument-general-observation-engine"
       ]
     },

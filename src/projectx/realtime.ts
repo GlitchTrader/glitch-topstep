@@ -17,6 +17,7 @@ import {
   recordProviderLifecycleEvent,
 } from "./provider-event-recorder.js";
 import {
+  isRecord,
   parseAccount,
   parseDepth,
   parseMarketTrade,
@@ -220,6 +221,9 @@ export class ProjectXRealtimeClient {
         this.payloadFault("market", new Error("depth_contract_id_invalid"));
         return;
       }
+      if (!isRecord(input)) {
+        return;
+      }
       this.recordAndApply(
         "market",
         "depth",
@@ -338,7 +342,10 @@ export class ProjectXRealtimeClient {
   private payloadFault(kind: VenueStreamKind, error: unknown): void {
     this.state.markPayloadFault(kind, error);
     console.error("Rejected ProjectX realtime event", error);
-    void this.options.onStateInvalidated?.();
+    // ponytail: market parse faults are local evidence gaps; REST reconcile amplifies 429 pressure.
+    if (kind !== "market") {
+      void this.options.onStateInvalidated?.();
+    }
   }
 
   private async subscribeUser(): Promise<void> {
