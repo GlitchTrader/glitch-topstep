@@ -130,18 +130,28 @@ export function parseTrade(input: unknown): TradeInfo {
 
 export function parseQuote(contractId: string, input: unknown): QuoteInfo {
   if (!isRecord(input)) throw new Error("quote_not_object");
+  const bestBid = requiredNumber(input, "bestBid");
+  const bestAsk = requiredNumber(input, "bestAsk");
+  const lastPrice = nullableNumber(input, "lastPrice") ?? (bestBid + bestAsk) / 2;
+  const open = nullableNumber(input, "open") ?? lastPrice;
+  const high = nullableNumber(input, "high") ?? lastPrice;
+  const low = nullableNumber(input, "low") ?? lastPrice;
+  const volume = nullableNumber(input, "volume") ?? 0;
+  const timestamp = typeof input.lastUpdated === "string" && input.lastUpdated.length > 0
+    ? input.lastUpdated
+    : requiredString(input, "timestamp");
   return {
     contractId,
     symbol: requiredString(input, "symbol"),
     ...(typeof input.symbolName === "string" ? { symbolName: input.symbolName } : {}),
-    lastPrice: requiredNumber(input, "lastPrice"),
-    bestBid: requiredNumber(input, "bestBid"),
-    bestAsk: requiredNumber(input, "bestAsk"),
-    open: requiredNumber(input, "open"),
-    high: requiredNumber(input, "high"),
-    low: requiredNumber(input, "low"),
-    volume: requiredNumber(input, "volume"),
-    timestamp: requiredString(input, "timestamp"),
+    lastPrice,
+    bestBid,
+    bestAsk,
+    open,
+    high,
+    low,
+    volume,
+    timestamp,
   };
 }
 
