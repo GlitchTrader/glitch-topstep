@@ -60,6 +60,13 @@ Fill `PROJECTX_USERNAME`, `PROJECTX_API_KEY`, `GLITCH_ACCOUNT_ID`, `GLITCH_ACCOU
 ## Run
 
 ```powershell
+.\start.ps1              # background (hidden node, logs in data/)
+.\start.ps1 -Foreground  # interactive console
+```
+
+Or manually:
+
+```powershell
 npm start
 ```
 
