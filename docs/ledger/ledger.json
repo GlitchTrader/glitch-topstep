@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "project": "glitch-topstep",
-  "updated": "2026-07-26",
+  "updated": "2026-07-27",
   "roadmap_ref": "docs/ROADMAP.md",
   "items": [
     {
@@ -75,7 +75,53 @@
       ]
     },
     {
-      "id": "TS-R2-01",
+      "id": "TS-R1-05",
+      "title": "Atomic UUID plus body-hash intent ownership (NT GL-AI-06 parity)",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "One hundred simultaneous identical intent POSTs cause exactly one provider mutation.",
+        "The same intent_id with a different body hash returns conflict and causes zero additional mutation.",
+        "Duplicate same-body retries replay in-progress or immutable receipt state."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-27: src/domain/intent-body-hash.ts canonical body hash.",
+        "2026-07-27: SqliteExecutionStore.registerIntent returns claimed, duplicate, or conflict under BEGIN IMMEDIATE.",
+        "2026-07-27: ExecutionCoordinator intent_body_conflict and barrier-synchronized 100-request fixture in tests/execution-coordinator.test.ts.",
+        "docs/PARITY.md rows: Atomic UUID plus body-hash claim; Same UUID with different body conflict."
+      ],
+      "sources": [
+        "src/storage/sqlite-execution-store.ts",
+        "src/execution/coordinator.ts",
+        "docs/AUTHORITY.md"
+      ]
+    },
+    {
+      "id": "TS-R4-00",
+      "title": "Nonterminal intents until native bracket and position proof (NT GL-AI-07 parity)",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "Entry receipts remain nonterminal until provider order identity and protective children are reconciled.",
+        "MOVE_STOP and MOVE_TP remain pending until exact native leg update confirms requested geometry.",
+        "Ambiguous transport and restart reconcile without time-authorized resubmission."
+      ],
+      "depends_on": [
+        "TS-R1-05",
+        "TS-R4-01"
+      ],
+      "evidence": [
+        "2026-07-27: reconcile-only ambiguous recovery already implemented; entry still returns submitted on API return (gap documented in docs/PARITY.md)."
+      ],
+      "sources": [
+        "docs/PARITY.md",
+        "src/execution/coordinator.ts",
+        "docs/AUTHORITY.md"
+      ]
+    },
       "title": "Authenticate with real TopstepX ProjectX key in shadow mode",
       "status": "blocked",
       "priority": "P0",

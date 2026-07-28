@@ -8,8 +8,14 @@ import type {
   StoredExecutionMutation,
   StoredIntentWithoutExecution,
 } from "../domain/execution-state.js";
+import { computeIntentBodyHash } from "../domain/intent-body-hash.js";
 import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+
+export type IntentRegistrationResult =
+  | { status: "claimed" }
+  | { status: "duplicate" }
+  | { status: "conflict" };
 
 interface SqlRow {
   [key: string]: string | number | bigint | Uint8Array | null;
@@ -81,21 +87,36 @@ export class SqliteExecutionStore {
     `).run(atUtc);
   }
 
-  public registerIntent(intent: TradeIntent, receivedUtc: string): boolean {
-    const result = this.database.prepare(`
-      INSERT OR IGNORE INTO intents (
-        intent_id, snapshot_hash, received_utc, account_alias, instrument, action, payload_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      intent.intentId,
-      intent.snapshotHash,
-      receivedUtc,
-      intent.account,
-      intent.instrument,
-      intent.action,
-      JSON.stringify(intent),
-    );
-    return Number(result.changes) === 1;
+  public registerIntent(intent: TradeIntent, receivedUtc: string): IntentRegistrationResult {
+    const bodyHash = computeIntentBodyHash(intent);
+    return this.inTransaction(() => {
+      const existing = this.database.prepare(`
+        SELECT body_hash
+        FROM intents
+        WHERE intent_id = ?
+      `).get(intent.intentId) as SqlRow | undefined;
+      if (existing) {
+        const storedHash = String(existing.body_hash);
+        return storedHash === bodyHash
+          ? { status: "duplicate" as const }
+          : { status: "conflict" as const };
+      }
+      this.database.prepare(`
+        INSERT INTO intents (
+          intent_id, body_hash, snapshot_hash, received_utc, account_alias, instrument, action, payload_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        intent.intentId,
+        bodyHash,
+        intent.snapshotHash,
+        receivedUtc,
+        intent.account,
+        intent.instrument,
+        intent.action,
+        JSON.stringify(intent),
+      );
+      return { status: "claimed" as const };
+    });
   }
 
   public recordReceipt(receipt: Record<string, unknown>): void {
@@ -381,6 +402,23 @@ export class SqliteExecutionStore {
       INSERT OR IGNORE INTO schema_migrations(version, applied_utc)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
     `);
+    this.applyMigration(2, `
+      ALTER TABLE intents ADD COLUMN body_hash TEXT NOT NULL DEFAULT '';
+    `);
+  }
+
+  private applyMigration(version: number, sql: string): void {
+    const applied = this.database.prepare(`
+      SELECT version FROM schema_migrations WHERE version = ?
+    `).get(version) as SqlRow | undefined;
+    if (applied) {
+      return;
+    }
+    this.database.exec(sql);
+    this.database.prepare(`
+      INSERT INTO schema_migrations(version, applied_utc)
+      VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    `).run(version);
   }
 
   private transitionMutation(

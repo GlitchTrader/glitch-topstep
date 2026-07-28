@@ -60,7 +60,16 @@ export class ExecutionCoordinator {
     }
 
     const receivedUtc = new Date().toISOString();
-    if (!this.store.registerIntent(intent, receivedUtc)) {
+    const registration = this.store.registerIntent(intent, receivedUtc);
+    if (registration.status === "conflict") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "intent_body_conflict",
+        detail: "The same intent_id was already registered with a different body hash.",
+      });
+    }
+    if (registration.status === "duplicate") {
       const existing = this.store.receiptForIntent<ExecutionReceipt>(intent.intentId);
       return existing ?? this.ephemeral({
         intentId: intent.intentId,

@@ -71,8 +71,12 @@ Glitch must not encode or enforce:
 - a rule that a capacity, buffer, policy, confidence, or quality field automatically decides the trade;
 - a learning approval gate based on one builder's preferred strategy;
 - Apex, replication, master/follower, NinjaTrader, or generic prop-firm assumptions in the Topstep core.
+- wall-clock TTL, callback delay, retry count, or resume counter as authority to resubmit or terminalize an intent;
+- time-based recovery-close or visibility-pending shortcuts that bypass provider reconciliation.
 
 Operator controls such as `disabled`, `shadow`, and `armed` are explicit human authority over order mutation. They are not market strategy.
+
+Ambiguous provider transport remains nonterminal until custom-tag, historical order search, or authoritative position truth reconciles the outcome. Reconciliation timers may observe stale state; they must not authorize duplicate exposure.
 
 ## Evidence semantics
 

@@ -193,4 +193,121 @@ describe("execution coordinator serialization", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("rejects the same intent_id with a different body hash", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-conflict-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+      );
+      store.recordIssuedPacket(packet);
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        { placeOrder: async () => 9001, closePosition: async () => undefined } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const base = intent(
+        "00000000-0000-4000-8000-000000000301",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+      );
+      const conflicting = { ...base, reason: "Different body hash." };
+      const first = await coordinator.handleWireIntent(base);
+      const second = await coordinator.handleWireIntent(conflicting);
+      assert.equal(first.status, "submitted");
+      assert.equal(second.status, "rejected");
+      assert.equal(second.code, "intent_body_conflict");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("executes exactly one provider mutation across one hundred identical intents", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-barrier-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+      );
+      store.recordIssuedPacket(packet);
+      let placeOrderCalls = 0;
+      const api = {
+        placeOrder: async () => {
+          placeOrderCalls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return 9001;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const wireIntent = intent(
+        "00000000-0000-4000-8000-000000000401",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+      );
+      const receipts = await Promise.all(
+        Array.from({ length: 100 }, () => coordinator.handleWireIntent(wireIntent)),
+      );
+      assert.equal(placeOrderCalls, 1);
+      assert.equal(receipts.every((receipt) => receipt.status === "submitted"), true);
+      assert.equal(new Set(receipts.map((receipt) => receipt.receipt_id)).size, 1);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

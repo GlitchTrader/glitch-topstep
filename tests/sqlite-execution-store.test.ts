@@ -97,8 +97,8 @@ describe("SQLite execution store", () => {
   it("enforces persistent intent identity and receipt replay", () => {
     const store = new SqliteExecutionStore(":memory:");
     const value = intent();
-    assert.equal(store.registerIntent(value, "2026-07-21T12:00:05Z"), true);
-    assert.equal(store.registerIntent(value, "2026-07-21T12:00:06Z"), false);
+    assert.deepEqual(store.registerIntent(value, "2026-07-21T12:00:05Z"), { status: "claimed" });
+    assert.deepEqual(store.registerIntent(value, "2026-07-21T12:00:06Z"), { status: "duplicate" });
     store.recordReceipt({
       receipt_id: "receipt-1",
       recorded_utc: "2026-07-21T12:00:07Z",
@@ -108,6 +108,16 @@ describe("SQLite execution store", () => {
     });
     const receipt = store.receiptForIntent<{ code: string }>(value.intentId);
     assert.equal(receipt?.code, "entry_verified_not_submitted");
+    store.close();
+  });
+
+  it("rejects the same intent_id with a different body hash", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const first = intent();
+    const second = intent();
+    second.reason = "Different body.";
+    assert.deepEqual(store.registerIntent(first, "2026-07-21T12:00:05Z"), { status: "claimed" });
+    assert.deepEqual(store.registerIntent(second, "2026-07-21T12:00:06Z"), { status: "conflict" });
     store.close();
   });
 

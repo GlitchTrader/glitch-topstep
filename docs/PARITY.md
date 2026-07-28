@@ -13,6 +13,8 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Hard loss-floor calculation | Implemented for configured models | Automatic authoritative account lifecycle |
 | Protected market entry translation | Scaffold implemented | Real provider bracket and fill evidence |
 | Durable SQLite intent identity | Implemented | Process and Windows restart fixtures |
+| Atomic UUID plus body-hash claim | Implemented | Process-kill and Windows restart fixtures |
+| Same UUID with different body conflict | Implemented | Operator acceptance of conflict receipt |
 | Durable outbox before provider mutation | Implemented | Kill-point fixtures around every transition |
 | Serialized entry settlement latch | Implemented | Real order/position propagation fixture |
 | Ambiguous entry recovery | Implemented by exact historical custom-tag identity | Real transport-timeout fixture |
@@ -34,7 +36,7 @@ This ledger maps useful behavioural contracts from the NinjaTrader edition into 
 | Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
 | Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
-| Provider-created stop/target ownership | Missing, P0 | Explicit child-order, OCO, or equivalent provider relation |
+| Provider-created stop/target ownership | Missing, P0 | Explicit child-order, OCO, or equivalent provider relation; nonterminal until native bracket proof (NT GL-AI-07 parity) |
 | Exact structural bracket correction | Missing, P0 | Protective child identity and amendment proof |
 | `MOVE_STOP` / `MOVE_TP` | Missing | Exact-leg mutation and sibling non-interference |
 | Multiple independent entry tranches | Missing | Per-tranche protection ownership and restart reconstruction |
