@@ -43,15 +43,15 @@ function nullableNumber(value: Record<string, unknown>, key: string): number | n
   if (field === null || field === undefined) {
     return null;
   }
-  return requiredNumber(value, key);
+  return coercedNumber(value, key);
 }
 
 export function parseAccount(input: unknown): AccountInfo {
   if (!isRecord(input)) throw new Error("account_not_object");
   return {
-    id: requiredNumber(input, "id"),
+    id: coercedInteger(input, "id"),
     name: requiredString(input, "name"),
-    balance: requiredNumber(input, "balance"),
+    balance: coercedNumber(input, "balance"),
     canTrade: requiredBoolean(input, "canTrade"),
     isVisible: requiredBoolean(input, "isVisible"),
     ...(typeof input.simulated === "boolean" ? { simulated: input.simulated } : {}),
@@ -73,35 +73,37 @@ export function parseContract(input: unknown): ContractInfo {
 
 export function parsePosition(input: unknown): PositionInfo {
   if (!isRecord(input)) throw new Error("position_not_object");
-  const type = requiredNumber(input, "type");
+  const type = coercedInteger(input, "type");
   if (![0, 1, 2].includes(type)) throw new Error("position_type_invalid");
   return {
-    id: requiredNumber(input, "id"),
-    accountId: requiredNumber(input, "accountId"),
+    id: coercedInteger(input, "id"),
+    accountId: coercedInteger(input, "accountId"),
     contractId: requiredString(input, "contractId"),
     creationTimestamp: requiredString(input, "creationTimestamp"),
     type: type as 0 | 1 | 2,
-    size: requiredNumber(input, "size"),
-    averagePrice: requiredNumber(input, "averagePrice"),
+    size: coercedNumber(input, "size"),
+    averagePrice: coercedNumber(input, "averagePrice"),
   };
 }
 
 export function parseOrder(input: unknown): OrderInfo {
   if (!isRecord(input)) throw new Error("order_not_object");
   return {
-    id: requiredNumber(input, "id"),
-    accountId: requiredNumber(input, "accountId"),
+    id: coercedInteger(input, "id"),
+    accountId: coercedInteger(input, "accountId"),
     contractId: requiredString(input, "contractId"),
     ...(typeof input.symbolId === "string" ? { symbolId: input.symbolId } : {}),
     creationTimestamp: requiredString(input, "creationTimestamp"),
     updateTimestamp: requiredString(input, "updateTimestamp"),
-    status: requiredNumber(input, "status"),
-    type: requiredNumber(input, "type"),
-    side: requiredNumber(input, "side"),
-    size: requiredNumber(input, "size"),
+    status: coercedInteger(input, "status"),
+    type: coercedInteger(input, "type"),
+    side: coercedInteger(input, "side"),
+    size: coercedNumber(input, "size"),
     limitPrice: nullableNumber(input, "limitPrice"),
     stopPrice: nullableNumber(input, "stopPrice"),
-    ...(typeof input.fillVolume === "number" ? { fillVolume: input.fillVolume } : {}),
+    ...(input.fillVolume === null || input.fillVolume === undefined
+      ? {}
+      : { fillVolume: coercedNumber(input, "fillVolume") }),
     ...(input.filledPrice === null || typeof input.filledPrice === "number"
       ? { filledPrice: input.filledPrice as number | null }
       : {}),
@@ -114,17 +116,17 @@ export function parseOrder(input: unknown): OrderInfo {
 export function parseTrade(input: unknown): TradeInfo {
   if (!isRecord(input)) throw new Error("trade_not_object");
   return {
-    id: requiredNumber(input, "id"),
-    accountId: requiredNumber(input, "accountId"),
+    id: coercedInteger(input, "id"),
+    accountId: coercedInteger(input, "accountId"),
     contractId: requiredString(input, "contractId"),
     creationTimestamp: requiredString(input, "creationTimestamp"),
-    price: requiredNumber(input, "price"),
+    price: coercedNumber(input, "price"),
     profitAndLoss: nullableNumber(input, "profitAndLoss"),
     fees: nullableNumber(input, "fees"),
-    side: requiredNumber(input, "side"),
-    size: requiredNumber(input, "size"),
+    side: coercedInteger(input, "side"),
+    size: coercedNumber(input, "size"),
     voided: requiredBoolean(input, "voided"),
-    orderId: requiredNumber(input, "orderId"),
+    orderId: coercedInteger(input, "orderId"),
   };
 }
 
