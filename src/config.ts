@@ -53,6 +53,8 @@ export interface AppConfig {
   packetLeaseMs: number;
 }
 
+const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
+
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name]?.trim();
   if (!value) {
@@ -63,6 +65,14 @@ function required(environment: NodeJS.ProcessEnv, name: string): string {
 
 function optional(environment: NodeJS.ProcessEnv, name: string, fallback: string): string {
   return environment[name]?.trim() || fallback;
+}
+
+function loopbackHost(environment: NodeJS.ProcessEnv): string {
+  const host = optional(environment, "GLITCH_LOCAL_HOST", "127.0.0.1").toLowerCase();
+  if (!NUMERIC_LOOPBACK_HOSTS.has(host)) {
+    throw new Error("GLITCH_LOCAL_HOST must be the numeric loopback address 127.0.0.1 or ::1");
+  }
+  return host;
 }
 
 function numberValue(
@@ -245,7 +255,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       liveMarketData: booleanValue(environment, "GLITCH_LIVE_MARKET_DATA", false),
     },
     localGateway: {
-      host: optional(environment, "GLITCH_LOCAL_HOST", "127.0.0.1"),
+      host: loopbackHost(environment),
       port: numberValue(
         environment,
         "GLITCH_LOCAL_PORT",
