@@ -70,7 +70,7 @@ Or manually:
 npm start
 ```
 
-Binds `http://127.0.0.1:8790` (loopback only — never expose to LAN/internet).
+Binds to a numeric loopback address only. `GLITCH_LOCAL_HOST` accepts `127.0.0.1` or `::1`; wildcard, hostname, LAN, and public binds are rejected before service startup. Never expose the gateway to LAN or internet.
 
 ```powershell
 curl http://127.0.0.1:8790/health
@@ -171,7 +171,7 @@ Recent NT parity shipped: **TS-R1-05** atomic UUID + body-hash claim.
 
 1. Default **`GLITCH_TRADING_MODE=shadow`** — no live orders without operator approval and runtime evidence.
 2. **`armed`** requires `GLITCH_ARMED_ACK=I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY` — not a readiness claim.
-3. Bind **127.0.0.1** only.
+3. Bind only to numeric loopback `127.0.0.1` or `::1`; invalid hosts fail before provider activity.
 4. **ProjectX credentials stay in this repo's `.env`** — never in Hermes, logs, or git.
 5. **Green tests ≠ live-ready.** See promotion rule in [`docs/PARITY.md`](docs/PARITY.md).
 6. **Not NinjaTrader** — do not import CopyEngine, Apex, or replication code. Behavioral contracts only via PARITY.
