@@ -38,10 +38,12 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
 | Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
-| Provider-created stop/target ownership | Missing, P0 | Explicit child-order, OCO, or equivalent provider relation; nonterminal until native bracket proof (NT GL-AI-07 parity) |
-| Exact structural bracket correction | Missing, P0 | Protective child identity and amendment proof |
-| `MOVE_STOP` / `MOVE_TP` | Missing | Exact-leg mutation and sibling non-interference |
-| Multiple independent entry tranches | Missing | Per-tranche protection ownership and restart reconstruction |
+| Provider-created stop/target ownership | Missing, P0 — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | Explicit child-order, OCO, or equivalent provider relation; nonterminal until native bracket proof (NT GL-AI-07 parity) |
+| Exact structural bracket correction | Missing, P0 — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | Protective child identity and amendment proof |
+| `MOVE_STOP` | Missing — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Exact-leg mutation and sibling non-interference; blocked until #17 accepted |
+| `MOVE_TP` | Missing — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Exact-leg mutation and sibling non-interference; blocked until #17 accepted |
+| Partial scale-out (`EXIT` quantity) | Missing — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | `partialCloseContract` or equivalent; bracket behavior after partial documented |
+| Multiple independent entry tranches | Missing, P3 — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27) | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
@@ -71,11 +73,50 @@ Donor repositories are read-only. A row is complete only when implementation, de
 6. **Native multi-timeframe ProjectX market evidence — implemented in software.**
 7. **Rolling tape and bounded depth evidence — implemented in software.**
 8. Real ProjectX read-only, payload-rate, bar/history/order-flow boundary, disconnect, correction, replay comparison, and crash-window acceptance.
-9. Explicit protective-child ownership discovery and protection reconstruction.
-10. Exact amendments and multiple protected tranches.
-11. Canonical outcomes and Hermes learning input.
-12. Session structure and automatic Topstep policy/session truth.
-13. One-account shadow evaluation, promotion review, and payout lifecycle.
+9. **Position management (PM)** — phased roadmap below; Hermes must not advertise actions the gateway has not accepted.
+10. Canonical outcomes and Hermes learning input.
+11. Session structure and automatic Topstep policy/session truth.
+12. One-account shadow evaluation, promotion review, and payout lifecycle.
+
+## Position management roadmap (PM)
+
+Topstep-native position management is **not** NT Master/Follower replication. Each phase earns ledger acceptance before the Hermes profile adds the corresponding `supported_actions` or intent shape.
+
+| Phase | Track | Issue | Unblocks | Hermes impact |
+|---|---|---|---|---|
+| **PM-0** | Protection ownership + nonterminal entry proof | [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `protection.status: proven`, `open_protected` terminal state | No new actions; truthful `protection` block in packet |
+| **PM-1** | `MOVE_STOP` exact-leg amendment | [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Runner / breakeven stop moves | Add `MOVE_STOP` to `supported_actions` after acceptance |
+| **PM-2** | `MOVE_TP` exact-leg amendment | [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Target extension / trail | Add `MOVE_TP` after acceptance |
+| **PM-3** | Partial scale-out | [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Bank partial profit, leave runner | `EXIT` with optional `quantity` / `exit_fraction` |
+| **PM-4** | Multi-tranche entries (optional) | [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27) | Scale-in as separate decisions | Per-tranche evidence in packet / outcomes |
+
+### PM-0 acceptance (blocks all later phases)
+
+- Provider stop and target child IDs bound to entry via explicit `trade.orderId` / `customTag` — never inferred from price proximity.
+- Entry receipt stays nonterminal until reconciled position + protective geometry match intent.
+- `protection.status` must not remain `unknown` while position is open.
+- Process restart reconstructs ownership from durable order/trade history before any replay.
+
+### PM-1 / PM-2 acceptance (amendments)
+
+- Amendment intents select one protective leg by provider identity.
+- REST modify → pending receipt → reconciled terminal (applied / rejected / ambiguous).
+- Sibling leg and position quantity unchanged on success.
+- Same UUID/body idempotent replay; no blind resubmit after timeout.
+
+### PM-3 acceptance (partial exit)
+
+- Partial `EXIT` reduces attributable quantity only; default remains full flat.
+- Document ProjectX bracket rescale/rebind behavior on partial close.
+- Packet reflects remaining quantity and protection state truthfully.
+
+### PM-4 acceptance (multi-tranche, defer)
+
+- Each tranche: intent UUID + entry order ID + protective children.
+- Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
+- Restart recovers all open tranches from provider history.
+
+**Current gateway state:** `supported_actions` = `ENTER_* | HOLD | EXIT | NOTHING` only. `MOVE_STOP` / `MOVE_TP` exist in models but are not parsed or executed. Do not enable in Hermes until the matching PM phase is accepted here.
 
 ## Promotion rule
 
