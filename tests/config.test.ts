@@ -20,6 +20,7 @@ describe("configuration authority", () => {
     const config = loadConfig(environment());
     assert.equal(config.tradingMode, "shadow");
     assert.equal(config.scope.instrument, "MNQ");
+    assert.equal(config.localGateway.host, "127.0.0.1");
     assert.equal(config.policy.authority, "operator_configured");
     assert.equal(config.policy.lossModel, "express_funded_eod");
     assert.equal(config.providerEvidence.marketEventRetention, 500_000);
@@ -27,6 +28,21 @@ describe("configuration authority", () => {
     assert.equal("requireSimulatedAccount" in config, false);
     assert.equal("maxRiskFractionOfBuffer" in config.risk, false);
     assert.equal("entryWindowOpen" in config.policy, false);
+  });
+
+  it("accepts only numeric loopback hosts for the local gateway", () => {
+    const ipv6 = loadConfig({
+      ...environment(),
+      GLITCH_LOCAL_HOST: "::1",
+    });
+    assert.equal(ipv6.localGateway.host, "::1");
+
+    for (const host of ["0.0.0.0", "::", "192.168.1.15", "203.0.113.10", "localhost", "gateway.local"]) {
+      assert.throws(
+        () => loadConfig({ ...environment(), GLITCH_LOCAL_HOST: host }),
+        /GLITCH_LOCAL_HOST must be the numeric loopback address/,
+      );
+    }
   });
 
   it("requires an explicit instrument and loss model", () => {
