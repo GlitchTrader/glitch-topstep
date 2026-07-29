@@ -30,6 +30,26 @@ $nodeArgs = @("--enable-source-maps", "dist/src/index.js")
 $port = if ($env:GLITCH_LOCAL_PORT) { [int]$env:GLITCH_LOCAL_PORT } else { 8790 }
 $url = "http://127.0.0.1:$port"
 
+$listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+if ($listeners.Count -gt 0) {
+    $owners = @(
+        $listeners |
+            Select-Object -ExpandProperty OwningProcess -Unique |
+            ForEach-Object {
+                $processId = [int]$_
+                $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+                if ($process) {
+                    "PID $processId ($($process.ProcessName))"
+                }
+                else {
+                    "PID $processId"
+                }
+            }
+    )
+    $ownerText = if ($owners.Count -gt 0) { $owners -join ", " } else { "an unknown process" }
+    throw "Port $port is already in use by $ownerText. Refusing to stop an unverified process. Stop the intended gateway explicitly or choose a different GLITCH_LOCAL_PORT."
+}
+
 if ($Foreground) {
     Write-Host "Gateway em $url (foreground)" -ForegroundColor Cyan
     & node @nodeArgs
@@ -44,14 +64,6 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
 $stdoutLog = Join-Path $dataDir "gateway.stdout.log"
 $stderrLog = Join-Path $dataDir "gateway.stderr.log"
-
-Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue |
-    ForEach-Object {
-        if ($_.OwningProcess -gt 0) {
-            Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
-        }
-    }
-Start-Sleep -Milliseconds 500
 
 # ponytail: npm.cmd no Windows abre janela cmd; invocar node directamente evita popup
 Start-Process -FilePath "node" `
