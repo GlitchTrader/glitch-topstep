@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   parseDepth,
   parseMarketTrade,
+  parseOrder,
   parseQuote,
   unwrapMarketStreamArgs,
 } from "../src/projectx/schemas.js";
@@ -132,5 +133,28 @@ describe("market stream payload normalization", () => {
       },
     ]);
     assert.equal(sparseBatch.price, 28010);
+  });
+});
+
+describe("user stream numeric coercion", () => {
+  it("parses GatewayUserOrder payloads when ProjectX sends numeric ids as strings", () => {
+    const order = parseOrder({
+      id: "9123456",
+      accountId: "25915453",
+      contractId: CONTRACT,
+      creationTimestamp: "2026-07-29T20:27:21.000Z",
+      updateTimestamp: "2026-07-29T20:27:21.100Z",
+      status: "1",
+      type: "2",
+      side: "1",
+      size: "1",
+      limitPrice: null,
+      stopPrice: "27200",
+      customTag: "glitch-intent-test",
+    });
+    assert.equal(order.id, 9123456);
+    assert.equal(order.accountId, 25915453);
+    assert.equal(order.stopPrice, 27200);
+    assert.equal(order.customTag, "glitch-intent-test");
   });
 });
