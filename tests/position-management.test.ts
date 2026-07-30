@@ -515,4 +515,70 @@ describe("position management coordinator", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("returns closed when reconciliation already marked EXIT submitted during closePosition", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-race-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const exitIntentId = "00000000-0000-4000-8000-00000000b004";
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async () => undefined,
+        closePosition: async () => {
+          const mutation = store.mutationForIntent(exitIntentId);
+          if (mutation?.state === "submitting") {
+            store.markMutationSubmitted(exitIntentId, null, new Date().toISOString());
+          }
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: exitIntentId,
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Flatten after amendments.",
+        decision_audit: audit("EXIT"),
+      });
+      assert.equal(receipt.status, "closed");
+      assert.equal(receipt.code, "close_contract_submitted");
+      assert.equal(store.mutationForIntent(exitIntentId)?.state, "submitted");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

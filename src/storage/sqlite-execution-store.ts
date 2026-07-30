@@ -489,6 +489,9 @@ export class SqliteExecutionStore {
         throw new Error(`execution_mutation_not_found:${intentId}`);
       }
       const state = String(current.state) as ExecutionMutationState;
+      if (state === nextState) {
+        return;
+      }
       if (!allowedStates.includes(state)) {
         throw new Error(`execution_mutation_transition_invalid:${state}->${nextState}`);
       }

@@ -82,7 +82,11 @@ export async function recoverExecutionMutations(
     }
 
     for (const mutation of uncertainEntries) {
-      const outcome = reconcileEntryMutation(mutation, historicalOrders, accountId, contractId);
+      const live = store.mutationForIntent(mutation.intentId);
+      if (!live || isTerminalMutationState(live.state)) {
+        continue;
+      }
+      const outcome = reconcileEntryMutation(live, historicalOrders, accountId, contractId);
       if (outcome.orderId !== null) {
         store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
         changed = true;
@@ -127,7 +131,11 @@ export async function recoverExecutionMutations(
     }
 
     for (const mutation of uncertainModifyEntries) {
-      const outcome = reconcileModifyMutation(mutation, historicalOrders, accountId, contractId);
+      const live = store.mutationForIntent(mutation.intentId);
+      if (!live || isTerminalMutationState(live.state)) {
+        continue;
+      }
+      const outcome = reconcileModifyMutation(live, historicalOrders, accountId, contractId);
       if (outcome.recovered) {
         store.markMutationSubmitted(
           mutation.intentId,
@@ -168,6 +176,10 @@ export async function recoverExecutionMutations(
     for (const mutation of unresolved.filter(
       (candidate) => candidate.operation === "close_position" && candidate.state !== "prepared",
     )) {
+      const live = store.mutationForIntent(mutation.intentId);
+      if (!live || isTerminalMutationState(live.state)) {
+        continue;
+      }
       if (!contractStillOpen) {
         store.markMutationSubmitted(mutation.intentId, null, now.toISOString());
         changed = true;
@@ -203,6 +215,14 @@ export async function recoverExecutionMutations(
     store.recordRecoveryResult(now.toISOString(), detail);
     throw error;
   }
+}
+
+function isTerminalMutationState(
+  state: StoredExecutionMutation["state"],
+): boolean {
+  return state === "submitted"
+    || state === "confirmed_not_submitted"
+    || state === "rejected";
 }
 
 function reconstructOrphanIntentResolution(

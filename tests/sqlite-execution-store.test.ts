@@ -186,4 +186,23 @@ describe("SQLite execution store", () => {
     assert.equal(store.recoveryStatus().ambiguousMutations, 1);
     store.close();
   });
+
+  it("treats markMutationSubmitted as idempotent when already submitted", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const value = intent("00000000-0000-4000-8000-000000000006");
+    value.action = "EXIT";
+    store.registerIntent(value, "2026-07-21T12:00:05Z");
+    store.prepareMutation(
+      value.intentId,
+      "close_position",
+      { accountId: 101, contractId: "CON.F.US.MNQ.U26" },
+      null,
+      "2026-07-21T12:00:06Z",
+    );
+    store.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
+    store.markMutationSubmitted(value.intentId, null, "2026-07-21T12:00:08Z");
+    store.markMutationSubmitted(value.intentId, null, "2026-07-21T12:00:09Z");
+    assert.equal(store.mutationForIntent(value.intentId)?.state, "submitted");
+    store.close();
+  });
 });
