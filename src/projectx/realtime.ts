@@ -25,6 +25,7 @@ import {
   parseQuote,
   parseTrade,
   unwrapMarketStreamArgs,
+  userStreamPayloadFaultDetail,
 } from "./schemas.js";
 
 export interface ProjectXRealtimeOptions {
@@ -309,7 +310,7 @@ export class ProjectXRealtimeClient {
       });
       this.state.markStreamEvent(kind);
     } catch (error) {
-      this.payloadFault(kind, error);
+      this.payloadFault(kind, error, kind === "user" ? { eventType, rawPayload } : undefined);
     }
   }
 
@@ -342,9 +343,19 @@ export class ProjectXRealtimeClient {
     }
   }
 
-  private payloadFault(kind: VenueStreamKind, error: unknown): void {
+  private payloadFault(
+    kind: VenueStreamKind,
+    error: unknown,
+    context?: { eventType: string; rawPayload: unknown },
+  ): void {
     this.state.markPayloadFault(kind, error);
     console.error("Rejected ProjectX realtime event", error);
+    if (kind === "user" && context) {
+      console.error(
+        "Rejected ProjectX user stream payload detail",
+        userStreamPayloadFaultDetail(context.eventType, context.rawPayload),
+      );
+    }
     // ponytail: market parse faults are local evidence gaps; REST reconcile amplifies 429 pressure.
     if (kind !== "market") {
       void this.options.onStateInvalidated?.();

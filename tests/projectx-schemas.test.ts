@@ -4,8 +4,11 @@ import {
   parseDepth,
   parseMarketTrade,
   parseOrder,
+  parsePosition,
   parseQuote,
+  parseTrade,
   unwrapMarketStreamArgs,
+  userStreamPayloadFaultDetail,
 } from "../src/projectx/schemas.js";
 
 const CONTRACT = "CON.F.US.MNQ.U26";
@@ -190,5 +193,57 @@ describe("user stream numeric coercion", () => {
       stopPrice: null,
     });
     assert.equal(order.id, 88776655);
+  });
+
+  it("defaults position type to Undefined (0) when ProjectX omits type on flat updates", () => {
+    const position = parsePosition({
+      id: "441122",
+      accountId: 25915453,
+      contractId: CONTRACT,
+      creationTimestamp: "2026-07-29T20:27:21.000Z",
+      size: 0,
+      averagePrice: 0,
+    });
+    assert.equal(position.id, 441122);
+    assert.equal(position.type, 0);
+  });
+
+  it("parses documented GatewayUserTrade id and orderId fields as strings", () => {
+    const trade = parseTrade({
+      id: "2926551391",
+      accountId: "25915453",
+      contractId: CONTRACT,
+      creationTimestamp: "2026-07-29T20:27:21.000Z",
+      price: 27590.75,
+      profitAndLoss: null,
+      fees: null,
+      side: "1",
+      size: "1",
+      voided: false,
+      orderId: "3338853733",
+    });
+    assert.equal(trade.id, 2926551391);
+    assert.equal(trade.orderId, 3338853733);
+  });
+});
+
+describe("userStreamPayloadFaultDetail", () => {
+  it("reports id field types without leaking full payload", () => {
+    const detail = userStreamPayloadFaultDetail("order", {
+      id: "9123456",
+      orderId: 88776655,
+      orderID: "bad",
+      accountId: 25915453,
+      contractId: CONTRACT,
+      customTag: "secret-should-not-appear",
+    });
+    assert.equal(detail.eventType, "order");
+    assert.deepEqual(detail.idFieldTypes, {
+      accountId: "number",
+      id: "string",
+      orderID: "string",
+      orderId: "number",
+    });
+    assert.equal((detail as { customTag?: string }).customTag, undefined);
   });
 });
