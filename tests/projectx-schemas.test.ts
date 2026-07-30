@@ -8,6 +8,7 @@ import {
   parseQuote,
   parseTrade,
   unwrapMarketStreamArgs,
+  unwrapUserStreamPayload,
   userStreamPayloadFaultDetail,
 } from "../src/projectx/schemas.js";
 
@@ -245,5 +246,27 @@ describe("userStreamPayloadFaultDetail", () => {
       orderId: "number",
     });
     assert.equal((detail as { customTag?: string }).customTag, undefined);
+  });
+});
+
+describe("unwrapUserStreamPayload", () => {
+  it("unwraps ProjectX user hub action/data envelopes before parsing", () => {
+    const order = parseOrder(unwrapUserStreamPayload({
+      action: 1,
+      data: {
+        id: "9123456",
+        accountId: 25915453,
+        contractId: CONTRACT,
+        creationTimestamp: "2026-07-29T20:27:21.000Z",
+        updateTimestamp: "2026-07-29T20:27:21.100Z",
+        status: 1,
+        type: 2,
+        side: 1,
+        size: 1,
+        limitPrice: null,
+        stopPrice: null,
+      },
+    }));
+    assert.equal(order.id, 9123456);
   });
 });

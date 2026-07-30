@@ -25,6 +25,7 @@ import {
   parseQuote,
   parseTrade,
   unwrapMarketStreamArgs,
+  unwrapUserStreamPayload,
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
 
@@ -119,11 +120,12 @@ export class ProjectXRealtimeClient {
 
   private registerHandlers(): void {
     this.userConnection.on("GatewayUserAccount", (input: unknown) => {
+      const payload = unwrapUserStreamPayload(input);
       this.recordAndApply(
         "user",
         "account",
         input,
-        () => parseAccount(input),
+        () => parseAccount(payload),
         (value) => ({
           accountId: value.id,
           contractId: null,
@@ -134,11 +136,12 @@ export class ProjectXRealtimeClient {
       );
     });
     this.userConnection.on("GatewayUserPosition", (input: unknown) => {
+      const payload = unwrapUserStreamPayload(input);
       this.recordAndApply(
         "user",
         "position",
         input,
-        () => parsePosition(input),
+        () => parsePosition(payload),
         (value) => ({
           accountId: value.accountId,
           contractId: value.contractId,
@@ -149,11 +152,12 @@ export class ProjectXRealtimeClient {
       );
     });
     this.userConnection.on("GatewayUserOrder", (input: unknown) => {
+      const payload = unwrapUserStreamPayload(input);
       this.recordAndApply(
         "user",
         "order",
         input,
-        () => parseOrder(input),
+        () => parseOrder(payload),
         (value) => ({
           accountId: value.accountId,
           contractId: value.contractId,
@@ -164,11 +168,12 @@ export class ProjectXRealtimeClient {
       );
     });
     this.userConnection.on("GatewayUserTrade", (input: unknown) => {
+      const payload = unwrapUserStreamPayload(input);
       this.recordAndApply(
         "user",
         "trade",
         input,
-        () => parseTrade(input),
+        () => parseTrade(payload),
         (value) => ({
           accountId: value.accountId,
           contractId: value.contractId,

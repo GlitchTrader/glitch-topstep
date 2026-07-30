@@ -21,20 +21,39 @@ function isTrackedUserStreamIdField(key: string): boolean {
   return key === "id" || key.endsWith("Id") || key.endsWith("ID");
 }
 
+/** ProjectX user hub sometimes wraps entity updates as `{ action, data }`. */
+export function unwrapUserStreamPayload(input: unknown): unknown {
+  if (!isRecord(input)) {
+    return input;
+  }
+  if (!("data" in input) || !isRecord(input.data)) {
+    return input;
+  }
+  if (!("action" in input)) {
+    return input;
+  }
+  return input.data;
+}
+
 /** Sanitized operator detail when a user-stream payload fails strict ProjectX parsing. */
 export function userStreamPayloadFaultDetail(
   eventType: string,
   input: unknown,
 ): Record<string, unknown> {
-  if (!isRecord(input)) {
-    return { eventType, payloadKind: input === null ? "null" : typeof input };
+  const unwrapped = unwrapUserStreamPayload(input);
+  if (!isRecord(unwrapped)) {
+    return {
+      eventType,
+      payloadKind: unwrapped === null ? "null" : typeof unwrapped,
+      wrapped: isRecord(input) && "data" in input,
+    };
   }
   const idFieldTypes: Record<string, string> = {};
-  for (const key of Object.keys(input).sort()) {
+  for (const key of Object.keys(unwrapped).sort()) {
     if (!isTrackedUserStreamIdField(key)) {
       continue;
     }
-    const field = input[key];
+    const field = unwrapped[key];
     idFieldTypes[key] = field === null
       ? "null"
       : Array.isArray(field)
@@ -43,7 +62,8 @@ export function userStreamPayloadFaultDetail(
   }
   return {
     eventType,
-    keys: Object.keys(input).sort(),
+    wrapped: unwrapped !== input,
+    keys: Object.keys(unwrapped).sort(),
     idFieldTypes,
   };
 }
