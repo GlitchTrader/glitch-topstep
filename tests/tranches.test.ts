@@ -167,6 +167,24 @@ describe("tranche projection", () => {
     assert.equal(tranches[1]?.remaining_qty, 1);
   });
 
+  it("does not apply historical full flat exits to tranches created later", () => {
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001), entry(ENTRY_B, 1, 9002)],
+      new Map([
+        [ENTRY_A, "2026-07-21T12:10:05Z"],
+        [ENTRY_B, "2026-07-21T12:10:06Z"],
+      ]),
+      [{
+        exitIntentId: "00000000-0000-4000-8000-00000000e000",
+        quantity: Number.MAX_SAFE_INTEGER,
+        targetIntentId: null,
+        createdUtc: "2026-07-21T12:05:00Z",
+      }],
+    );
+    assert.equal(tranches[0]?.remaining_qty, 1);
+    assert.equal(tranches[1]?.remaining_qty, 1);
+  });
+
   it("reads submitted exit allocations from the execution store", () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-tranches-exit-"));
     const path = join(directory, "glitch-topstep.sqlite");
