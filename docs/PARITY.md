@@ -40,10 +40,10 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
 | Provider-created stop/target ownership | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `customTag` SL/TP binding; live acceptance + nonterminal entry proof on sanitized payloads |
 | Exact structural bracket correction | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `modifyOrder` amendment receipts; sibling non-interference on live payloads |
-| `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue stop price moved) |
-| `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue TP price moved) |
-| Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Bracket rescale/rebind after partial on real ProjectX payloads |
-| Multiple independent entry tranches | Implemented in software (Phase A+B) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), PR [#35](https://github.com/GlitchTrader/glitch-topstep/pull/35) | `tranches[]` in `/ownership` and packet; EXIT `target_intent_id` + FIFO partial; live multi-tranche acceptance and Phase C (scale-in, per-tranche MOVE_*, restart) pending |
+| `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Live acceptance 2026-07-30: short+long cycles, venue stop moved, idempotent replay (`move_stop_reconciled`) |
+| `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Live acceptance 2026-07-30: short+long cycles, venue TP moved |
+| Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Full flat `EXIT` live 2026-07-30 (202/`close_contract_submitted`); partial qty not exercised (1 MNQ contract) |
+| Multiple independent entry tranches | Implemented in software (Phase A+B) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), merged [#35](https://github.com/GlitchTrader/glitch-topstep/pull/35) (`f872497`) | `tranches[]` in `/ownership` and packet; EXIT `target_intent_id` + FIFO partial; live multi-tranche acceptance and Phase C pending |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
@@ -116,7 +116,7 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
 - Restart recovers all open tranches from provider history.
 
-**Current gateway state:** `supported_actions` includes `MOVE_STOP` and `MOVE_TP` when `protection.status === proven`. Partial `EXIT` accepts optional `quantity`. Ledger acceptance for PM-0–PM-3 requires live payload evidence — software contracts are implemented and unit-tested.
+**Current gateway state (live `f872497`, 2026-07-30):** `supported_actions` includes `MOVE_STOP` and `MOVE_TP` when `protection.status === proven`. Partial `EXIT` accepts optional `quantity`. **PM-0 / PM-1 / PM-2** accepted live on short and long cycles (`data/pm-e2e-full-result.json` on gateway host). Full flat `EXIT` returns 202 after PR #36 race fix. **PM-3** partial qty and **PM-4** multi-tranche live cycles remain open.
 
 ## Promotion rule
 
