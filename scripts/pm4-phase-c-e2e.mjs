@@ -206,13 +206,24 @@ function baseIntent(action, snap, intentId = randomUUID()) {
   };
 }
 
+function reconciliationCurrentFromHealth(hlth) {
+  const op = hlth.data_quality?.operational;
+  const rec = op?.reconciliation;
+  return rec?.state === "succeeded" && rec?.generation === op?.generation;
+}
+
+function reconciliationCurrentFromPacket(pkt) {
+  const dq = pkt.data_quality ?? {};
+  return dq.reconciliation_state === "succeeded"
+    && dq.reconciliation_generation === dq.generation;
+}
+
 async function waitReconciliationReady() {
   for (let i = 0; i < 120; i++) {
     const hlth = await health();
-    const rec = hlth.data_quality?.operational?.reconciliation;
     const stateAge = hlth.data_quality?.state_age_ms ?? 99999;
     if (
-      rec?.state === "succeeded"
+      reconciliationCurrentFromHealth(hlth)
       && hlth.data_quality?.state_complete
       && stateAge < 4000
     ) {
@@ -223,11 +234,35 @@ async function waitReconciliationReady() {
   throw new Error("reconciliation_not_ready");
 }
 
-async function submitIntent(body, steps, stepName, retries = 12) {
+async function waitPacketReconciliationCurrent(timeoutSec = 60) {
+  for (let i = 0; i < timeoutSec * 2; i++) {
+    const pkt = await packet();
+    if (reconciliationCurrentFromPacket(pkt)) return pkt;
+    await sleep(500);
+  }
+  throw new Error("packet_reconciliation_not_current");
+}
+
+const RECONCILIATION_RETRY_CODES = new Set([
+  "decision_packet_unknown_or_expired",
+  "account_state_stale",
+  "quote_stale",
+  "venue_state_incomplete",
+  "working_order_ownership_unresolved",
+  "protection_not_proven",
+  "execution_preparation_failed",
+]);
+
+function isReconciliationRetry(res) {
+  return RECONCILIATION_RETRY_CODES.has(res.body.code)
+    || String(res.body.detail ?? "").includes("reconciliation_not_current");
+}
+
+async function submitIntent(body, steps, stepName, retries = 24) {
   let current = { ...body, intent_id: body.intent_id ?? randomUUID() };
   for (let attempt = 0; attempt < retries; attempt++) {
     await waitReconciliationReady();
-    const pkt = await packet();
+    const pkt = await waitPacketReconciliationCurrent();
     if (current.stop_loss !== undefined) {
       const brackets = body.action === "ENTER_LONG"
         ? wideLongBrackets(pkt)
@@ -269,20 +304,13 @@ async function submitIntent(body, steps, stepName, retries = 12) {
       return { ...res, intent_id: current.intent_id };
     }
     if (
-      res.body.code === "decision_packet_unknown_or_expired"
-      || res.body.code === "account_state_stale"
-      || res.body.code === "quote_stale"
-      || res.body.code === "venue_state_incomplete"
+      isReconciliationRetry(res)
       || res.body.code === "stop_not_tick_aligned"
       || res.body.code === "target_not_tick_aligned"
-      || res.body.code === "working_order_ownership_unresolved"
-      || res.body.code === "protection_not_proven"
-      || res.body.code === "execution_preparation_failed"
       || String(res.body.detail ?? "").includes("stop_not_on_loss_side")
-      || String(res.body.detail ?? "").includes("reconciliation_not_current")
     ) {
       current.intent_id = randomUUID();
-      await sleep(1500);
+      await sleep(isReconciliationRetry(res) ? 4000 : 1500);
       continue;
     }
     return { ...res, intent_id: current.intent_id };
@@ -381,6 +409,19 @@ async function cancelWorkingOrders(steps, label) {
     });
     child.on("error", reject);
   });
+}
+
+async function assertNoOpenOrders(steps, label) {
+  let st = await state();
+  if (countOpenOrders(st) > 0) {
+    await cancelWorkingOrders(steps, label);
+    await sleep(2000);
+    await waitNoOpenOrders(steps, label);
+    st = await state();
+  }
+  if (countOpenOrders(st) > 0) {
+    throw new Error(`${label}: open_orders_not_empty:${countOpenOrders(st)}`);
+  }
 }
 
 async function ensureFlat(steps) {
@@ -592,6 +633,7 @@ async function runTrancheScenario(scenario, {
   moveTpDelta,
 }) {
   const { steps, checks } = scenario;
+  await assertNoOpenOrders(steps, `${prefix}_PRE_ENTER`);
   let pkt = await packet();
   const brackets = enterAction === "ENTER_LONG" ? wideLongBrackets(pkt) : wideShortBrackets(pkt);
   if (!brackets) throw new Error(`${prefix}: no_entry_price`);
@@ -618,6 +660,7 @@ async function runTrancheScenario(scenario, {
 
   pkt = await waitArmedPacket(steps, `${prefix}_ARMED`);
   await sleep(8000);
+  await assertNoOpenOrders(steps, `${prefix}_PRE_SCALE_IN`);
   const trancheBIntentId = randomUUID();
   const enter2 = await submitIntent({
     ...baseIntent(enterAction, "unused", trancheBIntentId),
@@ -818,14 +861,26 @@ try {
     gateway_mode: hlth.gateway_mode,
   };
 
+  await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
   await ensureFlat(log.scenario_a.steps);
 
-  await runTrancheScenario(log.scenario_a, {
+  const scenarioAConfig = {
     prefix: "SHORT",
     enterAction: "ENTER_SHORT",
     moveStopDelta: -5 * TICK,
     moveTpDelta: 5 * TICK,
-  });
+  };
+  try {
+    await runTrancheScenario(log.scenario_a, scenarioAConfig);
+  } catch (enterAError) {
+    const msg = String(enterAError?.message ?? enterAError);
+    if (!msg.includes("ENTER_A")) throw enterAError;
+    log.scenario_a.steps.push({ step: "SHORT_ENTER_A_RETRY", reason: msg });
+    await sleep(30_000);
+    await cancelWorkingOrders(log.scenario_a.steps, "ENTER_A_RETRY");
+    await ensureFlat(log.scenario_a.steps);
+    await runTrancheScenario(log.scenario_a, scenarioAConfig);
+  }
 
   const runRestart = process.env.PM4_E2E_RESTART === "1";
   if (!runRestart) {
