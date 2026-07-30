@@ -89,7 +89,7 @@ export function parsePosition(input: unknown): PositionInfo {
 export function parseOrder(input: unknown): OrderInfo {
   if (!isRecord(input)) throw new Error("order_not_object");
   return {
-    id: coercedInteger(input, "id"),
+    id: coercedIntegerField(input, "id", "orderId"),
     accountId: coercedInteger(input, "accountId"),
     contractId: requiredString(input, "contractId"),
     ...(typeof input.symbolId === "string" ? { symbolId: input.symbolId } : {}),
@@ -302,10 +302,26 @@ function coercedNumber(value: Record<string, unknown>, key: string): number {
 
 function coercedInteger(value: Record<string, unknown>, key: string): number {
   const parsed = coercedNumber(value, key);
-  if (!Number.isInteger(parsed)) {
+  const rounded = Math.round(parsed);
+  if (Math.abs(parsed - rounded) > 1e-6) {
     throw new Error(`invalid_number:${key}`);
   }
-  return parsed;
+  return rounded;
+}
+
+function coercedIntegerField(value: Record<string, unknown>, ...keys: string[]): number {
+  let lastError: Error | null = null;
+  for (const key of keys) {
+    if (!(key in value) || value[key] === null || value[key] === undefined) {
+      continue;
+    }
+    try {
+      return coercedInteger(value, key);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(`invalid_number:${key}`);
+    }
+  }
+  throw lastError ?? new Error(`invalid_number:${keys[0]}`);
 }
 
 export function parseMarketTrade(contractId: string, input: unknown): MarketTradeInfo {

@@ -39,3 +39,14 @@ export function calculateBracketTicks(
 
   return { stopTicks, targetTicks };
 }
+
+/** ProjectX bracket ticks are signed relative to entry side; magnitudes stay positive internally. */
+export function toProjectXBracketTicks(
+  side: "long" | "short",
+  brackets: BracketTicks,
+): BracketTicks {
+  if (side === "long") {
+    return { stopTicks: -brackets.stopTicks, targetTicks: brackets.targetTicks };
+  }
+  return { stopTicks: brackets.stopTicks, targetTicks: -brackets.targetTicks };
+}

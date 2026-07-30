@@ -10,6 +10,7 @@ import {
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import { gatewayModePermitsLiveOrders } from "./gateway-mode.js";
+import { toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
@@ -174,6 +175,11 @@ export class ExecutionCoordinator {
         });
       }
 
+      const side = intent.action === "ENTER_LONG" ? "long" : "short";
+      const projectXBrackets = toProjectXBracketTicks(side, {
+        stopTicks: validated.stopTicks,
+        targetTicks: validated.targetTicks,
+      });
       const request: PlaceOrderRequest = {
         accountId: validated.account.id,
         contractId: validated.contract.id,
@@ -181,8 +187,8 @@ export class ExecutionCoordinator {
         side: intent.action === "ENTER_LONG" ? 0 : 1,
         size: validated.quantity,
         customTag: validated.customTag,
-        stopLossBracket: { ticks: validated.stopTicks, type: 4 },
-        takeProfitBracket: { ticks: validated.targetTicks, type: 1 },
+        stopLossBracket: { ticks: projectXBrackets.stopTicks, type: 4 },
+        takeProfitBracket: { ticks: projectXBrackets.targetTicks, type: 1 },
       };
       this.store.prepareMutation(
         intent.intentId,

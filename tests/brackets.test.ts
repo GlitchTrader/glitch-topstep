@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { calculateBracketTicks, isTickAligned } from "../src/execution/brackets.js";
+import { calculateBracketTicks, isTickAligned, toProjectXBracketTicks } from "../src/execution/brackets.js";
 
 describe("ProjectX bracket translation", () => {
   it("converts absolute long geometry to conservative tick distances", () => {
@@ -27,5 +27,17 @@ describe("ProjectX bracket translation", () => {
   it("detects tick alignment", () => {
     assert.equal(isTickAligned(20_000.25, 0.25), true);
     assert.equal(isTickAligned(20_000.1, 0.25), false);
+  });
+
+  it("applies ProjectX signed bracket ticks by entry side", () => {
+    const magnitudes = { stopTicks: 322, targetTicks: 475 };
+    assert.deepEqual(toProjectXBracketTicks("long", magnitudes), {
+      stopTicks: -322,
+      targetTicks: 475,
+    });
+    assert.deepEqual(toProjectXBracketTicks("short", magnitudes), {
+      stopTicks: 322,
+      targetTicks: -475,
+    });
   });
 });
