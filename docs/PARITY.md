@@ -43,7 +43,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Live acceptance 2026-07-30: short+long cycles, venue stop moved, idempotent replay (`move_stop_reconciled`) |
 | `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Live acceptance 2026-07-30: short+long cycles, venue TP moved |
 | Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Full flat `EXIT` live 2026-07-30 (202/`close_contract_submitted`); partial qty not exercised (1 MNQ contract) |
-| Multiple independent entry tranches | Implemented in software (Phase A+B+C) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), PR [#37](https://github.com/GlitchTrader/glitch-topstep/pull/37) | Scale-in same-direction (`validateScaleIn`), `target_intent_id` on MOVE_STOP/MOVE_TP; live scale-in 202 on gateway 2026-07-30 (`data/pm4-phase-c-e2e.json`); full multi-tranche MOVE/EXIT cycle partial |
+| Multiple independent entry tranches | Implemented in software (Phase A+B+C) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), merged [#37](https://github.com/GlitchTrader/glitch-topstep/pull/37) | Live scale-in + targeted partial EXIT + per-tranche MOVE_STOP/MOVE_TP (`data/pm4-phase-c-e2e.json`, 2026-07-30) |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
@@ -116,7 +116,7 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
 - Restart recovers all open tranches from provider history.
 
-**Current gateway state (live `f872497`, 2026-07-30):** `supported_actions` includes `MOVE_STOP` and `MOVE_TP` when `protection.status === proven`. Partial `EXIT` accepts optional `quantity`. **PM-0 / PM-1 / PM-2** accepted live on short and long cycles (`data/pm-e2e-full-result.json` on gateway host). Full flat `EXIT` returns 202 after PR #36 race fix. **PM-3** partial qty and **PM-4** multi-tranche live cycles remain open.
+**Current gateway state (live `a81cd00`, 2026-07-30):** PM-4 Phase C merged ([#37](https://github.com/GlitchTrader/glitch-topstep/pull/37)). Live multi-tranche: scale-in 202, targeted partial EXIT, tranche A `remaining_qty=1`, per-tranche `MOVE_STOP`/`MOVE_TP` via `target_intent_id`, full flat. Evidence: `data/pm4-phase-c-e2e.json` (~14:53 UTC, Hermes paused). PM-0–PM-2 accepted (`data/pm-e2e-full-result.json`). Restart scenario deferred (`PM4_E2E_RESTART=1`).
 
 ## Promotion rule
 
