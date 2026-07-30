@@ -307,7 +307,7 @@ export class ExecutionCoordinator {
 
     if (intent.targetIntentId !== undefined) {
       const tranche = this.tranches().find((candidate) => candidate.intent_id === intent.targetIntentId);
-      if (!tranche) {
+      if (!tranche || tranche.filled_qty <= 0) {
         return this.record({
           intentId: intent.intentId,
           status: "rejected",
@@ -315,7 +315,10 @@ export class ExecutionCoordinator {
           detail: intent.targetIntentId,
         });
       }
-      if (tranche.remaining_qty <= 0) {
+      const attributableQty = tranche.remaining_qty > 0
+        ? tranche.remaining_qty
+        : Math.min(tranche.filled_qty, positionSize);
+      if (attributableQty <= 0) {
         return this.record({
           intentId: intent.intentId,
           status: "ignored",
@@ -324,13 +327,13 @@ export class ExecutionCoordinator {
         });
       }
       if (intent.quantity === undefined && intent.exitFraction === undefined) {
-        exitQuantity = tranche.remaining_qty;
-      } else if (exitQuantity > tranche.remaining_qty) {
+        exitQuantity = attributableQty;
+      } else if (exitQuantity > attributableQty) {
         return this.record({
           intentId: intent.intentId,
           status: "rejected",
           code: "exit_quantity_exceeds_tranche_remaining",
-          detail: `requested=${exitQuantity};tranche_remaining=${tranche.remaining_qty}`,
+          detail: `requested=${exitQuantity};tranche_remaining=${attributableQty}`,
         });
       }
     } else if (
@@ -432,13 +435,38 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const active = this.resolveActiveProtection(snapshot);
-    if (!active || active.protection.status !== "proven") {
+    const attributableTranches = this.attributableTranches(snapshot);
+    if (intent.targetIntentId === undefined && attributableTranches.length > 1) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "target_intent_id_required",
+      });
+    }
+
+    const active = this.resolveActiveProtection(snapshot, intent);
+    if (!active) {
+      if (intent.targetIntentId !== undefined) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "target_tranche_not_found",
+          detail: intent.targetIntentId,
+        });
+      }
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
         code: "protection_not_proven",
-        detail: active?.protection.reason ?? "no_active_protection",
+        detail: "no_active_protection",
+      });
+    }
+    if (active.protection.status !== "proven") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "protection_not_proven",
+        detail: active.protection.reason,
       });
     }
 
@@ -548,9 +576,48 @@ export class ExecutionCoordinator {
     return null;
   }
 
+  private attributableTranches(snapshot: AccountVenueSnapshot): TrancheView[] {
+    const all = this.tranches();
+    const open = all.filter((tranche) => tranche.remaining_qty > 0);
+    if (open.length > 0) {
+      return open;
+    }
+    if (snapshot.instrumentOpenContracts > 0) {
+      return all.filter((tranche) => tranche.filled_qty > 0);
+    }
+    return open;
+  }
+
   private resolveActiveProtection(
     snapshot: AccountVenueSnapshot,
+    intent?: TradeIntent,
   ): { intentId: string; protection: ResolvedProtection } | null {
+    const allTranches = this.tranches();
+    const attributableTranches = this.attributableTranches(snapshot);
+
+    if (intent?.targetIntentId !== undefined) {
+      const tranche = allTranches.find((candidate) => candidate.intent_id === intent.targetIntentId);
+      if (!tranche || tranche.filled_qty <= 0) {
+        return null;
+      }
+      return {
+        intentId: tranche.intent_id,
+        protection: trancheProtectionToResolved(tranche),
+      };
+    }
+
+    if (attributableTranches.length === 1) {
+      const tranche = attributableTranches[0]!;
+      return {
+        intentId: tranche.intent_id,
+        protection: trancheProtectionToResolved(tranche),
+      };
+    }
+
+    if (attributableTranches.length > 1) {
+      return null;
+    }
+
     const intentId = snapshot.openOrders
       .map((order) => (order.customTag ? intentIdFromStopTag(order.customTag) : null))
       .find((candidate) => candidate !== null);
@@ -689,4 +756,23 @@ export class ExecutionCoordinator {
     }
     return receipt;
   }
+}
+
+function trancheProtectionToResolved(tranche: TrancheView): ResolvedProtection {
+  return {
+    status: tranche.protection.status,
+    reason: tranche.protection.reason,
+    stop: {
+      customTag: tranche.protection.stop.custom_tag,
+      providerOrderId: tranche.protection.stop.provider_order_id,
+      price: tranche.protection.stop.price,
+      observedOrder: null,
+    },
+    target: {
+      customTag: tranche.protection.target.custom_tag,
+      providerOrderId: tranche.protection.target.provider_order_id,
+      price: tranche.protection.target.price,
+      observedOrder: null,
+    },
+  };
 }

@@ -50,26 +50,47 @@ function protectionView(protection: EntryProtection): TrancheProtectionView {
   };
 }
 
+function trancheEligibleForExit(
+  tranche: { intentId: string; createdUtc: string },
+  exit: ExitAllocationSource,
+): boolean {
+  if (!tranche.createdUtc || !exit.createdUtc) {
+    return false;
+  }
+  return tranche.createdUtc.localeCompare(exit.createdUtc) <= 0;
+}
+
+function eligibleFifoOrder(
+  tranches: ReadonlyArray<{ intentId: string; filledQty: number; createdUtc: string }>,
+  exit: ExitAllocationSource,
+): Array<{ intentId: string; filledQty: number; createdUtc: string }> {
+  return [...tranches]
+    .filter((tranche) => trancheEligibleForExit(tranche, exit))
+    .sort(
+      (left, right) => left.createdUtc.localeCompare(right.createdUtc)
+        || left.intentId.localeCompare(right.intentId),
+    );
+}
+
 export function allocateExitQuantities(
   tranches: ReadonlyArray<{ intentId: string; filledQty: number; createdUtc: string }>,
   exits: ReadonlyArray<ExitAllocationSource>,
 ): Map<string, number> {
   const remaining = new Map(tranches.map((tranche) => [tranche.intentId, tranche.filledQty]));
   const allocated = new Map<string, number>();
-  const fifoOrder = [...tranches].sort(
-    (left, right) => left.createdUtc.localeCompare(right.createdUtc)
-      || left.intentId.localeCompare(right.intentId),
-  );
   const sortedExits = [...exits].sort(
     (left, right) => left.createdUtc.localeCompare(right.createdUtc)
       || left.exitIntentId.localeCompare(right.exitIntentId),
   );
 
   for (const exit of sortedExits) {
-    let quantityLeft = exit.quantity;
     if (exit.targetIntentId !== null) {
+      const tranche = tranches.find((candidate) => candidate.intentId === exit.targetIntentId);
+      if (!tranche || !trancheEligibleForExit(tranche, exit)) {
+        continue;
+      }
       const available = remaining.get(exit.targetIntentId) ?? 0;
-      const take = Math.min(quantityLeft, available);
+      const take = Math.min(exit.quantity, available);
       if (take > 0) {
         remaining.set(exit.targetIntentId, available - take);
         allocated.set(
@@ -79,6 +100,11 @@ export function allocateExitQuantities(
       }
       continue;
     }
+
+    const fifoOrder = eligibleFifoOrder(tranches, exit);
+    let quantityLeft = exit.quantity === Number.MAX_SAFE_INTEGER
+      ? fifoOrder.reduce((total, tranche) => total + (remaining.get(tranche.intentId) ?? 0), 0)
+      : exit.quantity;
 
     for (const tranche of fifoOrder) {
       if (quantityLeft <= 0) {

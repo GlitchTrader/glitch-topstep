@@ -97,6 +97,31 @@ describe("Glitch intent contract", () => {
     assert.equal(parseTradeIntent(partialExit).quantity, 1);
   });
 
+  it("accepts MOVE_STOP and MOVE_TP with optional target_intent_id", () => {
+    const targetedMoveStop = {
+      ...baseIntent(),
+      action: "MOVE_STOP",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "MOVE_STOP" },
+      new_stop_price: 20_000,
+      target_intent_id: "00000000-0000-4000-8000-00000000a001",
+    };
+    const targetedMoveTp = {
+      ...baseIntent(),
+      action: "MOVE_TP",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "MOVE_TP" },
+      new_take_profit: 20_050,
+      target_intent_id: "00000000-0000-4000-8000-00000000a002",
+    };
+    assert.equal(
+      parseTradeIntent(targetedMoveStop).targetIntentId,
+      "00000000-0000-4000-8000-00000000a001",
+    );
+    assert.equal(
+      parseTradeIntent(targetedMoveTp).targetIntentId,
+      "00000000-0000-4000-8000-00000000a002",
+    );
+  });
+
   it("accepts EXIT with optional target_intent_id", () => {
     const targetedExit = {
       ...baseIntent(),
@@ -110,8 +135,8 @@ describe("Glitch intent contract", () => {
       "00000000-0000-4000-8000-00000000a001",
     );
     assert.throws(
-      () => parseTradeIntent({ ...baseIntent(), action: "MOVE_STOP", target_intent_id: targetedExit.target_intent_id }),
-      /target_intent_id_only_allowed_on_exit/,
+      () => parseTradeIntent({ ...baseIntent(), action: "ENTER_LONG", target_intent_id: targetedExit.target_intent_id }),
+      /target_intent_id_only_allowed_on_exit_or_amendment/,
     );
   });
 });

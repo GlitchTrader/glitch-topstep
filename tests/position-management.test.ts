@@ -171,6 +171,158 @@ function tranche(intentId: string, remainingQty: number, entryOrderId: number): 
 }
 
 describe("position management coordinator", () => {
+  it("submits MOVE_STOP against a targeted tranche protection leg", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-targeted-move-stop-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.positions[0]!.size = 2;
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      current.openOrders = [
+        ...protectiveOrders(ENTRY_INTENT_ID),
+        ...protectiveOrders(ENTRY_INTENT_ID_B),
+      ];
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+        [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      store.recordIssuedPacket(packet);
+      let modified: ModifyOrderRequest | undefined;
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async (request: ModifyOrderRequest) => {
+          modified = request;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b006",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Tighten tranche B stop.",
+        decision_audit: audit("MOVE_STOP"),
+        new_stop_price: 20_005,
+        target_intent_id: ENTRY_INTENT_ID_B,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "move_stop_submitted_pending_reconciliation");
+      assert.equal(modified?.orderId, 9012);
+      assert.equal(modified?.stopPrice, 20_005);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects MOVE_STOP without target_intent_id when multiple tranches are active", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-move-stop-target-required-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.positions[0]!.size = 2;
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+        [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      store.recordIssuedPacket(packet);
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b007",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Ambiguous tranche.",
+        decision_audit: audit("MOVE_STOP"),
+        new_stop_price: 20_005,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "target_intent_id_required");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("submits MOVE_STOP against the proven stop child and returns a pending receipt", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-move-stop-"));
     const store = new SqliteExecutionStore(":memory:");

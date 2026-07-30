@@ -191,4 +191,87 @@ describe("buildExecutionGates", () => {
     assert.equal(exposureGate?.passed, false);
     assert.match(exposureGate?.detail ?? "", /no_open_orders/);
   });
+
+  it("passes new_exposure for valid same-direction scale-in", () => {
+    const current = snapshot();
+    current.instrumentOpenContracts = 1;
+    current.totalOpenContracts = 1;
+    current.positions = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      type: 2,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    current.openOrders = [{
+      id: 9201,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 4,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: 20_010,
+      customTag: "glt-00000000-0000-4000-8000-00000000a001-SL",
+    }];
+    const appConfig = config("armed");
+    const gates = buildExecutionGates(
+      current,
+      appConfig.risk,
+      orderFlowWithTrades(2),
+      healthyRecovery(),
+      appConfig.tradingMode,
+      appConfig.policy.maxContracts,
+      new Date("2026-07-21T12:00:05Z"),
+    );
+    const exposureGate = gates.find((gate) => gate.id === "new_exposure_technically_supported");
+    assert.equal(exposureGate?.passed, true);
+  });
+
+  it("reports scale_in_blocked when positioned but scale-in is invalid", () => {
+    const current = snapshot();
+    current.instrumentOpenContracts = 1;
+    current.totalOpenContracts = 1;
+    current.positions = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      type: 1,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    current.openOrders = [{
+      id: 9301,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 2,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: null,
+      customTag: "glt-pending-entry",
+    }];
+    const appConfig = config("armed");
+    const gates = buildExecutionGates(
+      current,
+      appConfig.risk,
+      orderFlowWithTrades(2),
+      healthyRecovery(),
+      appConfig.tradingMode,
+      appConfig.policy.maxContracts,
+      new Date("2026-07-21T12:00:05Z"),
+    );
+    const exposureGate = gates.find((gate) => gate.id === "new_exposure_technically_supported");
+    assert.equal(exposureGate?.passed, false);
+    assert.match(exposureGate?.detail ?? "", /scale_in_blocked/);
+  });
 });

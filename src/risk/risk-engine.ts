@@ -7,6 +7,7 @@ import type {
   ValidatedEntry,
 } from "../domain/models.js";
 import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
+import { validateScaleIn, type ScaleInAction } from "../ownership/scale-in.js";
 import { calculateRiskBudget } from "./mll.js";
 
 export class RiskRejectedError extends Error {
@@ -90,12 +91,23 @@ export function validateEntryRisk(
     throw new RiskRejectedError("quote_missing");
   }
 
-  // The initial gateway cannot yet prove independent additions or working-order ownership.
-  // Rejecting these states protects venue truth; it does not encode a trading strategy.
   if (snapshot.instrumentOpenContracts !== 0) {
-    throw new RiskRejectedError("position_addition_not_implemented");
-  }
-  if (snapshot.openOrders.length !== 0) {
+    const scaleIn = validateScaleIn(
+      intent.action as ScaleInAction,
+      snapshot,
+      snapshot.contract.id,
+      context.expectedAccountId,
+    );
+    if (!scaleIn.allowed) {
+      if (scaleIn.reason === "position_side_conflict") {
+        throw new RiskRejectedError("position_side_conflict");
+      }
+      if (scaleIn.reason === "working_order_ownership_unresolved") {
+        throw new RiskRejectedError("working_order_ownership_unresolved");
+      }
+      throw new RiskRejectedError("position_addition_not_implemented");
+    }
+  } else if (snapshot.openOrders.length !== 0) {
     throw new RiskRejectedError("working_order_ownership_unresolved");
   }
 

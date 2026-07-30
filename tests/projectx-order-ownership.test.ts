@@ -312,6 +312,128 @@ describe("ProjectX order ownership", () => {
   });
 });
 
+describe("multi-tranche ownership reconstruction", () => {
+  it("returns two tranches with correct remaining_qty after targeted partial exit", () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-ownership-multi-tranche-"));
+    const executionPath = join(directory, "glitch-topstep.sqlite");
+    const evidencePath = join(directory, "projectx-evidence.sqlite");
+    const execution = new SqliteExecutionStore(executionPath);
+    const evidence = new SqliteProviderEvidenceStore(evidencePath, {
+      marketEventRetention: 100,
+      marketPruneInterval: 10,
+    });
+    const ownershipOptions = {
+      accountId: ACCOUNT_ID,
+      accountName: ACCOUNT_NAME,
+      contractId: CONTRACT_ID,
+      instrument: INSTRUMENT,
+    };
+    try {
+      const first = intent("00000000-0000-4000-8000-000000009010");
+      const second = intent("00000000-0000-4000-8000-000000009011");
+      submittedEntry(execution, first, 9010);
+      execution.clearEntrySubmissionLatch(first.intentId);
+      submittedEntry(execution, second, 9011);
+
+      for (const [value, orderId, fillId] of [
+        [first, 9010, 7101],
+        [second, 9011, 7102],
+      ] as const) {
+        const observedOrder = order(orderId);
+        observedOrder.customTag = `glt-${value.intentId}`;
+        evidence.append({
+          receivedUtc: "2026-07-21T12:00:09Z",
+          providerTimestampUtc: observedOrder.updateTimestamp,
+          source: "projectx_user_stream",
+          eventType: "order",
+          generation: 1,
+          accountId: ACCOUNT_ID,
+          contractId: CONTRACT_ID,
+          providerEntityId: String(orderId),
+          rawPayload: observedOrder,
+          normalizedPayload: observedOrder,
+        });
+        const exactFill = trade(fillId, orderId);
+        evidence.append({
+          receivedUtc: "2026-07-21T12:00:10Z",
+          providerTimestampUtc: exactFill.creationTimestamp,
+          source: "projectx_user_stream",
+          eventType: "trade",
+          generation: 1,
+          accountId: ACCOUNT_ID,
+          contractId: CONTRACT_ID,
+          providerEntityId: String(fillId),
+          relatedProviderEntityId: String(orderId),
+          rawPayload: exactFill,
+          normalizedPayload: exactFill,
+        });
+      }
+
+      const exitIntent: TradeIntent = {
+        schemaVersion: "glitch.intent.v2",
+        intentId: "00000000-0000-4000-8000-000000009012",
+        createdUtc: "2026-07-21T12:10:00Z",
+        instrument: INSTRUMENT,
+        account: ACCOUNT_NAME,
+        operatorProfile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshotHash: "snapshot-hash",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v2",
+        reason: "Exit second tranche.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "EXIT",
+        },
+        quantity: 1,
+        targetIntentId: second.intentId,
+      };
+      execution.registerIntent(exitIntent, "2026-07-21T12:10:00Z");
+      execution.prepareMutation(
+        exitIntent.intentId,
+        "place_order",
+        { accountId: ACCOUNT_ID, contractId: CONTRACT_ID, type: 2, side: 1, size: 1 },
+        `glt-${exitIntent.intentId}`,
+        "2026-07-21T12:10:01Z",
+      );
+      execution.markMutationSubmitting(exitIntent.intentId, "2026-07-21T12:10:02Z");
+      execution.markMutationSubmitted(exitIntent.intentId, 9410, "2026-07-21T12:10:03Z");
+
+      execution.close();
+      evidence.close();
+
+      const ownership = new ProjectXOrderOwnershipService(
+        executionPath,
+        evidencePath,
+        ownershipOptions,
+        () => new Date("2026-07-21T12:11:00Z"),
+      );
+      const snapshot = ownership.current();
+      ownership.close();
+
+      assert.equal(snapshot.tranches.length, 2);
+      const enterEntries = snapshot.entries.filter(
+        (entry) => entry.action === "ENTER_LONG" || entry.action === "ENTER_SHORT",
+      );
+      assert.equal(enterEntries.length, 2);
+      const trancheA = snapshot.tranches.find((row) => row.intent_id === first.intentId);
+      const trancheB = snapshot.tranches.find((row) => row.intent_id === second.intentId);
+      assert.equal(trancheA?.remaining_qty, 1);
+      assert.equal(trancheB?.remaining_qty, 0);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("provider evidence relationship migration", () => {
   it("backfills legacy trade orderId and recomputes its evidence hash", () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-evidence-migration-"));
