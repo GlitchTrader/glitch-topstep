@@ -32,12 +32,12 @@ function alignTick(price) {
   return Math.round(price / TICK) * TICK;
 }
 
-function wideShortBrackets(entry) {
-  const ref = alignTick(entry);
+function wideShortBrackets(pkt) {
+  const ask = alignTick(pkt.market?.ask ?? pkt.market?.last ?? pkt.market?.bid);
+  if (!ask) return null;
   return {
-    entry: ref,
-    sl: alignTick(ref + 100 * TICK),
-    tp: alignTick(ref - 100 * TICK),
+    sl: alignTick(ask + 100 * TICK),
+    tp: alignTick(ask - 100 * TICK),
   };
 }
 
@@ -85,7 +85,7 @@ function baseIntent(action, snap, intentId = randomUUID()) {
 }
 
 async function waitReconciliationReady() {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 120; i++) {
     const hlth = await health();
     const rec = hlth.data_quality?.operational?.reconciliation;
     const stateAge = hlth.data_quality?.state_age_ms ?? 99999;
@@ -101,11 +101,18 @@ async function waitReconciliationReady() {
   throw new Error("reconciliation_not_ready");
 }
 
-async function submitIntent(body, steps, stepName, retries = 5) {
+async function submitIntent(body, steps, stepName, retries = 12) {
   let current = { ...body, intent_id: body.intent_id ?? randomUUID() };
   for (let attempt = 0; attempt < retries; attempt++) {
     await waitReconciliationReady();
     const pkt = await packet();
+    if (current.stop_loss !== undefined) {
+      const brackets = wideShortBrackets(pkt);
+      if (brackets) {
+        current.stop_loss = brackets.sl;
+        current.take_profit_1 = brackets.tp;
+      }
+    }
     current = {
       ...current,
       snapshot_hash: pkt.market.snapshot_hash,
@@ -121,8 +128,18 @@ async function submitIntent(body, steps, stepName, retries = 5) {
       detail: res.body.detail,
       intent_id: current.intent_id,
     });
-    if (res.http === 202) {
+    if (res.http === 202 && res.body.status !== "shadowed") {
       return { ...res, intent_id: current.intent_id };
+    }
+    if (
+      res.body.code === "entry_verified_not_submitted"
+      || res.body.code === "exit_verified_not_submitted"
+      || res.body.code === "move_stop_verified_not_submitted"
+      || res.body.code === "move_tp_verified_not_submitted"
+    ) {
+      current.intent_id = randomUUID();
+      await sleep(2000);
+      continue;
     }
     if (res.body.code === "intent_body_conflict") {
       return { ...res, intent_id: current.intent_id };
@@ -135,6 +152,8 @@ async function submitIntent(body, steps, stepName, retries = 5) {
       || res.body.code === "stop_not_tick_aligned"
       || res.body.code === "target_not_tick_aligned"
       || res.body.code === "working_order_ownership_unresolved"
+      || res.body.code === "execution_preparation_failed"
+      || String(res.body.detail ?? "").includes("stop_not_on_loss_side")
       || String(res.body.detail ?? "").includes("reconciliation_not_current")
     ) {
       current.intent_id = randomUUID();
@@ -175,6 +194,25 @@ async function ensureFlat(steps) {
     if (s.instrumentOpenContracts === 0) return;
   }
   throw new Error("still_not_flat");
+}
+
+async function waitArmedPacket(steps, label, timeoutSec = 180) {
+  for (let i = 0; i < timeoutSec; i++) {
+    await sleep(1000);
+    try {
+      await waitReconciliationReady();
+    } catch {
+      // keep polling
+    }
+    const pkt = await packet();
+    if (pkt.execution?.gateway_mode === "armed") {
+      return pkt;
+    }
+    if (i % 15 === 14) {
+      steps.push({ step: `${label}_armed_poll`, gateway_mode: pkt.execution?.gateway_mode });
+    }
+  }
+  throw new Error(`${label}: gateway_not_armed`);
 }
 
 async function waitProven(steps, label, timeoutSec = 180) {
@@ -234,6 +272,7 @@ const log = {
 
 try {
   const hlth = await waitHealthReady();
+  await waitReconciliationReady();
   log.health_before = {
     status: hlth.status,
     userStream: hlth.data_quality?.operational?.userStream?.state,
@@ -243,9 +282,9 @@ try {
   await ensureFlat(log.scenario_a.steps);
 
   let pkt = await packet();
-  const brackets = wideShortBrackets(pkt.market?.last ?? pkt.market?.ask ?? pkt.market?.bid);
-  if (!brackets.entry) throw new Error("no_entry_price");
-  const { entry, sl, tp } = brackets;
+  const brackets = wideShortBrackets(pkt);
+  if (!brackets) throw new Error("no_entry_price");
+  const { sl, tp } = brackets;
   const trancheAIntentId = randomUUID();
 
   const enter1 = await submitIntent({
@@ -259,14 +298,15 @@ try {
   const trancheAIntentIdResolved = enter1.intent_id;
   log.scenario_a.checks.enter_a = enter1.http === 202 && enter1.body.status === "pending";
   if (!log.scenario_a.checks.enter_a) {
-    throw new Error(`ENTER_SHORT_A failed: ${enter1.body?.code ?? enter1.http}`);
+    throw new Error(`ENTER_SHORT_A failed: ${enter1.body?.code ?? enter1.http} status=${enter1.body?.status}`);
   }
 
   pkt = await waitProven(log.scenario_a.steps, "A");
   log.scenario_a.tranche_a_intent_id = trancheAIntentIdResolved;
   log.scenario_a.checks.proven_a = pkt.protection?.status === "proven";
 
-  pkt = await packet();
+  pkt = await waitArmedPacket(log.scenario_a.steps, "A_ARMED");
+  await sleep(8000);
   const trancheBIntentId = randomUUID();
   const enter2 = await submitIntent({
     ...baseIntent("ENTER_SHORT", "unused", trancheBIntentId),
@@ -275,7 +315,7 @@ try {
     stop_loss: sl,
     take_profit_1: tp,
     reason: "ENTER_SHORT scale-in tranche B",
-  }, log.scenario_a.steps, "ENTER_SHORT_B_SCALE_IN");
+  }, log.scenario_a.steps, "ENTER_SHORT_B_SCALE_IN", 24);
   const trancheBIntentIdResolved = enter2.intent_id;
   log.scenario_a.checks.scale_in =
     enter2.http === 202 &&

@@ -169,6 +169,55 @@ describe("durable execution recovery", () => {
     store.close();
   });
 
+  it("recovers ambiguous modify mutations with tick-aligned fractional prices", async () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const intentId = "00000000-0000-4000-8000-000000000006";
+    const moveStopIntent: TradeIntent = {
+      ...intent(intentId),
+      action: "MOVE_STOP",
+      newStopPrice: 20_055.75,
+    };
+    store.registerIntent(moveStopIntent, "2026-07-21T12:00:05Z");
+    store.prepareMutation(
+      intentId,
+      "modify_order",
+      { accountId, contractId, orderId: 9101, stopPrice: 20_055.75 },
+      "glt-stop",
+      "2026-07-21T12:00:06Z",
+    );
+    store.markMutationSubmitting(intentId, "2026-07-21T12:00:07Z");
+    store.markMutationAmbiguous(intentId, "timeout", "2026-07-21T12:00:08Z");
+
+    const result = await recoverExecutionMutations(
+      store,
+      {
+        searchOrders: async () => [{
+          id: 9101,
+          accountId,
+          contractId,
+          creationTimestamp: "2026-07-21T12:00:10Z",
+          updateTimestamp: "2026-07-21T12:00:11Z",
+          status: 1,
+          type: 4,
+          side: 1,
+          size: 1,
+          limitPrice: null,
+          stopPrice: 20_055.75,
+          customTag: "glt-stop",
+        }],
+      },
+      accountId,
+      contractId,
+      [],
+      new Date("2026-07-21T12:01:00Z"),
+    );
+    assert.equal(result.resolved, 1);
+    assert.equal(result.ambiguous, 0);
+    assert.equal(result.resolutions[0]?.code, "modify_recovered_from_projectx_order_state");
+    assert.equal(store.recoveryStatus().blockingAmbiguity, false);
+    store.close();
+  });
+
   it("reconstructs a receipt when submitted state survived but the receipt did not", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const value = intent("00000000-0000-4000-8000-000000000005");

@@ -309,8 +309,8 @@ function reconcileModifyMutation(
     return { recovered: false, error: "modify_order_outcome_ambiguous:order_identity_mismatch" };
   }
 
-  const requestedStop = nullableInteger(mutation.request.stopPrice);
-  const requestedLimit = nullableInteger(mutation.request.limitPrice);
+  const requestedStop = nullableNumber(mutation.request.stopPrice);
+  const requestedLimit = nullableNumber(mutation.request.limitPrice);
   if (requestedStop !== null) {
     if (observed.stopPrice !== requestedStop) {
       return { recovered: false, error: "modify_order_outcome_ambiguous:stop_price_mismatch" };
@@ -334,8 +334,8 @@ function reconcileModifyMutation(
   return { recovered: false, error: "modify_order_outcome_ambiguous:request_price_missing" };
 }
 
-function nullableInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isInteger(value) ? value : null;
+function nullableNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function reconcileEntryMutation(

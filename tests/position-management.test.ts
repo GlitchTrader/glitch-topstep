@@ -244,8 +244,88 @@ describe("position management coordinator", () => {
       });
       assert.equal(receipt.status, "pending");
       assert.equal(receipt.code, "move_stop_submitted_pending_reconciliation");
-      assert.equal(modified?.orderId, 9012);
+      assert.equal(modified?.orderId, 9201);
       assert.equal(modified?.stopPrice, 20_005);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers live open-order protection ids over stale tranche cache after partial exit", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-stale-protection-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const refreshedStopId = 9401;
+      const refreshedTargetId = 9402;
+      current.openOrders = [
+        {
+          ...protectiveOrders(ENTRY_INTENT_ID)[0]!,
+          id: refreshedStopId,
+        },
+        {
+          ...protectiveOrders(ENTRY_INTENT_ID)[1]!,
+          id: refreshedTargetId,
+        },
+      ];
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+        [tranche(ENTRY_INTENT_ID, 1, 9001)],
+      );
+      store.recordIssuedPacket(packet);
+      let modified: ModifyOrderRequest | undefined;
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async (request: ModifyOrderRequest) => {
+          modified = request;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [tranche(ENTRY_INTENT_ID, 1, 9001)],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b008",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_TP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Refresh target after partial exit.",
+        decision_audit: audit("MOVE_TP"),
+        new_take_profit: 20_030,
+        target_intent_id: ENTRY_INTENT_ID,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "move_tp_submitted_pending_reconciliation");
+      assert.equal(modified?.orderId, refreshedTargetId);
+      assert.equal(modified?.limitPrice, 20_030);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

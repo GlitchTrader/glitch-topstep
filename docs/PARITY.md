@@ -116,7 +116,7 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
 - Restart recovers all open tranches from provider history.
 
-**Current gateway state (live `a81cd00`, 2026-07-30):** PM-4 Phase C merged ([#37](https://github.com/GlitchTrader/glitch-topstep/pull/37)). Live multi-tranche: scale-in 202, targeted partial EXIT, tranche A `remaining_qty=1`, per-tranche `MOVE_STOP`/`MOVE_TP` via `target_intent_id`, full flat. Evidence: `data/pm4-phase-c-e2e.json` (~14:53 UTC, Hermes paused). PM-0–PM-2 accepted (`data/pm-e2e-full-result.json`). Restart scenario deferred (`PM4_E2E_RESTART=1`).
+**Current gateway state (live, 2026-07-30):** PM-4 Phase C merged ([#37](https://github.com/GlitchTrader/glitch-topstep/pull/37)). Live multi-tranche E2E **`all_pass: true`** (`data/pm4-phase-c-e2e.json`, 16:09–16:11 UTC, Hermes paused): scale-in, targeted partial EXIT, tranche A alive, per-tranche `MOVE_STOP`/`MOVE_TP` via `target_intent_id`, full flat. Post-partial MOVE fixes: live `bindProtection` for amendment order IDs; recovery accepts fractional tick prices (`nullableNumber`). PM-0–PM-2 accepted (`data/pm-e2e-full-result.json`). Restart scenario deferred (`PM4_E2E_RESTART=1`).
 
 ## Promotion rule
 

@@ -595,6 +595,8 @@ export class ExecutionCoordinator {
     const allTranches = this.tranches();
     const attributableTranches = this.attributableTranches(snapshot);
 
+    const positionOpen = snapshot.instrumentOpenContracts > 0;
+
     if (intent?.targetIntentId !== undefined) {
       const tranche = allTranches.find((candidate) => candidate.intent_id === intent.targetIntentId);
       if (!tranche || tranche.filled_qty <= 0) {
@@ -602,7 +604,13 @@ export class ExecutionCoordinator {
       }
       return {
         intentId: tranche.intent_id,
-        protection: trancheProtectionToResolved(tranche),
+        protection: bindProtection(
+          tranche.intent_id,
+          snapshot.openOrders,
+          this.config.scope.accountId,
+          this.config.scope.contractId,
+          positionOpen,
+        ),
       };
     }
 
@@ -610,7 +618,13 @@ export class ExecutionCoordinator {
       const tranche = attributableTranches[0]!;
       return {
         intentId: tranche.intent_id,
-        protection: trancheProtectionToResolved(tranche),
+        protection: bindProtection(
+          tranche.intent_id,
+          snapshot.openOrders,
+          this.config.scope.accountId,
+          this.config.scope.contractId,
+          positionOpen,
+        ),
       };
     }
 
@@ -756,23 +770,4 @@ export class ExecutionCoordinator {
     }
     return receipt;
   }
-}
-
-function trancheProtectionToResolved(tranche: TrancheView): ResolvedProtection {
-  return {
-    status: tranche.protection.status,
-    reason: tranche.protection.reason,
-    stop: {
-      customTag: tranche.protection.stop.custom_tag,
-      providerOrderId: tranche.protection.stop.provider_order_id,
-      price: tranche.protection.stop.price,
-      observedOrder: null,
-    },
-    target: {
-      customTag: tranche.protection.target.custom_tag,
-      providerOrderId: tranche.protection.target.provider_order_id,
-      price: tranche.protection.target.price,
-      observedOrder: null,
-    },
-  };
 }
