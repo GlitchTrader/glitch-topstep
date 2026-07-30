@@ -276,6 +276,7 @@ async function submitIntent(body, steps, stepName, retries = 12) {
       || res.body.code === "stop_not_tick_aligned"
       || res.body.code === "target_not_tick_aligned"
       || res.body.code === "working_order_ownership_unresolved"
+      || res.body.code === "protection_not_proven"
       || res.body.code === "execution_preparation_failed"
       || String(res.body.detail ?? "").includes("stop_not_on_loss_side")
       || String(res.body.detail ?? "").includes("reconciliation_not_current")
@@ -409,6 +410,38 @@ async function ensureFlat(steps) {
     }
   }
   await waitNoOpenOrders(steps, "PRE_FLAT");
+}
+
+function protectionTags(intentId) {
+  const entry = `glt-${intentId}`.slice(0, 64);
+  const base = entry.length <= 60 ? entry : entry.slice(0, 60);
+  return { stop: `${base}-SL`, target: `${base}-TP` };
+}
+
+async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
+  const { stop, target } = protectionTags(intentId);
+  for (let i = 0; i < timeoutSec; i++) {
+    await sleep(1000);
+    try {
+      await waitReconciliationReady();
+    } catch {
+      // keep polling
+    }
+    const st = await state();
+    const orders = st.openOrders ?? [];
+    const hasStop = orders.some((order) => order.customTag === stop);
+    const hasTarget = orders.some((order) => order.customTag === target);
+    if (hasStop && hasTarget) return;
+    if (i % 15 === 14) {
+      steps.push({
+        step: `${label}_live_protection_poll`,
+        has_stop: hasStop,
+        has_target: hasTarget,
+        open_orders: orders.length,
+      });
+    }
+  }
+  throw new Error(`${label}: live_protection_not_observed`);
 }
 
 async function waitArmedPacket(steps, label, timeoutSec = 180) {
@@ -576,6 +609,8 @@ async function runTrancheScenario(scenario, {
     trancheAMid !== undefined
     && trancheAMid.remaining_qty === 1
     && trancheAMid.protection?.status === "proven";
+
+  await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
 
   pkt = await packet();
   const trancheA = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);

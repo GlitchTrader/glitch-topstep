@@ -806,7 +806,8 @@
       "evidence": [
         "2026-07-30: scenario A partial live pass (enter, proven, scale_in, two_tranches) with Auto OCO; B failed on start.ps1 detached restart.",
         "2026-07-30 fix scripts/pm4-phase-c-e2e.mjs: kill port until free, start node with .env (no npm build), health diagnostics, recovery without second kill, ensureFlat waits working_orders=0.",
-        "2026-07-30: scenarios A and B pass live; C failed because ensureFlat read ownership.working_orders (absent) instead of state.openOrders — fixed to cancel orphan brackets via ProjectX before scenario C."
+        "2026-07-30: scenarios A and B pass live; C failed because ensureFlat read ownership.working_orders (absent) instead of state.openOrders — fixed to cancel orphan brackets via ProjectX before scenario C.",
+        "2026-07-30: scenario A MOVE failed after partial EXIT_B + restart — ownership proven != live openOrders; harness waits for SL/TP custom tags on state.openOrders before MOVE."
       ],
       "sources": [
         "scripts/pm4-phase-c-e2e.mjs",
