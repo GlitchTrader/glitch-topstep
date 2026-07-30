@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { unlinkSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import type { TopstepPolicyState, TradeIntent } from "../src/domain/models.js";
@@ -204,5 +208,29 @@ describe("SQLite execution store", () => {
     store.markMutationSubmitted(value.intentId, null, "2026-07-21T12:00:09Z");
     assert.equal(store.mutationForIntent(value.intentId)?.state, "submitted");
     store.close();
+  });
+
+  it("reopens a file-backed store with unchanged recovery state (TS-R1-02 smoke)", () => {
+    const path = join(tmpdir(), `ts-r1-restart-${randomUUID()}.sqlite`);
+    const value = intent("00000000-0000-4000-8000-000000000007");
+    const first = new SqliteExecutionStore(path);
+    first.registerIntent(value, "2026-07-21T12:00:05Z");
+    first.prepareMutation(
+      value.intentId,
+      "modify_order",
+      { accountId: 101, orderId: 42, stopPrice: 20_000.25 },
+      "glt-7-SL",
+      "2026-07-21T12:00:06Z",
+    );
+    first.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
+    first.markMutationAmbiguous(value.intentId, "transport_timeout", "2026-07-21T12:00:08Z");
+    first.close();
+
+    const reopened = new SqliteExecutionStore(path);
+    assert.equal(reopened.mutationForIntent(value.intentId)?.state, "ambiguous");
+    assert.equal(reopened.recoveryStatus().blockingAmbiguity, true);
+    assert.equal(reopened.recoveryStatus().blockingNewExposure, true);
+    reopened.close();
+    unlinkSync(path);
   });
 });

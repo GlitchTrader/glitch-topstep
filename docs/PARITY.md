@@ -116,7 +116,9 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
 - Restart recovers all open tranches from provider history.
 
-**Current gateway state (live, 2026-07-30):** PM-4 Phase C merged ([#37](https://github.com/GlitchTrader/glitch-topstep/pull/37)). Live multi-tranche E2E **`all_pass: true`** (`data/pm4-phase-c-e2e.json`, 16:09–16:11 UTC, Hermes paused): scale-in, targeted partial EXIT, tranche A alive, per-tranche `MOVE_STOP`/`MOVE_TP` via `target_intent_id`, full flat. Post-partial MOVE fixes: live `bindProtection` for amendment order IDs; recovery accepts fractional tick prices (`nullableNumber`). PM-0–PM-2 accepted (`data/pm-e2e-full-result.json`). Restart scenario deferred (`PM4_E2E_RESTART=1`).
+**Live prerequisite (TopstepX):** protected entries require **Auto OCO Brackets** enabled on the account. If ProjectX returns `Brackets cannot be used with Position Brackets`, disable Position Brackets or enable Auto OCO in the Topstep dashboard before running E2E or live entries.
+
+**Current gateway state (live, 2026-07-30):** PM-4 Phase C merged ([#37](https://github.com/GlitchTrader/glitch-topstep/pull/37)). Live multi-tranche E2E **`all_pass: true`** (`data/pm4-phase-c-e2e.json`, 16:09–16:11 UTC, Hermes paused): scale-in, targeted partial EXIT, tranche A alive, per-tranche `MOVE_STOP`/`MOVE_TP` via `target_intent_id`, full flat. Post-partial MOVE fixes: live `bindProtection` for amendment order IDs; recovery accepts fractional tick prices (`nullableNumber`). PM-0–PM-2 accepted (`data/pm-e2e-full-result.json`). E2E script now covers **scenario C (LONG mirror)** by default; **scenario B (gateway restart)** via `PM4_E2E_RESTART=1` (partial **TS-R1-02** evidence). Unit smoke: file-backed execution store survives reopen (`tests/sqlite-execution-store.test.ts`). After gateway restart, Hermes may skip cycles until `quote_age_ms` recovers (`stale_gateway_quote`).
 
 ## Promotion rule
 

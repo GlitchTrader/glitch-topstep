@@ -41,6 +41,15 @@ function wideShortBrackets(pkt) {
   };
 }
 
+function wideLongBrackets(pkt) {
+  const bid = alignTick(pkt.market?.bid ?? pkt.market?.last ?? pkt.market?.ask);
+  if (!bid) return null;
+  return {
+    sl: alignTick(bid - 100 * TICK),
+    tp: alignTick(bid + 100 * TICK),
+  };
+}
+
 async function health() {
   const r = await fetch(`${base}/health`);
   if (!r.ok) throw new Error(`health ${r.status}`);
@@ -107,7 +116,9 @@ async function submitIntent(body, steps, stepName, retries = 12) {
     await waitReconciliationReady();
     const pkt = await packet();
     if (current.stop_loss !== undefined) {
-      const brackets = wideShortBrackets(pkt);
+      const brackets = body.action === "ENTER_LONG"
+        ? wideLongBrackets(pkt)
+        : wideShortBrackets(pkt);
       if (brackets) {
         current.stop_loss = brackets.sl;
         current.take_profit_1 = brackets.tp;
@@ -170,13 +181,40 @@ async function waitHealthReady() {
     try {
       const hlth = await health();
       const us = hlth.data_quality?.operational?.userStream?.state;
-      if (hlth.status === "ok" && hlth.data_quality?.state_complete && us === "connected") return hlth;
+      const quoteAge = hlth.data_quality?.quote_age_ms ?? 99999;
+      if (
+        hlth.status === "ok"
+        && hlth.data_quality?.state_complete
+        && us === "connected"
+        && quoteAge < 8000
+      ) {
+        return hlth;
+      }
     } catch {
       // gateway still starting
     }
     await sleep(2000);
   }
   throw new Error("health_not_ready");
+}
+
+async function restartGateway(steps, label) {
+  const port = env.GLITCH_LOCAL_PORT ?? "8790";
+  const kill = spawn("powershell", [
+    "-NoProfile",
+    "-Command",
+    `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+  ]);
+  await new Promise((r) => kill.on("close", r));
+  await sleep(5000);
+  spawn("powershell", ["-NoProfile", "-File", "start.ps1"], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: "ignore",
+  }).unref();
+  steps.push({ step: `${label}_RESTART_TRIGGERED`, port });
+  await waitHealthReady();
+  await waitReconciliationReady();
 }
 
 async function ensureFlat(steps) {
@@ -262,11 +300,150 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
   throw new Error(`${label}: two_tranches_not_ready`);
 }
 
+async function runTrancheScenario(scenario, {
+  prefix,
+  enterAction,
+  moveStopDelta,
+  moveTpDelta,
+  onTwoTranches,
+}) {
+  const { steps, checks } = scenario;
+  let pkt = await packet();
+  const brackets = enterAction === "ENTER_LONG" ? wideLongBrackets(pkt) : wideShortBrackets(pkt);
+  if (!brackets) throw new Error(`${prefix}: no_entry_price`);
+  const { sl, tp } = brackets;
+  const trancheAIntentId = randomUUID();
+
+  const enter1 = await submitIntent({
+    ...baseIntent(enterAction, "unused", trancheAIntentId),
+    quantity: 1,
+    order_type: "MARKET",
+    stop_loss: sl,
+    take_profit_1: tp,
+    reason: `${enterAction} tranche A`,
+  }, steps, `${prefix}_ENTER_A`);
+  const trancheAIntentIdResolved = enter1.intent_id;
+  checks.enter_a = enter1.http === 202 && enter1.body.status === "pending";
+  if (!checks.enter_a) {
+    throw new Error(`${prefix}_ENTER_A failed: ${enter1.body?.code ?? enter1.http}`);
+  }
+
+  pkt = await waitProven(steps, `${prefix}_A`);
+  scenario.tranche_a_intent_id = trancheAIntentIdResolved;
+  checks.proven_a = pkt.protection?.status === "proven";
+
+  pkt = await waitArmedPacket(steps, `${prefix}_ARMED`);
+  await sleep(8000);
+  const trancheBIntentId = randomUUID();
+  const enter2 = await submitIntent({
+    ...baseIntent(enterAction, "unused", trancheBIntentId),
+    quantity: 1,
+    order_type: "MARKET",
+    stop_loss: sl,
+    take_profit_1: tp,
+    reason: `${enterAction} scale-in tranche B`,
+  }, steps, `${prefix}_SCALE_IN`, 24);
+  const trancheBIntentIdResolved = enter2.intent_id;
+  checks.scale_in =
+    enter2.http === 202
+    && enter2.body.status === "pending"
+    && enter2.body.code !== "position_addition_not_implemented";
+
+  await waitTwoTranches(steps, `${prefix}_two_tranches`, [
+    trancheAIntentIdResolved,
+    trancheBIntentIdResolved,
+  ]);
+  const stTwo = await state();
+  checks.two_tranches = stTwo.instrumentOpenContracts === 2;
+  scenario.tranche_b_intent_id = trancheBIntentIdResolved;
+
+  if (onTwoTranches) {
+    await onTwoTranches(trancheAIntentIdResolved, trancheBIntentIdResolved);
+  }
+
+  const exitB = await submitIntent({
+    ...baseIntent("EXIT", "unused"),
+    quantity: 1,
+    target_intent_id: trancheBIntentIdResolved,
+    reason: "EXIT tranche B only",
+  }, steps, `${prefix}_EXIT_B`);
+  checks.exit_b = exitB.http === 202 && exitB.body.status === "pending";
+
+  for (let i = 0; i < 90; i++) {
+    await sleep(1000);
+    const st = await state();
+    if (st.instrumentOpenContracts === 1) break;
+  }
+  const stMid = await state();
+  const ownMid = await ownership();
+  const trancheAMid = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
+  steps.push({
+    step: `${prefix}_AFTER_EXIT_B`,
+    instrument_open: stMid.instrumentOpenContracts,
+    tranche_a_remaining: trancheAMid?.remaining_qty,
+    tranche_a_protection: trancheAMid?.protection?.status,
+  });
+  checks.one_contract_left =
+    stMid.instrumentOpenContracts === 1
+    || (trancheAMid?.remaining_qty === 1 && stMid.instrumentOpenContracts >= 1);
+  checks.tranche_a_alive =
+    trancheAMid !== undefined
+    && trancheAMid.remaining_qty === 1
+    && trancheAMid.protection?.status === "proven";
+
+  pkt = await packet();
+  const trancheA = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
+  const stopBeforeA = trancheA?.protection?.stop?.price ?? pkt.protection?.stop?.price ?? sl;
+  const newStopA = stopBeforeA + moveStopDelta;
+
+  const moveStopA = await submitIntent({
+    ...baseIntent("MOVE_STOP", "unused"),
+    new_stop_price: newStopA,
+    target_intent_id: trancheAIntentIdResolved,
+    reason: "MOVE_STOP tranche A only",
+  }, steps, `${prefix}_MOVE_STOP_A`);
+  checks.move_stop_a =
+    moveStopA.http === 202
+    && (moveStopA.body.status === "pending" || moveStopA.body.status === "submitted");
+
+  await sleep(5000);
+  pkt = await packet();
+  const tpBeforeA = trancheA?.protection?.target?.price ?? pkt.protection?.target?.price ?? tp;
+  const newTpA = tpBeforeA + moveTpDelta;
+
+  const moveTpA = await submitIntent({
+    ...baseIntent("MOVE_TP", "unused"),
+    new_take_profit: newTpA,
+    target_intent_id: trancheAIntentIdResolved,
+    reason: "MOVE_TP tranche A",
+  }, steps, `${prefix}_MOVE_TP_A`);
+  checks.move_tp_a =
+    moveTpA.http === 202
+    && (moveTpA.body.status === "pending" || moveTpA.body.status === "submitted");
+
+  const exitFlat = await submitIntent({
+    ...baseIntent("EXIT", "unused"),
+    reason: "EXIT flat",
+  }, steps, `${prefix}_EXIT_FLAT`);
+  checks.exit_flat =
+    exitFlat.http === 202
+    && (exitFlat.body.status === "pending" || exitFlat.body.status === "closed");
+
+  for (let i = 0; i < 120; i++) {
+    await sleep(1000);
+    const st = await state();
+    if (st.instrumentOpenContracts === 0) break;
+  }
+  const stFinal = await state();
+  checks.flat = stFinal.instrumentOpenContracts === 0;
+  scenario.pass = Object.values(checks).every(Boolean);
+}
+
 const log = {
   started_utc: new Date().toISOString(),
   scenario_a: { steps: [], checks: {}, pass: false },
   scenario_b: { steps: [], checks: {}, pass: false, skipped: false },
-  scenario_c: { skipped: true, reason: "time budget — mirror LONG deferred" },
+  scenario_c: { steps: [], checks: {}, pass: false, skipped: false },
   all_pass: false,
 };
 
@@ -281,173 +458,72 @@ try {
 
   await ensureFlat(log.scenario_a.steps);
 
-  let pkt = await packet();
-  const brackets = wideShortBrackets(pkt);
-  if (!brackets) throw new Error("no_entry_price");
-  const { sl, tp } = brackets;
-  const trancheAIntentId = randomUUID();
+  const runRestart = process.env.PM4_E2E_RESTART === "1";
+  await runTrancheScenario(log.scenario_a, {
+    prefix: "SHORT",
+    enterAction: "ENTER_SHORT",
+    moveStopDelta: -5 * TICK,
+    moveTpDelta: 5 * TICK,
+    onTwoTranches: runRestart
+      ? async (trancheAId, trancheBId) => {
+          log.scenario_b.skipped = false;
+          try {
+            await restartGateway(log.scenario_b.steps, "SCENARIO_B");
+            await waitTwoTranches(
+              log.scenario_b.steps,
+              "restart_tranches",
+              [trancheAId, trancheBId],
+              300,
+            );
+            const ownRestart = await ownership();
+            const activeAfterRestart = (ownRestart.tranches ?? []).filter(
+              (t) => t.intent_id === trancheAId || t.intent_id === trancheBId,
+            );
+            const stRestart = await state();
+            log.scenario_b.steps.push({
+              step: "RESTART_OWNERSHIP",
+              open_contracts: stRestart.instrumentOpenContracts,
+              tranche_count: activeAfterRestart.length,
+              tranches: activeAfterRestart.map((t) => ({
+                intent_id: t.intent_id,
+                filled_qty: t.filled_qty,
+                remaining_qty: t.remaining_qty,
+                protection: t.protection?.status,
+              })),
+            });
+            log.scenario_b.checks.two_tranches_after_restart = stRestart.instrumentOpenContracts === 2;
+            log.scenario_b.checks.ownership_two_tranches =
+              activeAfterRestart.length === 2
+              && activeAfterRestart.every((t) => t.remaining_qty === 1);
+            log.scenario_b.pass = Object.values(log.scenario_b.checks).every(Boolean);
+          } catch (restartError) {
+            log.scenario_b.reason = String(restartError?.message ?? restartError);
+            log.scenario_b.pass = false;
+            await restartGateway(log.scenario_b.steps, "SCENARIO_B_RECOVERY");
+          }
+        }
+      : undefined,
+  });
 
-  const enter1 = await submitIntent({
-    ...baseIntent("ENTER_SHORT", "unused", trancheAIntentId),
-    quantity: 1,
-    order_type: "MARKET",
-    stop_loss: sl,
-    take_profit_1: tp,
-    reason: "ENTER_SHORT tranche A",
-  }, log.scenario_a.steps, "ENTER_SHORT_A");
-  const trancheAIntentIdResolved = enter1.intent_id;
-  log.scenario_a.checks.enter_a = enter1.http === 202 && enter1.body.status === "pending";
-  if (!log.scenario_a.checks.enter_a) {
-    throw new Error(`ENTER_SHORT_A failed: ${enter1.body?.code ?? enter1.http} status=${enter1.body?.status}`);
-  }
-
-  pkt = await waitProven(log.scenario_a.steps, "A");
-  log.scenario_a.tranche_a_intent_id = trancheAIntentIdResolved;
-  log.scenario_a.checks.proven_a = pkt.protection?.status === "proven";
-
-  pkt = await waitArmedPacket(log.scenario_a.steps, "A_ARMED");
-  await sleep(8000);
-  const trancheBIntentId = randomUUID();
-  const enter2 = await submitIntent({
-    ...baseIntent("ENTER_SHORT", "unused", trancheBIntentId),
-    quantity: 1,
-    order_type: "MARKET",
-    stop_loss: sl,
-    take_profit_1: tp,
-    reason: "ENTER_SHORT scale-in tranche B",
-  }, log.scenario_a.steps, "ENTER_SHORT_B_SCALE_IN", 24);
-  const trancheBIntentIdResolved = enter2.intent_id;
-  log.scenario_a.checks.scale_in =
-    enter2.http === 202 &&
-    enter2.body.status === "pending" &&
-    enter2.body.code !== "position_addition_not_implemented";
-
-  const own2 = await waitTwoTranches(
-    log.scenario_a.steps,
-    "two_tranches",
-    [trancheAIntentIdResolved, trancheBIntentIdResolved],
-  );
-  const stTwo = await state();
-  log.scenario_a.checks.two_tranches = stTwo.instrumentOpenContracts === 2;
-  log.scenario_a.tranche_b_intent_id = trancheBIntentIdResolved;
-
-  // Scenario B (optional): restart while 2 tranches open.
-  if (process.env.PM4_E2E_RESTART === "1") {
-    const port = env.GLITCH_LOCAL_PORT ?? "8790";
-    try {
-      const kill = spawn("powershell", [
-        "-NoProfile",
-        "-Command",
-        `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
-      ]);
-      await new Promise((r) => kill.on("close", r));
-      await sleep(5000);
-      spawn("powershell", ["-NoProfile", "-File", "start.ps1"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
-      await waitHealthReady();
-      const ownRestart = await ownership();
-      const activeAfterRestart = (ownRestart.tranches ?? []).filter(
-        (t) => t.intent_id === trancheAIntentIdResolved || t.intent_id === trancheBIntentIdResolved,
-      );
-      const stRestart = await state();
-      log.scenario_b.steps.push({
-        step: "RESTART_OWNERSHIP",
-        open_contracts: stRestart.instrumentOpenContracts,
-        tranche_count: activeAfterRestart.length,
-        tranches: activeAfterRestart.map((t) => ({
-          intent_id: t.intent_id,
-          filled_qty: t.filled_qty,
-          remaining_qty: t.remaining_qty,
-        })),
-      });
-      log.scenario_b.checks.two_tranches_after_restart = stRestart.instrumentOpenContracts === 2;
-      log.scenario_b.pass = log.scenario_b.checks.two_tranches_after_restart;
-    } catch (restartError) {
-      log.scenario_b.skipped = true;
-      log.scenario_b.reason = String(restartError?.message ?? restartError);
-      log.scenario_b.pass = false;
-      spawn("powershell", ["-NoProfile", "-File", "start.ps1"], { cwd: process.cwd(), detached: true, stdio: "ignore" }).unref();
-      await waitHealthReady();
-    }
-  } else {
+  if (!runRestart) {
     log.scenario_b.skipped = true;
     log.scenario_b.reason = "PM4_E2E_RESTART not set";
     log.scenario_b.pass = false;
   }
 
-  pkt = await packet();
-  const exitB = await submitIntent({
-    ...baseIntent("EXIT", "unused"),
-    quantity: 1,
-    target_intent_id: trancheBIntentIdResolved,
-    reason: "EXIT tranche B only (before amendments to avoid stop trigger)",
-  }, log.scenario_a.steps, "EXIT_B");
-  log.scenario_a.checks.exit_b = exitB.http === 202 && exitB.body.status === "pending";
-
-  for (let i = 0; i < 90; i++) {
-    await sleep(1000);
-    const st = await state();
-    if (st.instrumentOpenContracts === 1) break;
+  if (process.env.PM4_E2E_SKIP_C === "1") {
+    log.scenario_c.skipped = true;
+    log.scenario_c.reason = "PM4_E2E_SKIP_C set";
+    log.scenario_c.pass = false;
+  } else {
+    await ensureFlat(log.scenario_c.steps);
+    await runTrancheScenario(log.scenario_c, {
+      prefix: "LONG",
+      enterAction: "ENTER_LONG",
+      moveStopDelta: 5 * TICK,
+      moveTpDelta: 5 * TICK,
+    });
   }
-  const stMid = await state();
-  const ownMid = await ownership();
-  const trancheAMid = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
-  log.scenario_a.steps.push({
-    step: "AFTER_EXIT_B",
-    instrument_open: stMid.instrumentOpenContracts,
-    tranche_a_remaining: trancheAMid?.remaining_qty,
-    tranche_a_protection: trancheAMid?.protection?.status,
-  });
-  log.scenario_a.checks.one_contract_left =
-    stMid.instrumentOpenContracts === 1
-    || (trancheAMid?.remaining_qty === 1 && stMid.instrumentOpenContracts >= 1);
-  log.scenario_a.checks.tranche_a_alive =
-    trancheAMid !== undefined && trancheAMid.remaining_qty === 1 && trancheAMid.protection?.status === "proven";
-
-  pkt = await packet();
-  const trancheA = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
-  const stopBeforeA = trancheA?.protection?.stop?.price ?? pkt.protection?.stop?.price ?? sl;
-  const newStopA = stopBeforeA - 5 * TICK;
-
-  const moveStopA = await submitIntent({
-    ...baseIntent("MOVE_STOP", "unused"),
-    new_stop_price: newStopA,
-    target_intent_id: trancheAIntentIdResolved,
-    reason: "MOVE_STOP tranche A only",
-  }, log.scenario_a.steps, "MOVE_STOP_A");
-  log.scenario_a.checks.move_stop_a =
-    moveStopA.http === 202 && (moveStopA.body.status === "pending" || moveStopA.body.status === "submitted");
-
-  await sleep(5000);
-  pkt = await packet();
-  const tpBeforeA = trancheA?.protection?.target?.price ?? pkt.protection?.target?.price ?? tp;
-  const newTpA = tpBeforeA + 5 * TICK;
-
-  const moveTpA = await submitIntent({
-    ...baseIntent("MOVE_TP", "unused"),
-    new_take_profit: newTpA,
-    target_intent_id: trancheAIntentIdResolved,
-    reason: "MOVE_TP tranche A",
-  }, log.scenario_a.steps, "MOVE_TP_A");
-  log.scenario_a.checks.move_tp_a =
-    moveTpA.http === 202 && (moveTpA.body.status === "pending" || moveTpA.body.status === "submitted");
-
-  pkt = await packet();
-  const exitFlat = await submitIntent({
-    ...baseIntent("EXIT", "unused"),
-    reason: "EXIT flat",
-  }, log.scenario_a.steps, "EXIT_FLAT");
-  log.scenario_a.checks.exit_flat =
-    exitFlat.http === 202 && (exitFlat.body.status === "pending" || exitFlat.body.status === "closed");
-
-  for (let i = 0; i < 120; i++) {
-    await sleep(1000);
-    const st = await state();
-    if (st.instrumentOpenContracts === 0) break;
-  }
-  const stFinal = await state();
-  log.scenario_a.checks.flat = stFinal.instrumentOpenContracts === 0;
-
-  log.scenario_a.pass = Object.values(log.scenario_a.checks).every(Boolean);
 
   const hlthEnd = await health();
   log.health_after = {
@@ -456,7 +532,10 @@ try {
     blockingAmbiguity: hlthEnd.execution_recovery?.blockingAmbiguity,
   };
 
-  log.all_pass = log.scenario_a.pass && (log.scenario_b.pass || log.scenario_b.skipped);
+  log.all_pass =
+    log.scenario_a.pass
+    && (log.scenario_b.pass || log.scenario_b.skipped)
+    && (log.scenario_c.pass || log.scenario_c.skipped);
   log.finished_utc = new Date().toISOString();
   fs.writeFileSync("data/pm4-phase-c-e2e.json", JSON.stringify(log, null, 2));
   console.log(JSON.stringify(log, null, 2));
