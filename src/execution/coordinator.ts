@@ -285,21 +285,21 @@ export class ExecutionCoordinator {
       });
     }
 
-    const position = snapshot.positions.find(
+    const contractPositions = snapshot.positions.filter(
       (candidate) => candidate.accountId === this.config.scope.accountId
         && candidate.contractId === this.config.scope.contractId
         && candidate.type !== 0
         && Math.abs(candidate.size) > 0,
     );
-    if (!position) {
+    if (contractPositions.length === 0) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
         code: "position_not_found",
       });
     }
-
-    const positionSize = Math.abs(position.size);
+    const position = contractPositions[0]!;
+    const positionSize = snapshot.instrumentOpenContracts;
     let exitQuantity = intent.quantity
       ?? (intent.exitFraction !== undefined
         ? Math.max(1, Math.min(positionSize, Math.round(positionSize * intent.exitFraction)))

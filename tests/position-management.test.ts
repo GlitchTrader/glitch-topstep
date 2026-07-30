@@ -681,6 +681,88 @@ describe("position management coordinator", () => {
     }
   });
 
+  it("submits partial targeted EXIT when venue reports multiple single-lot positions", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-split-positions-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const basePosition = current.positions[0]!;
+      current.positions = [
+        { ...basePosition, size: -1 },
+        { ...basePosition, id: basePosition.id + 1, size: -1 },
+      ];
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let placedSize: number | undefined;
+      let closeCalled = false;
+      const api = {
+        placeOrder: async (request: { size: number }) => {
+          placedSize = request.size;
+          return 9303;
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => {
+          closeCalled = true;
+          return undefined;
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b005",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Exit the second tranche only with split venue rows.",
+        decision_audit: audit("EXIT"),
+        quantity: 1,
+        target_intent_id: ENTRY_INTENT_ID_B,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
+      assert.equal(placedSize, 1);
+      assert.equal(closeCalled, false);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rejects targeted EXIT when quantity exceeds tranche remaining", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-targeted-exit-reject-"));
     const store = new SqliteExecutionStore(":memory:");

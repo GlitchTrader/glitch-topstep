@@ -807,7 +807,8 @@
         "2026-07-30: scenario A partial live pass (enter, proven, scale_in, two_tranches) with Auto OCO; B failed on start.ps1 detached restart.",
         "2026-07-30 fix scripts/pm4-phase-c-e2e.mjs: kill port until free, start node with .env (no npm build), health diagnostics, recovery without second kill, ensureFlat waits working_orders=0.",
         "2026-07-30: scenarios A and B pass live; C failed because ensureFlat read ownership.working_orders (absent) instead of state.openOrders — fixed to cancel orphan brackets via ProjectX before scenario C.",
-        "2026-07-30: scenario A MOVE failed after partial EXIT_B + restart — ownership proven != live openOrders; harness waits for SL/TP custom tags on state.openOrders before MOVE."
+        "2026-07-30: scenario A MOVE failed after partial EXIT_B + restart — ownership proven != live openOrders; harness waits for SL/TP custom tags on state.openOrders before MOVE.",
+        "2026-07-30 root cause: handleExit used first position row size (1) instead of instrumentOpenContracts (2) when ProjectX reports split lots; partial EXIT called closePosition and flattened. Fixed in coordinator.ts + regression test."
       ],
       "sources": [
         "scripts/pm4-phase-c-e2e.mjs",
