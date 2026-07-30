@@ -307,7 +307,7 @@ export class ExecutionCoordinator {
 
     if (intent.targetIntentId !== undefined) {
       const tranche = this.tranches().find((candidate) => candidate.intent_id === intent.targetIntentId);
-      if (!tranche) {
+      if (!tranche || tranche.filled_qty <= 0) {
         return this.record({
           intentId: intent.intentId,
           status: "rejected",
@@ -315,7 +315,10 @@ export class ExecutionCoordinator {
           detail: intent.targetIntentId,
         });
       }
-      if (tranche.remaining_qty <= 0) {
+      const attributableQty = tranche.remaining_qty > 0
+        ? tranche.remaining_qty
+        : Math.min(tranche.filled_qty, positionSize);
+      if (attributableQty <= 0) {
         return this.record({
           intentId: intent.intentId,
           status: "ignored",
@@ -324,13 +327,13 @@ export class ExecutionCoordinator {
         });
       }
       if (intent.quantity === undefined && intent.exitFraction === undefined) {
-        exitQuantity = tranche.remaining_qty;
-      } else if (exitQuantity > tranche.remaining_qty) {
+        exitQuantity = attributableQty;
+      } else if (exitQuantity > attributableQty) {
         return this.record({
           intentId: intent.intentId,
           status: "rejected",
           code: "exit_quantity_exceeds_tranche_remaining",
-          detail: `requested=${exitQuantity};tranche_remaining=${tranche.remaining_qty}`,
+          detail: `requested=${exitQuantity};tranche_remaining=${attributableQty}`,
         });
       }
     } else if (
@@ -432,8 +435,8 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const activeTranches = this.tranches().filter((tranche) => tranche.remaining_qty > 0);
-    if (intent.targetIntentId === undefined && activeTranches.length > 1) {
+    const attributableTranches = this.attributableTranches(snapshot);
+    if (intent.targetIntentId === undefined && attributableTranches.length > 1) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -573,15 +576,28 @@ export class ExecutionCoordinator {
     return null;
   }
 
+  private attributableTranches(snapshot: AccountVenueSnapshot): TrancheView[] {
+    const all = this.tranches();
+    const open = all.filter((tranche) => tranche.remaining_qty > 0);
+    if (open.length > 0) {
+      return open;
+    }
+    if (snapshot.instrumentOpenContracts > 0) {
+      return all.filter((tranche) => tranche.filled_qty > 0);
+    }
+    return open;
+  }
+
   private resolveActiveProtection(
     snapshot: AccountVenueSnapshot,
     intent?: TradeIntent,
   ): { intentId: string; protection: ResolvedProtection } | null {
-    const activeTranches = this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+    const allTranches = this.tranches();
+    const attributableTranches = this.attributableTranches(snapshot);
 
     if (intent?.targetIntentId !== undefined) {
-      const tranche = activeTranches.find((candidate) => candidate.intent_id === intent.targetIntentId);
-      if (!tranche) {
+      const tranche = allTranches.find((candidate) => candidate.intent_id === intent.targetIntentId);
+      if (!tranche || tranche.filled_qty <= 0) {
         return null;
       }
       return {
@@ -590,15 +606,15 @@ export class ExecutionCoordinator {
       };
     }
 
-    if (activeTranches.length === 1) {
-      const tranche = activeTranches[0]!;
+    if (attributableTranches.length === 1) {
+      const tranche = attributableTranches[0]!;
       return {
         intentId: tranche.intent_id,
         protection: trancheProtectionToResolved(tranche),
       };
     }
 
-    if (activeTranches.length > 1) {
+    if (attributableTranches.length > 1) {
       return null;
     }
 
