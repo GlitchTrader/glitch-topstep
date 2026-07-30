@@ -258,8 +258,14 @@ function isReconciliationRetry(res) {
     || String(res.body.detail ?? "").includes("reconciliation_not_current");
 }
 
+function isVelocityRejected(res) {
+  return res.body.code === "projectx_mutation_rejected"
+    && String(res.body.detail ?? "").toLowerCase().includes("velocity control");
+}
+
 async function submitIntent(body, steps, stepName, retries = 24) {
   let current = { ...body, intent_id: body.intent_id ?? randomUUID() };
+  let velocityAttempts = 0;
   for (let attempt = 0; attempt < retries; attempt++) {
     await waitReconciliationReady();
     const pkt = await waitPacketReconciliationCurrent();
@@ -312,6 +318,21 @@ async function submitIntent(body, steps, stepName, retries = 24) {
       current.intent_id = randomUUID();
       await sleep(isReconciliationRetry(res) ? 4000 : 1500);
       continue;
+    }
+    // ponytail: venue rate limit — backoff 60-120s, max 3 per intent
+    if (isVelocityRejected(res)) {
+      velocityAttempts += 1;
+      if (velocityAttempts < 3) {
+        const waitMs = 60_000 + Math.floor(Math.random() * 60_001);
+        steps.push({
+          step: `${stepName}_VELOCITY_WAIT`,
+          velocity_attempt: velocityAttempts,
+          wait_ms: waitMs,
+        });
+        current.intent_id = randomUUID();
+        await sleep(waitMs);
+        continue;
+      }
     }
     return { ...res, intent_id: current.intent_id };
   }
