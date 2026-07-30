@@ -26,11 +26,54 @@ export interface TrancheView {
   created_utc: string;
 }
 
+export type ExitAllocationOperation = "place_order" | "close_position" | "modify_order";
+
 export interface ExitAllocationSource {
   exitIntentId: string;
   quantity: number;
   targetIntentId: string | null;
   createdUtc: string;
+  operation: ExitAllocationOperation;
+  receiptStatus: string | null;
+}
+
+export function filterProvenExitAllocations(
+  exits: readonly ExitAllocationSource[],
+  venueOpenContracts: number | undefined,
+  entryCreatedUtc: readonly string[] = [],
+): ExitAllocationSource[] {
+  const latestEntryUtc = entryCreatedUtc.reduce(
+    (latest, createdUtc) => (createdUtc > latest ? createdUtc : latest),
+    "",
+  );
+  return exits.filter((exit) => {
+    if (exit.receiptStatus === "ambiguous") {
+      return false;
+    }
+    // ponytail: a flat close before a later entry re-opens exposure is stale attribution
+    if (
+      exit.operation === "close_position"
+      && exit.targetIntentId === null
+      && latestEntryUtc
+      && exit.createdUtc < latestEntryUtc
+    ) {
+      return false;
+    }
+    // ponytail: close_position API ack ≠ flat venue; skip FIFO flat projection while instrument is open
+    if (
+      exit.operation === "close_position"
+      && exit.targetIntentId === null
+      && venueOpenContracts !== undefined
+      && venueOpenContracts > 0
+    ) {
+      return false;
+    }
+    // ponytail: partial market exit — allocate only after receipt leaves pending
+    if (exit.operation === "place_order" && exit.receiptStatus === "pending") {
+      return false;
+    }
+    return true;
+  });
 }
 
 function protectionView(protection: EntryProtection): TrancheProtectionView {
@@ -183,7 +226,7 @@ export function querySubmittedExitAllocations(database: DatabaseSync): ExitAlloc
       AND outbox.state = 'submitted'
       AND (
         receipt.status IS NULL
-        OR receipt.status NOT IN ('rejected', 'ignored')
+        OR receipt.status NOT IN ('rejected', 'ignored', 'ambiguous')
       )
     ORDER BY intent.received_utc ASC, intent.intent_id ASC
   `).all() as Array<{
@@ -218,6 +261,8 @@ export function querySubmittedExitAllocations(database: DatabaseSync): ExitAlloc
       quantity: quantity ?? 0,
       targetIntentId,
       createdUtc: row.received_utc,
+      operation: row.operation as ExitAllocationOperation,
+      receiptStatus: row.status,
     };
   }).filter((exit) => exit.quantity > 0);
 }

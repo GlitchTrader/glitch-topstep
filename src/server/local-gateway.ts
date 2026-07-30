@@ -116,7 +116,7 @@ export class LocalGatewayServer {
           this.json(response, 503, { error: "ownership_projection_unavailable" });
           return;
         }
-        this.json(response, 200, this.ownershipService.current());
+        this.json(response, 200, this.ownershipService.current(this.snapshot().instrumentOpenContracts));
         return;
       }
       if (request.method === "POST" && url.pathname === "/intent") {

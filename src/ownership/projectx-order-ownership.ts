@@ -16,6 +16,7 @@ import {
 } from "./protection.js";
 import {
   buildTranches,
+  filterProvenExitAllocations,
   queryIntentRegistrationTimes,
   querySubmittedExitAllocations,
 } from "./tranches.js";
@@ -74,7 +75,7 @@ export class ProjectXOrderOwnershipService {
     this.executionDatabase.close();
   }
 
-  public current(): ProjectXOrderOwnershipSnapshot {
+  public current(venueOpenContracts?: number): ProjectXOrderOwnershipSnapshot {
     const rows = this.executionDatabase.prepare(`
       SELECT
         outbox.intent_id,
@@ -119,7 +120,11 @@ export class ProjectXOrderOwnershipService {
 
     const positionOpen = this.hasOpenPosition(entries);
     const intentCreatedUtc = queryIntentRegistrationTimes(this.executionDatabase);
-    const exitAllocations = querySubmittedExitAllocations(this.executionDatabase);
+    const exitAllocations = filterProvenExitAllocations(
+      querySubmittedExitAllocations(this.executionDatabase),
+      venueOpenContracts,
+      [...intentCreatedUtc.values()],
+    );
     const tranches = buildTranches(entries, intentCreatedUtc, exitAllocations);
     return {
       schema_version: "glitch.projectx.order_ownership.v1",

@@ -206,7 +206,7 @@ export class GlitchTopstepService {
         last_error: "order_flow_service_unavailable",
         observation: null,
       },
-      () => this.ownershipService?.current().tranches ?? [],
+      () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -283,7 +283,7 @@ export class GlitchTopstepService {
       snapshot,
       (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
       () => this.packets?.invalidateAll(),
-      () => this.ownershipService?.current().tranches ?? [],
+      () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
     );
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,

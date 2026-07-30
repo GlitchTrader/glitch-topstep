@@ -9,6 +9,7 @@ import type { TradeIntent } from "../src/domain/models.js";
 import {
   allocateExitQuantities,
   buildTranches,
+  filterProvenExitAllocations,
   querySubmittedExitAllocations,
 } from "../src/ownership/tranches.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
@@ -145,6 +146,8 @@ describe("tranche projection", () => {
         quantity: 2,
         targetIntentId: null,
         createdUtc: "2026-07-21T12:10:00Z",
+        operation: "place_order",
+        receiptStatus: "closed",
       }],
     );
     assert.equal(allocated.get(ENTRY_A), 1);
@@ -161,6 +164,8 @@ describe("tranche projection", () => {
         quantity: 2,
         targetIntentId: null,
         createdUtc: "2026-07-21T12:10:00Z",
+        operation: "place_order",
+        receiptStatus: "closed",
       }],
     );
     assert.equal(tranches[0]?.remaining_qty, 0);
@@ -179,6 +184,8 @@ describe("tranche projection", () => {
         quantity: Number.MAX_SAFE_INTEGER,
         targetIntentId: null,
         createdUtc: "2026-07-21T12:05:00Z",
+        operation: "close_position",
+        receiptStatus: "closed",
       }],
     );
     assert.equal(tranches[0]?.remaining_qty, 1);
@@ -202,11 +209,92 @@ describe("tranche projection", () => {
         assert.equal(exits.length, 1);
         assert.equal(exits[0]?.quantity, 1);
         assert.equal(exits[0]?.targetIntentId, ENTRY_B);
+        assert.equal(exits[0]?.operation, "place_order");
       } finally {
         database.close();
       }
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("does not flatten tranches on submitted close_position while venue is still open", () => {
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001), entry(ENTRY_B, 1, 9002)],
+      new Map([
+        [ENTRY_A, "2026-07-21T12:00:05Z"],
+        [ENTRY_B, "2026-07-21T12:00:06Z"],
+      ]),
+      filterProvenExitAllocations([{
+        exitIntentId: "00000000-0000-4000-8000-00000000e003",
+        quantity: Number.MAX_SAFE_INTEGER,
+        targetIntentId: null,
+        createdUtc: "2026-07-21T12:10:00Z",
+        operation: "close_position",
+        receiptStatus: "closed",
+      }], 2),
+    );
+    assert.equal(tranches[0]?.remaining_qty, 1);
+    assert.equal(tranches[1]?.remaining_qty, 1);
+  });
+
+  it("applies submitted close_position once venue is flat", () => {
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001), entry(ENTRY_B, 1, 9002)],
+      new Map([
+        [ENTRY_A, "2026-07-21T12:00:05Z"],
+        [ENTRY_B, "2026-07-21T12:00:06Z"],
+      ]),
+      filterProvenExitAllocations([{
+        exitIntentId: "00000000-0000-4000-8000-00000000e004",
+        quantity: Number.MAX_SAFE_INTEGER,
+        targetIntentId: null,
+        createdUtc: "2026-07-21T12:10:00Z",
+        operation: "close_position",
+        receiptStatus: "closed",
+      }], 0),
+    );
+    assert.equal(tranches[0]?.remaining_qty, 0);
+    assert.equal(tranches[1]?.remaining_qty, 0);
+  });
+
+  it("does not allocate pending partial exits before venue confirmation", () => {
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001), entry(ENTRY_B, 1, 9002)],
+      new Map([
+        [ENTRY_A, "2026-07-21T12:00:05Z"],
+        [ENTRY_B, "2026-07-21T12:00:06Z"],
+      ]),
+      filterProvenExitAllocations([{
+        exitIntentId: "00000000-0000-4000-8000-00000000e005",
+        quantity: 1,
+        targetIntentId: ENTRY_B,
+        createdUtc: "2026-07-21T12:10:00Z",
+        operation: "place_order",
+        receiptStatus: "pending",
+      }], 2),
+    );
+    assert.equal(tranches[0]?.remaining_qty, 1);
+    assert.equal(tranches[1]?.remaining_qty, 1);
+  });
+
+  it("ignores stale full flat closes when a later entry reopened exposure", () => {
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001), entry(ENTRY_B, 1, 9002)],
+      new Map([
+        [ENTRY_A, "2026-07-21T12:00:05Z"],
+        [ENTRY_B, "2026-07-21T12:00:06Z"],
+      ]),
+      filterProvenExitAllocations([{
+        exitIntentId: "00000000-0000-4000-8000-00000000e006",
+        quantity: Number.MAX_SAFE_INTEGER,
+        targetIntentId: null,
+        createdUtc: "2026-07-21T12:00:05.500Z",
+        operation: "close_position",
+        receiptStatus: "closed",
+      }], 0, ["2026-07-21T12:00:05Z", "2026-07-21T12:00:06Z"]),
+    );
+    assert.equal(tranches[0]?.remaining_qty, 1);
+    assert.equal(tranches[1]?.remaining_qty, 1);
   });
 });
