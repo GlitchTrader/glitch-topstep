@@ -14,6 +14,40 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isTrackedUserStreamIdField(key: string): boolean {
+  if (key === "contractId" || key === "symbolId") {
+    return false;
+  }
+  return key === "id" || key.endsWith("Id") || key.endsWith("ID");
+}
+
+/** Sanitized operator detail when a user-stream payload fails strict ProjectX parsing. */
+export function userStreamPayloadFaultDetail(
+  eventType: string,
+  input: unknown,
+): Record<string, unknown> {
+  if (!isRecord(input)) {
+    return { eventType, payloadKind: input === null ? "null" : typeof input };
+  }
+  const idFieldTypes: Record<string, string> = {};
+  for (const key of Object.keys(input).sort()) {
+    if (!isTrackedUserStreamIdField(key)) {
+      continue;
+    }
+    const field = input[key];
+    idFieldTypes[key] = field === null
+      ? "null"
+      : Array.isArray(field)
+        ? "array"
+        : typeof field;
+  }
+  return {
+    eventType,
+    keys: Object.keys(input).sort(),
+    idFieldTypes,
+  };
+}
+
 function requiredString(value: Record<string, unknown>, key: string): string {
   const field = value[key];
   if (typeof field !== "string") {
@@ -73,7 +107,7 @@ export function parseContract(input: unknown): ContractInfo {
 
 export function parsePosition(input: unknown): PositionInfo {
   if (!isRecord(input)) throw new Error("position_not_object");
-  const type = coercedInteger(input, "type");
+  const type = coercedIntegerOptional(input, "type", 0);
   if (![0, 1, 2].includes(type)) throw new Error("position_type_invalid");
   return {
     id: coercedInteger(input, "id"),
@@ -89,6 +123,7 @@ export function parsePosition(input: unknown): PositionInfo {
 export function parseOrder(input: unknown): OrderInfo {
   if (!isRecord(input)) throw new Error("order_not_object");
   return {
+    // ponytail: live #29 observed orderId without id; REST place returns orderId. Canonical stream field is id.
     id: coercedIntegerField(input, "id", "orderId"),
     accountId: coercedInteger(input, "accountId"),
     contractId: requiredString(input, "contractId"),
@@ -284,6 +319,17 @@ function mapPrimitiveMarketArray(
     };
   }
   return null;
+}
+
+function coercedIntegerOptional(
+  value: Record<string, unknown>,
+  key: string,
+  defaultValue: number,
+): number {
+  if (!(key in value) || value[key] === null || value[key] === undefined) {
+    return defaultValue;
+  }
+  return coercedInteger(value, key);
 }
 
 function coercedNumber(value: Record<string, unknown>, key: string): number {
