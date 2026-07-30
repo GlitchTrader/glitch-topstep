@@ -20,6 +20,10 @@ function canonicalIntentPayload(intent: TradeIntent): Record<string, unknown> {
     ...(intent.orderType === undefined ? {} : { order_type: intent.orderType }),
     ...(intent.stopLoss === undefined ? {} : { stop_loss: intent.stopLoss }),
     ...(intent.takeProfit1 === undefined ? {} : { take_profit_1: intent.takeProfit1 }),
+    ...(intent.newStopPrice === undefined ? {} : { new_stop_price: intent.newStopPrice }),
+    ...(intent.newTakeProfit === undefined ? {} : { new_take_profit: intent.newTakeProfit }),
+    ...(intent.exitFraction === undefined ? {} : { exit_fraction: intent.exitFraction }),
+    ...(intent.targetIntentId === undefined ? {} : { target_intent_id: intent.targetIntentId }),
   };
 }
 

@@ -14,6 +14,7 @@ import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
+import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
@@ -47,6 +48,7 @@ export class GlitchTopstepService {
   private orderFlow: ProjectXOrderFlowService | null = null;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
+  private ownershipService: ProjectXOrderOwnershipService | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
@@ -173,6 +175,20 @@ export class GlitchTopstepService {
     await this.persistRecoveryResolutions(initialRecovery.resolutions);
     this.reconcileEntrySubmissionLatch(positions, orders);
 
+    const ownershipConfig = this.config.localGateway.ownership;
+    if (ownershipConfig) {
+      this.ownershipService = new ProjectXOrderOwnershipService(
+        ownershipConfig.executionDatabasePath,
+        ownershipConfig.evidenceDatabasePath,
+        {
+          accountId: ownershipConfig.accountId,
+          accountName: ownershipConfig.accountName,
+          contractId: ownershipConfig.contractId,
+          instrument: ownershipConfig.instrument,
+        },
+      );
+    }
+
     const snapshot = () => this.state.buildSnapshot(
       this.config.scope.accountId,
       this.config.scope.contractId,
@@ -190,6 +206,7 @@ export class GlitchTopstepService {
         last_error: "order_flow_service_unavailable",
         observation: null,
       },
+      () => this.ownershipService?.current().tranches ?? [],
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -266,6 +283,7 @@ export class GlitchTopstepService {
       snapshot,
       (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
       () => this.packets?.invalidateAll(),
+      () => this.ownershipService?.current().tranches ?? [],
     );
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
@@ -326,6 +344,7 @@ export class GlitchTopstepService {
       },
       (limit) => this.providerEvidenceStore.recent(limit),
       coordinator,
+      this.ownershipService,
     );
     await this.gateway.start();
 
@@ -383,6 +402,8 @@ export class GlitchTopstepService {
       this.gateway?.stop() ?? Promise.resolve(),
       this.realtime?.stop() ?? Promise.resolve(),
     ]);
+    this.ownershipService?.close();
+    this.ownershipService = null;
     await Promise.all([
       this.historySync.waitForIdle(),
       this.marketObservation.waitForIdle(),

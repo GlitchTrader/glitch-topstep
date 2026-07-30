@@ -10,6 +10,7 @@ import {
   emptyOrderFlowState,
   type DirectDecisionPacket,
 } from "./packet-builder.js";
+import type { TrancheView } from "../ownership/tranches.js";
 
 export class DecisionPacketService {
   public constructor(
@@ -20,6 +21,7 @@ export class DecisionPacketService {
     private readonly now: () => number = Date.now,
     private readonly marketObservation: () => MarketObservationState = emptyMarketObservationState,
     private readonly orderFlow: () => ProjectXOrderFlowState = emptyOrderFlowState,
+    private readonly tranches: () => TrancheView[] = () => [],
   ) {}
 
   public current(): DirectDecisionPacket {
@@ -35,6 +37,7 @@ export class DecisionPacketService {
       new Date(nowMs),
       this.marketObservation(),
       this.orderFlow(),
+      this.tranches(),
     );
     this.store.recordIssuedPacket(packet);
     return packet;

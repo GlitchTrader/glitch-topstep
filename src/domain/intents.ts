@@ -25,6 +25,7 @@ const CORE_FIELDS = new Set([
   "new_stop_price",
   "new_take_profit",
   "exit_fraction",
+  "target_intent_id",
 ]);
 
 const AUDIT_FIELDS = new Set([
@@ -139,9 +140,24 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   const newStopPrice = optionalNumber(input, "new_stop_price");
   const newTakeProfit = optionalNumber(input, "new_take_profit");
   const exitFraction = optionalNumber(input, "exit_fraction");
+  const targetIntentIdRaw = input.target_intent_id;
   const orderType = input.order_type;
   if (orderType !== undefined && orderType !== "MARKET") {
     throw new Error("order_type_invalid");
+  }
+
+  let targetIntentId: string | undefined;
+  if (targetIntentIdRaw !== undefined) {
+    if (action !== "EXIT") {
+      throw new Error("target_intent_id_only_allowed_on_exit");
+    }
+    if (typeof targetIntentIdRaw !== "string") {
+      throw new Error("target_intent_id_invalid");
+    }
+    targetIntentId = stringField({ target_intent_id: targetIntentIdRaw }, "target_intent_id", 64);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetIntentId)) {
+      throw new Error("target_intent_id_must_be_uuid");
+    }
   }
 
   const entry = action === "ENTER_LONG" || action === "ENTER_SHORT";
@@ -233,5 +249,6 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     ...(newStopPrice === undefined ? {} : { newStopPrice }),
     ...(newTakeProfit === undefined ? {} : { newTakeProfit }),
     ...(exitFraction === undefined ? {} : { exitFraction }),
+    ...(targetIntentId === undefined ? {} : { targetIntentId }),
   };
 }

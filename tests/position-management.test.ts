@@ -8,6 +8,7 @@ import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import type { OrderInfo } from "../src/domain/models.js";
 import { ExecutionCoordinator } from "../src/execution/coordinator.js";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
+import type { TrancheView } from "../src/ownership/tranches.js";
 import type { ModifyOrderRequest, ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
@@ -15,6 +16,7 @@ import { orderFlowWithTrades, snapshot } from "./fixtures.js";
 
 const INTENT_ID = "00000000-0000-4000-8000-00000000b001";
 const ENTRY_INTENT_ID = "00000000-0000-4000-8000-00000000b000";
+const ENTRY_INTENT_ID_B = "00000000-0000-4000-8000-00000000b003";
 
 function config(dataDir: string): AppConfig {
   return {
@@ -142,6 +144,30 @@ function openPositionSnapshot(intentId: string) {
   }];
   current.openOrders = protectiveOrders(intentId);
   return current;
+}
+
+function tranche(intentId: string, remainingQty: number, entryOrderId: number): TrancheView {
+  return {
+    intent_id: intentId,
+    entry_order_id: entryOrderId,
+    filled_qty: remainingQty,
+    remaining_qty: remainingQty,
+    created_utc: "2026-07-21T12:00:05Z",
+    protection: {
+      status: "proven",
+      reason: "provider_child_orders_bound_by_custom_tag",
+      stop: {
+        provider_order_id: entryOrderId + 10,
+        custom_tag: `glt-${intentId}-SL`,
+        price: 19_990,
+      },
+      target: {
+        provider_order_id: entryOrderId + 11,
+        custom_tag: `glt-${intentId}-TP`,
+        price: 20_020,
+      },
+    },
+  };
 }
 
 describe("position management coordinator", () => {
@@ -342,6 +368,148 @@ describe("position management coordinator", () => {
       assert.equal(receipt.status, "pending");
       assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
       assert.equal(placedSize, 1);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("submits targeted partial EXIT against a specific tranche remaining quantity", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-targeted-exit-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.positions[0]!.size = 2;
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let placedSize: number | undefined;
+      const api = {
+        placeOrder: async (request: { size: number }) => {
+          placedSize = request.size;
+          return 9302;
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => {
+          throw new Error("closePosition should not be called for targeted partial exit");
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b004",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Exit the second tranche only.",
+        decision_audit: audit("EXIT"),
+        quantity: 1,
+        target_intent_id: ENTRY_INTENT_ID_B,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
+      assert.equal(placedSize, 1);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects targeted EXIT when quantity exceeds tranche remaining", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-targeted-exit-reject-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.positions[0]!.size = 2;
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const api = {
+        placeOrder: async () => {
+          throw new Error("placeOrder should not be called");
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [tranche(ENTRY_INTENT_ID_B, 1, 9002)],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b005",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Too large for tranche.",
+        decision_audit: audit("EXIT"),
+        quantity: 2,
+        target_intent_id: ENTRY_INTENT_ID_B,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "exit_quantity_exceeds_tranche_remaining");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

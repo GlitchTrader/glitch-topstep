@@ -8,6 +8,7 @@ import {
   intentIdFromStopTag,
   type ResolvedProtection,
 } from "../ownership/protection.js";
+import type { TrancheView } from "../ownership/tranches.js";
 import {
   type ModifyOrderRequest,
   type PlaceOrderRequest,
@@ -43,6 +44,7 @@ export class ExecutionCoordinator {
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
     private readonly invalidateIssuedPackets: () => void,
+    private readonly tranches: () => TrancheView[] = () => [],
   ) {}
 
   public handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
@@ -298,10 +300,57 @@ export class ExecutionCoordinator {
     }
 
     const positionSize = Math.abs(position.size);
-    const exitQuantity = intent.quantity
+    let exitQuantity = intent.quantity
       ?? (intent.exitFraction !== undefined
         ? Math.max(1, Math.min(positionSize, Math.round(positionSize * intent.exitFraction)))
         : positionSize);
+
+    if (intent.targetIntentId !== undefined) {
+      const tranche = this.tranches().find((candidate) => candidate.intent_id === intent.targetIntentId);
+      if (!tranche) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "target_tranche_not_found",
+          detail: intent.targetIntentId,
+        });
+      }
+      if (tranche.remaining_qty <= 0) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "ignored",
+          code: "target_tranche_already_flat",
+          detail: intent.targetIntentId,
+        });
+      }
+      if (intent.quantity === undefined && intent.exitFraction === undefined) {
+        exitQuantity = tranche.remaining_qty;
+      } else if (exitQuantity > tranche.remaining_qty) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "exit_quantity_exceeds_tranche_remaining",
+          detail: `requested=${exitQuantity};tranche_remaining=${tranche.remaining_qty}`,
+        });
+      }
+    } else if (
+      intent.quantity !== undefined
+      && intent.quantity < positionSize
+      && this.tranches().length > 0
+    ) {
+      const fifoRemaining = this.tranches()
+        .filter((candidate) => candidate.remaining_qty > 0)
+        .reduce((total, candidate) => total + candidate.remaining_qty, 0);
+      if (exitQuantity > fifoRemaining) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "exit_quantity_exceeds_attributable_remaining",
+          detail: `requested=${exitQuantity};attributable_remaining=${fifoRemaining}`,
+        });
+      }
+    }
+
     if (!Number.isInteger(exitQuantity) || exitQuantity < 1 || exitQuantity > positionSize) {
       return this.record({
         intentId: intent.intentId,

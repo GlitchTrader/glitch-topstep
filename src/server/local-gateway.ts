@@ -27,6 +27,7 @@ export interface LocalGatewayOptions {
 export class LocalGatewayServer {
   private server: Server | null = null;
   private ownershipService: ProjectXOrderOwnershipService | null;
+  private readonly ownsOwnershipService: boolean;
 
   public constructor(
     private readonly options: LocalGatewayOptions,
@@ -35,20 +36,23 @@ export class LocalGatewayServer {
     private readonly packet: () => DirectDecisionPacket,
     private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
     private readonly coordinator: ExecutionCoordinator,
+    ownershipService: ProjectXOrderOwnershipService | null = null,
   ) {
     const ownership = options.ownership;
-    this.ownershipService = ownership
-      ? new ProjectXOrderOwnershipService(
-          ownership.executionDatabasePath,
-          ownership.evidenceDatabasePath,
-          {
-            accountId: ownership.accountId,
-            accountName: ownership.accountName,
-            contractId: ownership.contractId,
-            instrument: ownership.instrument,
-          },
-        )
-      : null;
+    this.ownsOwnershipService = ownershipService === null && ownership !== undefined;
+    this.ownershipService = ownershipService
+      ?? (ownership
+        ? new ProjectXOrderOwnershipService(
+            ownership.executionDatabasePath,
+            ownership.evidenceDatabasePath,
+            {
+              accountId: ownership.accountId,
+              accountName: ownership.accountName,
+              contractId: ownership.contractId,
+              instrument: ownership.instrument,
+            },
+          )
+        : null);
   }
 
   public async start(): Promise<void> {
@@ -72,7 +76,9 @@ export class LocalGatewayServer {
         server.close((error) => (error ? reject(error) : resolve()));
       });
     }
-    this.ownershipService?.close();
+    if (this.ownsOwnershipService) {
+      this.ownershipService?.close();
+    }
     this.ownershipService = null;
   }
 
