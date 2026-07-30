@@ -615,6 +615,10 @@ describe("position management coordinator", () => {
       current.positions[0]!.size = 2;
       current.instrumentOpenContracts = 2;
       current.totalOpenContracts = 2;
+      current.openOrders = [
+        ...protectiveOrders(ENTRY_INTENT_ID),
+        ...protectiveOrders(ENTRY_INTENT_ID_B),
+      ];
       const now = new Date();
       current.capturedAt = now.toISOString();
       current.quote = { ...current.quote!, timestamp: now.toISOString() };
@@ -632,12 +636,16 @@ describe("position management coordinator", () => {
       );
       store.recordIssuedPacket(packet);
       let placedSize: number | undefined;
+      const cancelledOrderIds: number[] = [];
       const api = {
         placeOrder: async (request: { size: number }) => {
           placedSize = request.size;
           return 9302;
         },
         modifyOrder: async () => undefined,
+        cancelOrder: async (_accountId: number, orderId: number) => {
+          cancelledOrderIds.push(orderId);
+        },
         closePosition: async () => {
           throw new Error("closePosition should not be called for targeted partial exit");
         },
@@ -675,6 +683,7 @@ describe("position management coordinator", () => {
       assert.equal(receipt.status, "pending");
       assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
       assert.equal(placedSize, 1);
+      assert.deepEqual(cancelledOrderIds.sort(), [9201, 9202]);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

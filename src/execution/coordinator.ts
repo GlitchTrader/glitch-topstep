@@ -369,6 +369,12 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
+    if (partialExit && intent.targetIntentId !== undefined) {
+      const cancelError = await this.cancelTrancheProtectionOrders(snapshot, intent);
+      if (cancelError) {
+        return cancelError;
+      }
+    }
     const request = partialExit
       ? {
           accountId: this.config.scope.accountId,
@@ -596,6 +602,32 @@ export class ExecutionCoordinator {
       return all.filter((tranche) => tranche.filled_qty > 0);
     }
     return open;
+  }
+
+  private async cancelTrancheProtectionOrders(
+    snapshot: AccountVenueSnapshot,
+    intent: TradeIntent,
+  ): Promise<ExecutionReceipt | null> {
+    const active = this.resolveActiveProtection(snapshot, intent);
+    if (!active) {
+      return null;
+    }
+    for (const leg of [active.protection.stop, active.protection.target]) {
+      if (leg.providerOrderId === null) {
+        continue;
+      }
+      try {
+        await this.api.cancelOrder(this.config.scope.accountId, leg.providerOrderId);
+      } catch (error) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "protection_cancel_failed",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return null;
   }
 
   private resolveActiveProtection(
