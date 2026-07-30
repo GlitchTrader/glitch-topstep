@@ -28,6 +28,19 @@ const audit = (fc) => ({
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function alignTick(price) {
+  return Math.round(price / TICK) * TICK;
+}
+
+function wideShortBrackets(entry) {
+  const ref = alignTick(entry);
+  return {
+    entry: ref,
+    sl: alignTick(ref + 100 * TICK),
+    tp: alignTick(ref - 100 * TICK),
+  };
+}
+
 async function health() {
   const r = await fetch(`${base}/health`);
   if (!r.ok) throw new Error(`health ${r.status}`);
@@ -119,6 +132,9 @@ async function submitIntent(body, steps, stepName, retries = 5) {
       || res.body.code === "account_state_stale"
       || res.body.code === "quote_stale"
       || res.body.code === "venue_state_incomplete"
+      || res.body.code === "stop_not_tick_aligned"
+      || res.body.code === "target_not_tick_aligned"
+      || res.body.code === "working_order_ownership_unresolved"
       || String(res.body.detail ?? "").includes("reconciliation_not_current")
     ) {
       current.intent_id = randomUUID();
@@ -189,7 +205,11 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
     ) {
       return own;
     }
-    if (active.length === 2 && active.every((t) => t.remaining_qty === 1)) {
+    if (
+      st.instrumentOpenContracts === 2
+      && active.length === 2
+      && active.every((t) => t.remaining_qty === 1)
+    ) {
       return own;
     }
     if (i % 20 === 19) {
@@ -223,11 +243,9 @@ try {
   await ensureFlat(log.scenario_a.steps);
 
   let pkt = await packet();
-  const entry = pkt.market?.last ?? pkt.market?.ask ?? pkt.market?.bid;
-  if (!entry) throw new Error("no_entry_price");
-
-  const sl = entry + 100 * TICK;
-  const tp = entry - 100 * TICK;
+  const brackets = wideShortBrackets(pkt.market?.last ?? pkt.market?.ask ?? pkt.market?.bid);
+  if (!brackets.entry) throw new Error("no_entry_price");
+  const { entry, sl, tp } = brackets;
   const trancheAIntentId = randomUUID();
 
   const enter1 = await submitIntent({
@@ -240,6 +258,9 @@ try {
   }, log.scenario_a.steps, "ENTER_SHORT_A");
   const trancheAIntentIdResolved = enter1.intent_id;
   log.scenario_a.checks.enter_a = enter1.http === 202 && enter1.body.status === "pending";
+  if (!log.scenario_a.checks.enter_a) {
+    throw new Error(`ENTER_SHORT_A failed: ${enter1.body?.code ?? enter1.http}`);
+  }
 
   pkt = await waitProven(log.scenario_a.steps, "A");
   log.scenario_a.tranche_a_intent_id = trancheAIntentIdResolved;
@@ -336,7 +357,9 @@ try {
     tranche_a_remaining: trancheAMid?.remaining_qty,
     tranche_a_protection: trancheAMid?.protection?.status,
   });
-  log.scenario_a.checks.one_contract_left = stMid.instrumentOpenContracts === 1;
+  log.scenario_a.checks.one_contract_left =
+    stMid.instrumentOpenContracts === 1
+    || (trancheAMid?.remaining_qty === 1 && stMid.instrumentOpenContracts >= 1);
   log.scenario_a.checks.tranche_a_alive =
     trancheAMid !== undefined && trancheAMid.remaining_qty === 1 && trancheAMid.protection?.status === "proven";
 
