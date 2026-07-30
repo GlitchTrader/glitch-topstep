@@ -148,8 +148,8 @@ export function parseTradeIntent(input: unknown): TradeIntent {
 
   let targetIntentId: string | undefined;
   if (targetIntentIdRaw !== undefined) {
-    if (action !== "EXIT") {
-      throw new Error("target_intent_id_only_allowed_on_exit");
+    if (action !== "EXIT" && action !== "MOVE_STOP" && action !== "MOVE_TP") {
+      throw new Error("target_intent_id_only_allowed_on_exit_or_amendment");
     }
     if (typeof targetIntentIdRaw !== "string") {
       throw new Error("target_intent_id_invalid");

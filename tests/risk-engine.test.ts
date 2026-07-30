@@ -139,6 +139,93 @@ describe("factual execution safety", () => {
     );
   });
 
+  it("allows same-direction scale-in when only protective orders remain open", () => {
+    const positioned = snapshot();
+    positioned.instrumentOpenContracts = 1;
+    positioned.totalOpenContracts = 1;
+    positioned.positions = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      type: 2,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    positioned.openOrders = [{
+      id: 9201,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 4,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: 20_010,
+      customTag: "glt-00000000-0000-4000-8000-00000000a001-SL",
+    }, {
+      id: 9202,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 1,
+      side: 0,
+      size: 1,
+      limitPrice: 19_980,
+      stopPrice: null,
+      customTag: "glt-00000000-0000-4000-8000-00000000a001-TP",
+    }];
+    const shortIntent = intent();
+    shortIntent.action = "ENTER_SHORT";
+    shortIntent.decisionAudit.finalChoice = "ENTER_SHORT";
+    shortIntent.stopLoss = 20_010.25;
+    shortIntent.takeProfit1 = 19_980.25;
+    assert.doesNotThrow(() => validateEntryRisk(shortIntent, positioned, policy, settings, context));
+
+    const longIntent = intent();
+    assert.throws(
+      () => validateEntryRisk(longIntent, positioned, policy, settings, context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "position_side_conflict",
+    );
+  });
+
+  it("rejects scale-in when non-protective working orders remain", () => {
+    const positioned = snapshot();
+    positioned.instrumentOpenContracts = 1;
+    positioned.totalOpenContracts = 1;
+    positioned.positions = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      type: 1,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    positioned.openOrders = [{
+      id: 9301,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 2,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: null,
+      customTag: "glt-pending-entry",
+    }];
+    assert.throws(
+      () => validateEntryRisk(intent(), positioned, policy, settings, context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "working_order_ownership_unresolved",
+    );
+  });
+
   it("rejects stale or incomplete venue truth", () => {
     const stale = snapshot();
     stale.capturedAt = "2026-07-21T11:59:00Z";

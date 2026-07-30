@@ -28,6 +28,7 @@ import {
   intentIdFromStopTag,
   type ResolvedProtection,
 } from "../ownership/protection.js";
+import { deriveScaleInSupportedAction } from "../ownership/scale-in.js";
 import type { TrancheView } from "../ownership/tranches.js";
 
 export interface DirectDecisionPacket {
@@ -292,10 +293,21 @@ export function derivePacketProtection(
 export function deriveSupportedActions(
   snapshot: AccountVenueSnapshot,
   protection: DirectDecisionPacket["protection"],
+  remainingCapacity = 0,
 ): TradeAction[] {
   const base: TradeAction[] = snapshot.instrumentOpenContracts === 0
     ? ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"]
     : ["HOLD", "EXIT", "NOTHING"];
+  const scaleInAction = deriveScaleInSupportedAction(
+    snapshot,
+    snapshot.contract.id,
+    snapshot.account.id,
+    remainingCapacity,
+    protection.status === "proven",
+  );
+  if (scaleInAction !== null) {
+    base.unshift(scaleInAction);
+  }
   if (protection.status === "proven") {
     return [...base.slice(0, base.length - 2), "MOVE_STOP", "MOVE_TP", ...base.slice(-2)];
   }
@@ -349,7 +361,7 @@ export function buildDecisionPacket(
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
   const protection = derivePacketProtection(snapshot, null, tranches);
-  const supportedActions = deriveSupportedActions(snapshot, protection);
+  const supportedActions = deriveSupportedActions(snapshot, protection, remainingCapacity);
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",

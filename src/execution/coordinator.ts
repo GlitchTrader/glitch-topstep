@@ -432,13 +432,38 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const active = this.resolveActiveProtection(snapshot);
-    if (!active || active.protection.status !== "proven") {
+    const activeTranches = this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+    if (intent.targetIntentId === undefined && activeTranches.length > 1) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "target_intent_id_required",
+      });
+    }
+
+    const active = this.resolveActiveProtection(snapshot, intent);
+    if (!active) {
+      if (intent.targetIntentId !== undefined) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: "target_tranche_not_found",
+          detail: intent.targetIntentId,
+        });
+      }
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
         code: "protection_not_proven",
-        detail: active?.protection.reason ?? "no_active_protection",
+        detail: "no_active_protection",
+      });
+    }
+    if (active.protection.status !== "proven") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "protection_not_proven",
+        detail: active.protection.reason,
       });
     }
 
@@ -550,7 +575,33 @@ export class ExecutionCoordinator {
 
   private resolveActiveProtection(
     snapshot: AccountVenueSnapshot,
+    intent?: TradeIntent,
   ): { intentId: string; protection: ResolvedProtection } | null {
+    const activeTranches = this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+
+    if (intent?.targetIntentId !== undefined) {
+      const tranche = activeTranches.find((candidate) => candidate.intent_id === intent.targetIntentId);
+      if (!tranche) {
+        return null;
+      }
+      return {
+        intentId: tranche.intent_id,
+        protection: trancheProtectionToResolved(tranche),
+      };
+    }
+
+    if (activeTranches.length === 1) {
+      const tranche = activeTranches[0]!;
+      return {
+        intentId: tranche.intent_id,
+        protection: trancheProtectionToResolved(tranche),
+      };
+    }
+
+    if (activeTranches.length > 1) {
+      return null;
+    }
+
     const intentId = snapshot.openOrders
       .map((order) => (order.customTag ? intentIdFromStopTag(order.customTag) : null))
       .find((candidate) => candidate !== null);
@@ -689,4 +740,23 @@ export class ExecutionCoordinator {
     }
     return receipt;
   }
+}
+
+function trancheProtectionToResolved(tranche: TrancheView): ResolvedProtection {
+  return {
+    status: tranche.protection.status,
+    reason: tranche.protection.reason,
+    stop: {
+      customTag: tranche.protection.stop.custom_tag,
+      providerOrderId: tranche.protection.stop.provider_order_id,
+      price: tranche.protection.stop.price,
+      observedOrder: null,
+    },
+    target: {
+      customTag: tranche.protection.target.custom_tag,
+      providerOrderId: tranche.protection.target.provider_order_id,
+      price: tranche.protection.target.price,
+      observedOrder: null,
+    },
+  };
 }

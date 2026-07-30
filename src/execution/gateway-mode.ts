@@ -1,6 +1,7 @@
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type { AccountVenueSnapshot, RiskSettings, TradingMode } from "../domain/models.js";
+import { validateScaleIn } from "../ownership/scale-in.js";
 import {
   evaluateSnapshotDataQuality,
   type SnapshotDataQuality,
@@ -124,9 +125,22 @@ function newExposureGate(
     failed.push("can_trade");
   }
   if (snapshot.instrumentOpenContracts !== 0) {
-    failed.push("flat");
-  }
-  if (snapshot.openOrders.length > 0) {
+    const scaleInLong = validateScaleIn(
+      "ENTER_LONG",
+      snapshot,
+      snapshot.contract.id,
+      snapshot.account.id,
+    );
+    const scaleInShort = validateScaleIn(
+      "ENTER_SHORT",
+      snapshot,
+      snapshot.contract.id,
+      snapshot.account.id,
+    );
+    if (!scaleInLong.allowed && !scaleInShort.allowed) {
+      failed.push("scale_in_blocked");
+    }
+  } else if (snapshot.openOrders.length > 0) {
     failed.push("no_open_orders");
   }
   if (remainingCapacity <= 0) {
