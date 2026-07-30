@@ -1,5 +1,6 @@
 import type { OrderInfo, TradeInfo } from "./models.js";
 import type { ProtectionStatus, ProtectiveLeg } from "../ownership/protection.js";
+import type { TrancheView } from "../ownership/tranches.js";
 
 export type EntryOrderOwnershipStatus =
   | "provider_acknowledged"
@@ -45,6 +46,7 @@ export interface ProjectXOrderOwnershipSnapshot {
   contract_id: string;
   instrument: string;
   entries: EntryOrderOwnership[];
+  tranches: TrancheView[];
   unresolved_entry_count: number;
   observed_fill_count: number;
   protection_status: ProtectionStatus;

@@ -28,6 +28,7 @@ import {
   intentIdFromStopTag,
   type ResolvedProtection,
 } from "../ownership/protection.js";
+import type { TrancheView } from "../ownership/tranches.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -128,6 +129,7 @@ export interface DirectDecisionPacket {
       custom_tag: string | null;
       price: number | null;
     } | null;
+    tranches: TrancheView[];
   };
   required_output_template: Record<string, unknown>;
 }
@@ -203,6 +205,7 @@ export function decisionStateHash(
 export function derivePacketProtection(
   snapshot: AccountVenueSnapshot,
   activeIntentId: string | null = null,
+  tranches: TrancheView[] = [],
 ): DirectDecisionPacket["protection"] {
   const positionOpen = snapshot.instrumentOpenContracts > 0;
   if (!positionOpen) {
@@ -212,6 +215,32 @@ export function derivePacketProtection(
       intent_id: null,
       stop: null,
       target: null,
+      tranches: [],
+    };
+  }
+
+  const activeTranches = tranches.filter((tranche) => tranche.remaining_qty > 0);
+  if (activeTranches.length > 0) {
+    const first = activeTranches[0]!;
+    return {
+      status: first.protection.status,
+      reason: first.protection.reason,
+      intent_id: first.intent_id,
+      stop: first.protection.stop.provider_order_id === null
+        ? null
+        : {
+            provider_order_id: first.protection.stop.provider_order_id,
+            custom_tag: first.protection.stop.custom_tag,
+            price: first.protection.stop.price,
+          },
+      target: first.protection.target.provider_order_id === null
+        ? null
+        : {
+            provider_order_id: first.protection.target.provider_order_id,
+            custom_tag: first.protection.target.custom_tag,
+            price: first.protection.target.price,
+          },
+      tranches: activeTranches,
     };
   }
 
@@ -227,6 +256,7 @@ export function derivePacketProtection(
       intent_id: null,
       stop: null,
       target: null,
+      tranches: [],
     };
   }
 
@@ -255,6 +285,7 @@ export function derivePacketProtection(
           custom_tag: protection.target.customTag,
           price: protection.target.price,
         },
+    tranches: [],
   };
 }
 
@@ -282,6 +313,7 @@ export function buildDecisionPacket(
   now = new Date(),
   marketObservation: MarketObservationState = emptyMarketObservationState(),
   orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
+  tranches: TrancheView[] = [],
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -316,7 +348,7 @@ export function buildDecisionPacket(
     now,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
-  const protection = derivePacketProtection(snapshot);
+  const protection = derivePacketProtection(snapshot, null, tranches);
   const supportedActions = deriveSupportedActions(snapshot, protection);
 
   return {

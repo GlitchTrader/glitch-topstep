@@ -96,4 +96,22 @@ describe("Glitch intent contract", () => {
     assert.equal(parseTradeIntent(moveTp).newTakeProfit, 20_050);
     assert.equal(parseTradeIntent(partialExit).quantity, 1);
   });
+
+  it("accepts EXIT with optional target_intent_id", () => {
+    const targetedExit = {
+      ...baseIntent(),
+      action: "EXIT",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "EXIT" },
+      quantity: 1,
+      target_intent_id: "00000000-0000-4000-8000-00000000a001",
+    };
+    assert.equal(
+      parseTradeIntent(targetedExit).targetIntentId,
+      "00000000-0000-4000-8000-00000000a001",
+    );
+    assert.throws(
+      () => parseTradeIntent({ ...baseIntent(), action: "MOVE_STOP", target_intent_id: targetedExit.target_intent_id }),
+      /target_intent_id_only_allowed_on_exit/,
+    );
+  });
 });

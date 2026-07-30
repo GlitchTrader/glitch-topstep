@@ -14,6 +14,11 @@ import {
   bindProtection,
   latestOrderById,
 } from "./protection.js";
+import {
+  buildTranches,
+  queryIntentRegistrationTimes,
+  querySubmittedExitAllocations,
+} from "./tranches.js";
 
 export interface ProjectXOrderOwnershipOptions {
   accountId: number;
@@ -113,6 +118,9 @@ export class ProjectXOrderOwnershipService {
     }
 
     const positionOpen = this.hasOpenPosition(entries);
+    const intentCreatedUtc = queryIntentRegistrationTimes(this.executionDatabase);
+    const exitAllocations = querySubmittedExitAllocations(this.executionDatabase);
+    const tranches = buildTranches(entries, intentCreatedUtc, exitAllocations);
     return {
       schema_version: "glitch.projectx.order_ownership.v1",
       generated_utc: this.now().toISOString(),
@@ -121,6 +129,7 @@ export class ProjectXOrderOwnershipService {
       contract_id: this.options.contractId,
       instrument: this.options.instrument,
       entries,
+      tranches,
       unresolved_entry_count: entries.filter((entry) => entry.status !== "provider_observed").length,
       observed_fill_count: entries.reduce(
         (total, entry) => total + entry.fills.filter((fill) => !fill.trade.voided).length,

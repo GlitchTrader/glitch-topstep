@@ -43,7 +43,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue stop price moved) |
 | `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue TP price moved) |
 | Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Bracket rescale/rebind after partial on real ProjectX payloads |
-| Multiple independent entry tranches | Missing, P3 — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27) | Per-tranche protection ownership and restart reconstruction |
+| Multiple independent entry tranches | Implemented in software (Phase A+B) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), PR [#35](https://github.com/GlitchTrader/glitch-topstep/pull/35) | `tranches[]` in `/ownership` and packet; EXIT `target_intent_id` + FIFO partial; live multi-tranche acceptance and Phase C (scale-in, per-tranche MOVE_*, restart) pending |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |

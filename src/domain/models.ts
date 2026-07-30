@@ -218,6 +218,7 @@ export interface TradeIntent {
   newStopPrice?: number;
   newTakeProfit?: number;
   exitFraction?: number;
+  targetIntentId?: string;
 }
 
 export interface ValidatedEntry {
