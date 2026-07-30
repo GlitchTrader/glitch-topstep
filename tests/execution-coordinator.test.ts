@@ -7,7 +7,7 @@ import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { ExecutionCoordinator } from "../src/execution/coordinator.js";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
-import type { ProjectXApiClient } from "../src/projectx/client.js";
+import type { ProjectXApiClient, PlaceOrderRequest } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { snapshot, orderFlowWithTrades } from "./fixtures.js";
@@ -361,6 +361,71 @@ describe("execution coordinator serialization", () => {
       });
       assert.equal(receipt.status, "ignored");
       assert.equal(receipt.code, "no_execution_action");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("submits signed ProjectX bracket ticks for protected long entries", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-brackets-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let captured: PlaceOrderRequest | undefined;
+      const api = {
+        placeOrder: async (request: PlaceOrderRequest) => {
+          captured = request;
+          return 9001;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent(intent(
+        "00000000-0000-4000-8000-000000000601",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+      ));
+      assert.equal(receipt.status, "submitted");
+      const placed = captured;
+      if (!placed?.stopLossBracket || !placed.takeProfitBracket) {
+        throw new Error("expected signed bracket request");
+      }
+      assert.ok(placed.stopLossBracket.ticks < 0, "long stop ticks must be negative");
+      assert.ok(placed.takeProfitBracket.ticks > 0, "long target ticks must be positive");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

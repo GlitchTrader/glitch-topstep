@@ -157,4 +157,38 @@ describe("user stream numeric coercion", () => {
     assert.equal(order.stopPrice, 27200);
     assert.equal(order.customTag, "glitch-intent-test");
   });
+
+  it("parses order ids delivered as near-integer floats", () => {
+    const order = parseOrder({
+      id: 9123456.0000001,
+      accountId: 25915453,
+      contractId: CONTRACT,
+      creationTimestamp: "2026-07-29T20:27:21.000Z",
+      updateTimestamp: "2026-07-29T20:27:21.100Z",
+      status: 1,
+      type: 2,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: null,
+    });
+    assert.equal(order.id, 9123456);
+  });
+
+  it("falls back to orderId when id is absent on GatewayUserOrder payloads", () => {
+    const order = parseOrder({
+      orderId: "88776655",
+      accountId: "25915453",
+      contractId: CONTRACT,
+      creationTimestamp: "2026-07-29T20:27:21.000Z",
+      updateTimestamp: "2026-07-29T20:27:21.100Z",
+      status: "1",
+      type: "2",
+      side: "0",
+      size: "1",
+      limitPrice: null,
+      stopPrice: null,
+    });
+    assert.equal(order.id, 88776655);
+  });
 });
