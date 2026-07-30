@@ -1,6 +1,6 @@
 import fs from "node:fs";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { spawn } from "node:child_process";
 
 const env = Object.fromEntries(
   fs.readFileSync(".env", "utf8")
@@ -13,8 +13,107 @@ const env = Object.fromEntries(
 );
 const token = env.GLITCH_LOCAL_TOKEN;
 const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-const base = "http://127.0.0.1:8790";
 const TICK = 0.25;
+
+function gatewayPort() {
+  return Number(env.GLITCH_LOCAL_PORT ?? 8790);
+}
+
+function apiBase() {
+  return `http://127.0.0.1:${gatewayPort()}`;
+}
+
+function psQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+async function runPowerShell(command, timeoutMs = 120_000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("powershell", ["-NoProfile", "-Command", command], {
+      cwd: process.cwd(),
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error("powershell_timeout"));
+    }, timeoutMs);
+    child.stdout?.on("data", (chunk) => { stdout += chunk; });
+    child.stderr?.on("data", (chunk) => { stderr += chunk; });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout: stdout.trim(), stderr: stderr.trim() });
+    });
+    child.on("error", reject);
+  });
+}
+
+async function isPortListening(port) {
+  const { stdout } = await runPowerShell(
+    `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Measure-Object).Count`,
+  );
+  return Number(stdout) > 0;
+}
+
+async function killGatewayOnPort(port) {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    if (!(await isPortListening(port))) return;
+    await runPowerShell(
+      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+    );
+    await sleep(2000);
+  }
+  if (await isPortListening(port)) {
+    throw new Error(`port_${port}_still_in_use`);
+  }
+}
+
+async function startGatewayProcess(steps, label) {
+  const port = gatewayPort();
+  if (await isPortListening(port)) {
+    steps.push({ step: `${label}_START_SKIPPED`, reason: "port_already_listening", port });
+    return;
+  }
+  const cwd = psQuote(process.cwd());
+  const dataDir = env.GLITCH_DATA_DIR ?? "data";
+  const dataDirAbs = path.isAbsolute(dataDir) ? dataDir : path.join(process.cwd(), dataDir);
+  const stdoutLog = psQuote(path.join(dataDirAbs, "gateway.stdout.log"));
+  const stderrLog = psQuote(path.join(dataDirAbs, "gateway.stderr.log"));
+  const dataDirQuoted = psQuote(dataDirAbs);
+  // ponytail: skip npm build on E2E restart; mirror start.ps1 node launch with .env loaded
+  const ps = `
+Set-Location ${cwd}
+Get-Content '.env' | ForEach-Object {
+  $line = $_.Trim()
+  if (-not $line -or $line.StartsWith('#') -or -not $line.Contains('=')) { return }
+  $eq = $line.IndexOf('=')
+  $name = $line.Substring(0, $eq).Trim()
+  $value = $line.Substring($eq + 1).Trim()
+  if ($name) { Set-Item -Path "env:$name" -Value $value }
+}
+New-Item -ItemType Directory -Force -Path ${dataDirQuoted} | Out-Null
+Start-Process -FilePath 'node' -ArgumentList '--enable-source-maps','dist/src/index.js' -WorkingDirectory ${cwd} -WindowStyle Hidden -RedirectStandardOutput ${stdoutLog} -RedirectStandardError ${stderrLog}
+`.trim();
+  const { code, stderr } = await runPowerShell(ps);
+  if (code !== 0) {
+    throw new Error(`gateway_start_failed: exit=${code} stderr=${stderr}`);
+  }
+  steps.push({ step: `${label}_START_TRIGGERED`, port });
+  await sleep(3000);
+}
+
+async function ensureGatewayUp(steps, label) {
+  const port = gatewayPort();
+  try {
+    await health();
+    steps.push({ step: `${label}_ALREADY_UP`, port });
+  } catch {
+    await startGatewayProcess(steps, label);
+  }
+  await waitHealthReady({ afterRestart: true });
+  await waitReconciliationReady();
+}
 const audit = (fc) => ({
   bull_case: "pm4-phase-c",
   bear_case: "pm4-phase-c",
@@ -51,27 +150,27 @@ function wideLongBrackets(pkt) {
 }
 
 async function health() {
-  const r = await fetch(`${base}/health`);
+  const r = await fetch(`${apiBase()}/health`);
   if (!r.ok) throw new Error(`health ${r.status}`);
   return r.json();
 }
 async function packet() {
-  const r = await fetch(`${base}/packet`, { headers: h });
+  const r = await fetch(`${apiBase()}/packet`, { headers: h });
   if (!r.ok) throw new Error(`packet ${r.status}`);
   return r.json();
 }
 async function state() {
-  const r = await fetch(`${base}/state`, { headers: h });
+  const r = await fetch(`${apiBase()}/state`, { headers: h });
   if (!r.ok) throw new Error(`state ${r.status}`);
   return r.json();
 }
 async function ownership() {
-  const r = await fetch(`${base}/ownership`, { headers: h });
+  const r = await fetch(`${apiBase()}/ownership`, { headers: h });
   if (!r.ok) throw new Error(`ownership ${r.status}`);
   return r.json();
 }
 async function postIntent(body) {
-  const r = await fetch(`${base}/intent`, { method: "POST", headers: h, body: JSON.stringify(body) });
+  const r = await fetch(`${apiBase()}/intent`, { method: "POST", headers: h, body: JSON.stringify(body) });
   return { http: r.status, body: await r.json() };
 }
 
@@ -176,62 +275,89 @@ async function submitIntent(body, steps, stepName, retries = 12) {
   throw new Error(`${stepName}: intent_submit_failed`);
 }
 
-async function waitHealthReady() {
-  for (let i = 0; i < 120; i++) {
+async function waitHealthReady(options = {}) {
+  const afterRestart = options.afterRestart === true;
+  const maxIterations = afterRestart ? 180 : 120;
+  const maxQuoteAgeMs = afterRestart ? 120_000 : 8_000;
+  let lastSnapshot = null;
+  let lastError = null;
+  for (let i = 0; i < maxIterations; i++) {
     try {
       const hlth = await health();
       const us = hlth.data_quality?.operational?.userStream?.state;
       const quoteAge = hlth.data_quality?.quote_age_ms ?? 99999;
+      lastSnapshot = {
+        iteration: i,
+        status: hlth.status,
+        state_complete: hlth.data_quality?.state_complete ?? false,
+        userStream: us ?? null,
+        quote_age_ms: quoteAge,
+        port_listening: await isPortListening(gatewayPort()),
+      };
       if (
         hlth.status === "ok"
         && hlth.data_quality?.state_complete
         && us === "connected"
-        && quoteAge < 8000
+        && quoteAge < maxQuoteAgeMs
       ) {
         return hlth;
       }
-    } catch {
-      // gateway still starting
+    } catch (error) {
+      lastError = String(error?.message ?? error);
+      lastSnapshot = {
+        iteration: i,
+        fetch_error: lastError,
+        port_listening: await isPortListening(gatewayPort()).catch(() => null),
+      };
     }
     await sleep(2000);
   }
-  throw new Error("health_not_ready");
+  throw new Error(`health_not_ready:${JSON.stringify({ lastSnapshot, lastError })}`);
 }
 
 async function restartGateway(steps, label) {
-  const port = env.GLITCH_LOCAL_PORT ?? "8790";
-  const kill = spawn("powershell", [
-    "-NoProfile",
-    "-Command",
-    `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
-  ]);
-  await new Promise((r) => kill.on("close", r));
-  await sleep(5000);
-  spawn("powershell", ["-NoProfile", "-File", "start.ps1"], {
-    cwd: process.cwd(),
-    detached: true,
-    stdio: "ignore",
-  }).unref();
+  const port = gatewayPort();
   steps.push({ step: `${label}_RESTART_TRIGGERED`, port });
-  await waitHealthReady();
+  await killGatewayOnPort(port);
+  await sleep(2000);
+  await startGatewayProcess(steps, label);
+  await waitHealthReady({ afterRestart: true });
   await waitReconciliationReady();
 }
 
-async function ensureFlat(steps) {
-  const st = await state();
-  if (st.instrumentOpenContracts === 0) return;
-  const res = await submitIntent(
-    { ...baseIntent("EXIT", "unused"), reason: "PRE_EXIT flat" },
-    steps,
-    "PRE_EXIT",
-  );
-  if (res.http !== 202) throw new Error("PRE_EXIT failed");
-  for (let i = 0; i < 120; i++) {
+async function waitNoWorkingOrders(steps, label, timeoutSec = 120) {
+  for (let i = 0; i < timeoutSec; i++) {
+    const own = await ownership();
+    const working = own.working_orders ?? 0;
+    if (working === 0) return;
+    if (i % 15 === 14) {
+      steps.push({ step: `${label}_working_poll`, working_orders: working });
+    }
     await sleep(1000);
-    const s = await state();
-    if (s.instrumentOpenContracts === 0) return;
   }
-  throw new Error("still_not_flat");
+  const own = await ownership();
+  throw new Error(`working_orders_still_open:${own.working_orders ?? "unknown"}`);
+}
+
+async function ensureFlat(steps) {
+  let st = await state();
+  let own = await ownership();
+  if (st.instrumentOpenContracts === 0 && (own.working_orders ?? 0) === 0) return;
+  if (st.instrumentOpenContracts !== 0) {
+    const res = await submitIntent(
+      { ...baseIntent("EXIT", "unused"), reason: "PRE_EXIT flat" },
+      steps,
+      "PRE_EXIT",
+    );
+    if (res.http !== 202) throw new Error("PRE_EXIT failed");
+    for (let i = 0; i < 120; i++) {
+      await sleep(1000);
+      st = await state();
+      if (st.instrumentOpenContracts === 0) break;
+    }
+    if (st.instrumentOpenContracts !== 0) throw new Error("still_not_flat");
+  }
+  await waitNoWorkingOrders(steps, "PRE_FLAT");
 }
 
 async function waitArmedPacket(steps, label, timeoutSec = 180) {
@@ -499,7 +625,11 @@ try {
           } catch (restartError) {
             log.scenario_b.reason = String(restartError?.message ?? restartError);
             log.scenario_b.pass = false;
-            await restartGateway(log.scenario_b.steps, "SCENARIO_B_RECOVERY");
+            try {
+              await ensureGatewayUp(log.scenario_b.steps, "SCENARIO_B_RECOVERY");
+            } catch (recoveryError) {
+              log.scenario_b.recovery_error = String(recoveryError?.message ?? recoveryError);
+            }
           }
         }
       : undefined,

@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "project": "glitch-topstep",
-  "updated": "2026-07-28",
+  "updated": "2026-07-30",
   "roadmap_ref": "docs/ROADMAP.md",
   "items": [
     {
@@ -789,6 +789,29 @@
         "docs/TOPSTEP-NATIVE.md"
       ],
       "stop_line": "Do not loosen the working-order guard before per-contract ownership is provable."
+    },
+    {
+      "id": "TS-PM4-01",
+      "title": "PM4 Phase C live E2E harness (scenarios A/B/C)",
+      "status": "ready",
+      "priority": "P0",
+      "owner_role": "tests",
+      "acceptance": [
+        "scripts/pm4-phase-c-e2e.mjs completes scenario A SHORT tranche flow with OCO enabled on PRAC.",
+        "Scenario B kills and restarts the gateway without health_not_ready; two tranches survive with ownership proof.",
+        "Scenario C LONG mirror passes after flat cleanup with working_orders=0.",
+        "data/pm4-phase-c-e2e.json records all_pass true on a live run."
+      ],
+      "depends_on": [],
+      "evidence": [
+        "2026-07-30: scenario A partial live pass (enter, proven, scale_in, two_tranches) with Auto OCO; B failed on start.ps1 detached restart.",
+        "2026-07-30 fix scripts/pm4-phase-c-e2e.mjs: kill port until free, start node with .env (no npm build), health diagnostics, recovery without second kill, ensureFlat waits working_orders=0."
+      ],
+      "sources": [
+        "scripts/pm4-phase-c-e2e.mjs",
+        "docs/PARITY.md",
+        "start.ps1"
+      ]
     }
   ]
 }
