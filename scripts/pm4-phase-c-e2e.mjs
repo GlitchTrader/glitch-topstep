@@ -340,18 +340,27 @@ async function restartGateway(steps, label) {
   await waitReconciliationReady();
 }
 
-async function waitNoWorkingOrders(steps, label, timeoutSec = 120) {
+function countOpenOrders(st) {
+  const orders = st?.openOrders ?? st?.open_orders ?? [];
+  return Array.isArray(orders) ? orders.length : 0;
+}
+
+async function waitNoOpenOrders(steps, label, timeoutSec = 120) {
   for (let i = 0; i < timeoutSec; i++) {
-    const own = await ownership();
-    const working = own.working_orders ?? own.workingOrders ?? 0;
-    if (working === 0) return;
+    const st = await state();
+    const openOrders = countOpenOrders(st);
+    if (openOrders === 0 && st.instrumentOpenContracts === 0) return;
     if (i % 15 === 14) {
-      steps.push({ step: `${label}_working_poll`, working_orders: working });
+      steps.push({
+        step: `${label}_open_orders_poll`,
+        open_orders: openOrders,
+        open_contracts: st.instrumentOpenContracts,
+      });
     }
     await sleep(1000);
   }
-  const own = await ownership();
-  throw new Error(`working_orders_still_open:${own.working_orders ?? "unknown"}`);
+  const st = await state();
+  throw new Error(`open_orders_still_present:${countOpenOrders(st)}`);
 }
 
 async function cancelWorkingOrders(steps, label) {
@@ -375,9 +384,6 @@ async function cancelWorkingOrders(steps, label) {
 
 async function ensureFlat(steps) {
   let st = await state();
-  let own = await ownership();
-  const workingOrders = own.working_orders ?? own.workingOrders ?? 0;
-  if (st.instrumentOpenContracts === 0 && workingOrders === 0) return;
   if (st.instrumentOpenContracts !== 0) {
     const res = await submitIntent(
       { ...baseIntent("EXIT", "unused"), reason: "PRE_EXIT flat" },
@@ -392,12 +398,17 @@ async function ensureFlat(steps) {
     }
     if (st.instrumentOpenContracts !== 0) throw new Error("still_not_flat");
   }
-  own = await ownership();
-  if ((own.working_orders ?? own.workingOrders ?? 0) !== 0) {
+  st = await state();
+  if (countOpenOrders(st) > 0) {
     await cancelWorkingOrders(steps, "PRE_FLAT");
     await sleep(2000);
+    try {
+      await waitReconciliationReady();
+    } catch {
+      // waitNoOpenOrders keeps polling
+    }
   }
-  await waitNoWorkingOrders(steps, "PRE_FLAT");
+  await waitNoOpenOrders(steps, "PRE_FLAT");
 }
 
 async function waitArmedPacket(steps, label, timeoutSec = 180) {
