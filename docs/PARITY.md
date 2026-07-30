@@ -40,8 +40,8 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
 | Provider-created stop/target ownership | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `customTag` SL/TP binding; live acceptance + nonterminal entry proof on sanitized payloads |
 | Exact structural bracket correction | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `modifyOrder` amendment receipts; sibling non-interference on live payloads |
-| `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Live amendment + idempotent replay acceptance |
-| `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Live amendment + idempotent replay acceptance |
+| `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue stop price moved) |
+| `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Idempotent replay acceptance; partial live amendment evidence (2026-07-29 retest: venue TP price moved) |
 | Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Bracket rescale/rebind after partial on real ProjectX payloads |
 | Multiple independent entry tranches | Missing, P3 — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27) | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |

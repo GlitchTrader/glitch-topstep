@@ -525,6 +525,10 @@ export class ExecutionCoordinator {
     error: unknown,
   ): Promise<ExecutionReceipt> {
     const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
+    const mutation = this.store.mutationForIntent(intentId);
+    if (mutation?.state === "submitted") {
+      return this.recordSubmittedMutationReceipt(intentId, mutation, detail);
+    }
     if (this.isAuthoritativeRejection(error)) {
       this.store.markMutationRejected(intentId, detail, new Date().toISOString());
       this.invalidateIssuedPackets();
@@ -541,6 +545,42 @@ export class ExecutionCoordinator {
       intentId,
       status: "ambiguous",
       code: "projectx_mutation_outcome_ambiguous",
+      detail,
+    });
+  }
+
+  private async recordSubmittedMutationReceipt(
+    intentId: string,
+    mutation: NonNullable<ReturnType<SqliteExecutionStore["mutationForIntent"]>>,
+    detail: string,
+  ): Promise<ExecutionReceipt> {
+    if (mutation.operation === "close_position") {
+      return this.record({
+        intentId,
+        status: "closed",
+        code: "close_contract_submitted",
+        detail,
+      });
+    }
+    if (mutation.operation === "modify_order") {
+      const leg = typeof mutation.request.stopPrice === "number" ? "stop" : "target";
+      return this.record({
+        intentId,
+        status: "pending",
+        code: leg === "stop"
+          ? "move_stop_submitted_pending_reconciliation"
+          : "move_tp_submitted_pending_reconciliation",
+        orderId: mutation.providerOrderId ?? undefined,
+        detail,
+      });
+    }
+    return this.record({
+      intentId,
+      status: "pending",
+      code: mutation.operation === "place_order"
+        ? "partial_exit_submitted_pending_reconciliation"
+        : "entry_submitted_pending_reconciliation",
+      orderId: mutation.providerOrderId ?? undefined,
       detail,
     });
   }
