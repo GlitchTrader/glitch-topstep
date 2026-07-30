@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { spawn } from "node:child_process";
 
 const env = Object.fromEntries(
   fs.readFileSync(".env", "utf8")
