@@ -455,6 +455,24 @@ function countOpenOrders(st) {
   return Array.isArray(orders) ? orders.length : 0;
 }
 
+async function waitNoWorkingOrders(steps, label, timeoutSec = 120) {
+  for (let i = 0; i < timeoutSec; i++) {
+    const st = await state();
+    const openOrders = countOpenOrders(st);
+    if (openOrders === 0) return;
+    if (i % 15 === 14) {
+      steps.push({
+        step: `${label}_working_orders_poll`,
+        open_orders: openOrders,
+        open_contracts: st.instrumentOpenContracts,
+      });
+    }
+    await sleep(1000);
+  }
+  const st = await state();
+  throw new Error(`working_orders_still_present:${countOpenOrders(st)}`);
+}
+
 async function waitNoOpenOrders(steps, label, timeoutSec = 120) {
   for (let i = 0; i < timeoutSec; i++) {
     const st = await state();
@@ -497,7 +515,7 @@ async function assertNoOpenOrders(steps, label) {
   if (countOpenOrders(st) > 0) {
     await cancelWorkingOrders(steps, label);
     await sleep(2000);
-    await waitNoOpenOrders(steps, label);
+    await waitNoWorkingOrders(steps, label);
     st = await state();
   }
   if (countOpenOrders(st) > 0) {
