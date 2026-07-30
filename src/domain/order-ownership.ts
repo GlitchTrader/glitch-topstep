@@ -1,4 +1,5 @@
 import type { OrderInfo, TradeInfo } from "./models.js";
+import type { ProtectionStatus, ProtectiveLeg } from "../ownership/protection.js";
 
 export type EntryOrderOwnershipStatus =
   | "provider_acknowledged"
@@ -8,6 +9,13 @@ export type EntryOrderOwnershipStatus =
 export interface OwnedFillEvidence {
   evidenceSequence: number;
   trade: TradeInfo;
+}
+
+export interface EntryProtection {
+  status: ProtectionStatus;
+  reason: string;
+  stop: ProtectiveLeg;
+  target: ProtectiveLeg;
 }
 
 export interface EntryOrderOwnership {
@@ -25,10 +33,7 @@ export interface EntryOrderOwnership {
   latestObservedOrder: OrderInfo | null;
   fills: OwnedFillEvidence[];
   effectiveFilledQuantity: number;
-  protection: {
-    status: "unknown";
-    reason: "provider_child_order_relation_not_observed";
-  };
+  protection: EntryProtection;
   issues: string[];
 }
 
@@ -42,7 +47,7 @@ export interface ProjectXOrderOwnershipSnapshot {
   entries: EntryOrderOwnership[];
   unresolved_entry_count: number;
   observed_fill_count: number;
-  protection_status: "unknown";
+  protection_status: ProtectionStatus;
   issues: string[];
   authority: "Only explicit durable provider identities are attributed; price and timing proximity are never ownership evidence.";
 }

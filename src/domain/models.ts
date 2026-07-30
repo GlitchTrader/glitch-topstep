@@ -215,6 +215,9 @@ export interface TradeIntent {
   orderType?: "MARKET";
   stopLoss?: number;
   takeProfit1?: number;
+  newStopPrice?: number;
+  newTakeProfit?: number;
+  exitFraction?: number;
 }
 
 export interface ValidatedEntry {

@@ -4,13 +4,19 @@ import { parseTradeIntent } from "../domain/intents.js";
 import type { AccountVenueSnapshot, TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
+  bindProtection,
+  intentIdFromStopTag,
+  type ResolvedProtection,
+} from "../ownership/protection.js";
+import {
+  type ModifyOrderRequest,
   type PlaceOrderRequest,
   ProjectXApiClient,
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import { gatewayModePermitsLiveOrders } from "./gateway-mode.js";
-import { toProjectXBracketTicks } from "./brackets.js";
+import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
@@ -20,7 +26,7 @@ export interface ExecutionReceipt {
   recorded_utc: string;
   intent_id: string | null;
   mode: "disabled" | "shadow" | "armed";
-  status: "rejected" | "shadowed" | "submitted" | "closed" | "ignored" | "ambiguous";
+  status: "rejected" | "shadowed" | "pending" | "submitted" | "open_protected" | "closed" | "ignored" | "ambiguous";
   code: string;
   order_id?: number;
   detail?: string;
@@ -119,12 +125,20 @@ export class ExecutionCoordinator {
       return this.handleExit(intent, issuedPacket);
     }
 
+    if (intent.action === "MOVE_STOP") {
+      return this.handleMoveStop(intent, issuedPacket);
+    }
+
+    if (intent.action === "MOVE_TP") {
+      return this.handleMoveTp(intent, issuedPacket);
+    }
+
     if (intent.action !== "ENTER_LONG" && intent.action !== "ENTER_SHORT") {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
         code: "action_not_implemented",
-        detail: "MOVE_STOP and MOVE_TP require durable protective-order ownership before activation.",
+        detail: `Unsupported action: ${intent.action}`,
       });
     }
 
@@ -205,8 +219,8 @@ export class ExecutionCoordinator {
         this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
         return this.record({
           intentId: intent.intentId,
-          status: "submitted",
-          code: "entry_submitted_with_provider_brackets",
+          status: "pending",
+          code: "entry_submitted_pending_reconciliation",
           orderId,
           detail: `protected_risk_usd=${validated.riskUsd.toFixed(2)};hard_buffer_usd=${validated.riskBudget.currentBuffer.toFixed(2)}`,
         });
@@ -269,20 +283,69 @@ export class ExecutionCoordinator {
       });
     }
 
-    const request = {
-      accountId: this.config.scope.accountId,
-      contractId: this.config.scope.contractId,
-    };
+    const position = snapshot.positions.find(
+      (candidate) => candidate.accountId === this.config.scope.accountId
+        && candidate.contractId === this.config.scope.contractId
+        && candidate.type !== 0
+        && Math.abs(candidate.size) > 0,
+    );
+    if (!position) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "position_not_found",
+      });
+    }
+
+    const positionSize = Math.abs(position.size);
+    const exitQuantity = intent.quantity
+      ?? (intent.exitFraction !== undefined
+        ? Math.max(1, Math.min(positionSize, Math.round(positionSize * intent.exitFraction)))
+        : positionSize);
+    if (!Number.isInteger(exitQuantity) || exitQuantity < 1 || exitQuantity > positionSize) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "exit_quantity_invalid",
+        detail: `requested=${exitQuantity};position=${positionSize}`,
+      });
+    }
+
+    const partialExit = exitQuantity < positionSize;
+    const request = partialExit
+      ? {
+          accountId: this.config.scope.accountId,
+          contractId: this.config.scope.contractId,
+          type: 2,
+          side: position.size > 0 ? 1 : 0,
+          size: exitQuantity,
+          customTag: `glt-${intent.intentId}`.slice(0, 64),
+        }
+      : {
+          accountId: this.config.scope.accountId,
+          contractId: this.config.scope.contractId,
+        };
     this.store.prepareMutation(
       intent.intentId,
-      "close_position",
+      partialExit ? "place_order" : "close_position",
       request,
-      null,
+      partialExit ? `glt-${intent.intentId}`.slice(0, 64) : null,
       new Date().toISOString(),
     );
     this.invalidateIssuedPackets();
     this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
     try {
+      if (partialExit) {
+        const orderId = await this.api.placeOrder(request as PlaceOrderRequest);
+        this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        return this.record({
+          intentId: intent.intentId,
+          status: "pending",
+          code: "partial_exit_submitted_pending_reconciliation",
+          orderId,
+          detail: `exit_quantity=${exitQuantity};remaining=${positionSize - exitQuantity}`,
+        });
+      }
       await this.api.closePosition(request.accountId, request.contractId);
       this.store.markMutationSubmitted(intent.intentId, null, new Date().toISOString());
       return this.record({
@@ -293,6 +356,168 @@ export class ExecutionCoordinator {
     } catch (error) {
       return this.recordMutationFailure(intent.intentId, error);
     }
+  }
+
+  private async handleMoveStop(
+    intent: TradeIntent,
+    issuedPacket: DirectDecisionPacket,
+  ): Promise<ExecutionReceipt> {
+    return this.handleProtectiveAmendment(intent, issuedPacket, "stop");
+  }
+
+  private async handleMoveTp(
+    intent: TradeIntent,
+    issuedPacket: DirectDecisionPacket,
+  ): Promise<ExecutionReceipt> {
+    return this.handleProtectiveAmendment(intent, issuedPacket, "target");
+  }
+
+  private async handleProtectiveAmendment(
+    intent: TradeIntent,
+    issuedPacket: DirectDecisionPacket,
+    leg: "stop" | "target",
+  ): Promise<ExecutionReceipt> {
+    const snapshot = this.snapshot();
+    const validation = await this.validateAmendmentIntent(intent, issuedPacket, snapshot);
+    if (validation) {
+      return validation;
+    }
+
+    const active = this.resolveActiveProtection(snapshot);
+    if (!active || active.protection.status !== "proven") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "protection_not_proven",
+        detail: active?.protection.reason ?? "no_active_protection",
+      });
+    }
+
+    const protectiveLeg = leg === "stop" ? active.protection.stop : active.protection.target;
+    const newPrice = leg === "stop" ? intent.newStopPrice : intent.takeProfit1;
+    if (newPrice === undefined) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: leg === "stop" ? "new_stop_price_missing" : "new_take_profit_missing",
+      });
+    }
+    if (!isTickAligned(newPrice, snapshot.contract.tickSize)) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: leg === "stop" ? "new_stop_not_tick_aligned" : "new_target_not_tick_aligned",
+      });
+    }
+    if (protectiveLeg.providerOrderId === null) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "protective_leg_unresolved",
+      });
+    }
+
+    if (!gatewayModePermitsLiveOrders(issuedPacket.execution.gateway_mode)) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "shadowed",
+        code: leg === "stop" ? "move_stop_verified_not_submitted" : "move_tp_verified_not_submitted",
+        detail: `new_price=${newPrice}`,
+      });
+    }
+    if (this.config.tradingMode === "shadow") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "shadowed",
+        code: leg === "stop" ? "move_stop_verified_not_submitted" : "move_tp_verified_not_submitted",
+        detail: `new_price=${newPrice}`,
+      });
+    }
+
+    const request: ModifyOrderRequest = {
+      accountId: this.config.scope.accountId,
+      orderId: protectiveLeg.providerOrderId,
+      ...(leg === "stop" ? { stopPrice: newPrice } : { limitPrice: newPrice }),
+    };
+    this.store.prepareMutation(
+      intent.intentId,
+      "modify_order",
+      request as unknown as Record<string, unknown>,
+      protectiveLeg.customTag,
+      new Date().toISOString(),
+    );
+    this.invalidateIssuedPackets();
+    this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+    try {
+      await this.api.modifyOrder(request);
+      this.store.markMutationSubmitted(intent.intentId, protectiveLeg.providerOrderId, new Date().toISOString());
+      return this.record({
+        intentId: intent.intentId,
+        status: "pending",
+        code: leg === "stop" ? "move_stop_submitted_pending_reconciliation" : "move_tp_submitted_pending_reconciliation",
+        orderId: protectiveLeg.providerOrderId,
+        detail: `new_price=${newPrice}`,
+      });
+    } catch (error) {
+      return this.recordMutationFailure(intent.intentId, error);
+    }
+  }
+
+  private async validateAmendmentIntent(
+    intent: TradeIntent,
+    issuedPacket: DirectDecisionPacket,
+    snapshot: AccountVenueSnapshot,
+  ): Promise<ExecutionReceipt | null> {
+    if (intent.account !== this.config.scope.accountName) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "account_name_mismatch",
+      });
+    }
+    if (intent.snapshotHash !== issuedPacket.market.snapshot_hash) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "snapshot_hash_mismatch",
+      });
+    }
+    if (snapshot.instrumentOpenContracts === 0) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "ignored",
+        code: "position_already_flat",
+      });
+    }
+    if (!issuedPacket.execution.supported_actions.includes(intent.action)) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "action_not_supported_in_current_packet",
+      });
+    }
+    return null;
+  }
+
+  private resolveActiveProtection(
+    snapshot: AccountVenueSnapshot,
+  ): { intentId: string; protection: ResolvedProtection } | null {
+    const intentId = snapshot.openOrders
+      .map((order) => (order.customTag ? intentIdFromStopTag(order.customTag) : null))
+      .find((candidate) => candidate !== null);
+    if (!intentId) {
+      return null;
+    }
+    return {
+      intentId,
+      protection: bindProtection(
+        intentId,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+      ),
+    };
   }
 
   private async recordMutationFailure(

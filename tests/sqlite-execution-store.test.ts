@@ -128,7 +128,15 @@ describe("SQLite execution store", () => {
     store.prepareMutation(
       first.intentId,
       "place_order",
-      { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
+      {
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        type: 2,
+        side: 0,
+        size: 1,
+        stopLossBracket: { ticks: -10, type: 4 },
+        takeProfitBracket: { ticks: 10, type: 1 },
+      },
       "glt-first",
       "2026-07-21T12:00:06Z",
     );
@@ -141,7 +149,15 @@ describe("SQLite execution store", () => {
     assert.throws(() => store.prepareMutation(
       second.intentId,
       "place_order",
-      { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
+      {
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        type: 2,
+        side: 0,
+        size: 1,
+        stopLossBracket: { ticks: -10, type: 4 },
+        takeProfitBracket: { ticks: 10, type: 1 },
+      },
       "glt-second",
       "2026-07-21T12:00:08Z",
     ), /entry_submission_pending/);
@@ -151,7 +167,15 @@ describe("SQLite execution store", () => {
     store.prepareMutation(
       second.intentId,
       "place_order",
-      { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
+      {
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        type: 2,
+        side: 0,
+        size: 1,
+        stopLossBracket: { ticks: -10, type: 4 },
+        takeProfitBracket: { ticks: 10, type: 1 },
+      },
       "glt-second",
       "2026-07-21T12:00:10Z",
     );

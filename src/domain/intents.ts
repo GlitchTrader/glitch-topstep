@@ -22,6 +22,9 @@ const CORE_FIELDS = new Set([
   "order_type",
   "stop_loss",
   "take_profit_1",
+  "new_stop_price",
+  "new_take_profit",
+  "exit_fraction",
 ]);
 
 const AUDIT_FIELDS = new Set([
@@ -133,6 +136,9 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   const quantity = optionalNumber(input, "quantity");
   const stopLoss = optionalNumber(input, "stop_loss");
   const takeProfit1 = optionalNumber(input, "take_profit_1");
+  const newStopPrice = optionalNumber(input, "new_stop_price");
+  const newTakeProfit = optionalNumber(input, "new_take_profit");
+  const exitFraction = optionalNumber(input, "exit_fraction");
   const orderType = input.order_type;
   if (orderType !== undefined && orderType !== "MARKET") {
     throw new Error("order_type_invalid");
@@ -146,14 +152,65 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     if (stopLoss === undefined || stopLoss <= 0 || takeProfit1 === undefined || takeProfit1 <= 0) {
       throw new Error("entries require quantity, MARKET order_type, stop_loss, and take_profit_1");
     }
+  } else if (action === "MOVE_STOP") {
+    if (newStopPrice === undefined || newStopPrice <= 0) {
+      throw new Error("MOVE_STOP requires new_stop_price");
+    }
+    if (
+      quantity !== undefined
+      || orderType !== undefined
+      || stopLoss !== undefined
+      || takeProfit1 !== undefined
+      || newTakeProfit !== undefined
+      || exitFraction !== undefined
+    ) {
+      throw new Error("MOVE_STOP cannot carry unrelated entry or exit fields");
+    }
+  } else if (action === "MOVE_TP") {
+    const targetPrice = newTakeProfit ?? takeProfit1;
+    if (targetPrice === undefined || targetPrice <= 0) {
+      throw new Error("MOVE_TP requires new_take_profit or take_profit_1");
+    }
+    if (
+      quantity !== undefined
+      || orderType !== undefined
+      || stopLoss !== undefined
+      || newStopPrice !== undefined
+      || exitFraction !== undefined
+    ) {
+      throw new Error("MOVE_TP cannot carry unrelated entry or exit fields");
+    }
+  } else if (action === "EXIT") {
+    if (orderType !== undefined || stopLoss !== undefined || takeProfit1 !== undefined) {
+      throw new Error("EXIT cannot carry entry fields");
+    }
+    if (newStopPrice !== undefined || newTakeProfit !== undefined) {
+      throw new Error("EXIT cannot carry amendment fields");
+    }
+    if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) {
+      throw new Error("EXIT quantity must be a positive integer");
+    }
+    if (exitFraction !== undefined && (exitFraction <= 0 || exitFraction > 1)) {
+      throw new Error("EXIT exit_fraction must be in (0, 1]");
+    }
+    if (quantity !== undefined && exitFraction !== undefined) {
+      throw new Error("EXIT cannot specify both quantity and exit_fraction");
+    }
   } else if (
     quantity !== undefined
     || orderType !== undefined
     || stopLoss !== undefined
     || takeProfit1 !== undefined
+    || newStopPrice !== undefined
+    || newTakeProfit !== undefined
+    || exitFraction !== undefined
   ) {
     throw new Error("non-entry actions cannot carry entry fields in the initial direct gateway");
   }
+
+  const resolvedTakeProfit = action === "MOVE_TP"
+    ? (newTakeProfit ?? takeProfit1)
+    : takeProfit1;
 
   return {
     schemaVersion: "glitch.intent.v2",
@@ -172,6 +229,9 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     ...(quantity === undefined ? {} : { quantity }),
     ...(orderType === undefined ? {} : { orderType }),
     ...(stopLoss === undefined ? {} : { stopLoss }),
-    ...(takeProfit1 === undefined ? {} : { takeProfit1 }),
+    ...(resolvedTakeProfit === undefined ? {} : { takeProfit1: resolvedTakeProfit }),
+    ...(newStopPrice === undefined ? {} : { newStopPrice }),
+    ...(newTakeProfit === undefined ? {} : { newTakeProfit }),
+    ...(exitFraction === undefined ? {} : { exitFraction }),
   };
 }

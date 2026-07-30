@@ -38,11 +38,11 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Ownership contradiction detection | Implemented | Real duplicate/correction payload acceptance |
 | Authenticated ownership inspection | Implemented | Operator acceptance of `/ownership` output |
 | Aggregate position ownership | Unknown by design | Explicit provider relation or deterministic reconstruction contract |
-| Provider-created stop/target ownership | Missing, P0 — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | Explicit child-order, OCO, or equivalent provider relation; nonterminal until native bracket proof (NT GL-AI-07 parity) |
-| Exact structural bracket correction | Missing, P0 — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | Protective child identity and amendment proof |
-| `MOVE_STOP` | Missing — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Exact-leg mutation and sibling non-interference; blocked until #17 accepted |
-| `MOVE_TP` | Missing — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Exact-leg mutation and sibling non-interference; blocked until #17 accepted |
-| Partial scale-out (`EXIT` quantity) | Missing — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | `partialCloseContract` or equivalent; bracket behavior after partial documented |
+| Provider-created stop/target ownership | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `customTag` SL/TP binding; live acceptance + nonterminal entry proof on sanitized payloads |
+| Exact structural bracket correction | Implemented in software — [#17](https://github.com/GlitchTrader/glitch-topstep/issues/17) | `modifyOrder` amendment receipts; sibling non-interference on live payloads |
+| `MOVE_STOP` | Implemented in software — [#24](https://github.com/GlitchTrader/glitch-topstep/issues/24) | Live amendment + idempotent replay acceptance |
+| `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Live amendment + idempotent replay acceptance |
+| Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Bracket rescale/rebind after partial on real ProjectX payloads |
 | Multiple independent entry tranches | Missing, P3 — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27) | Per-tranche protection ownership and restart reconstruction |
 | Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
@@ -116,7 +116,7 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Explicit policy for partial exit targeting (tranche vs FIFO/LIFO).
 - Restart recovers all open tranches from provider history.
 
-**Current gateway state:** `supported_actions` = `ENTER_* | HOLD | EXIT | NOTHING` only. `MOVE_STOP` / `MOVE_TP` exist in models but are not parsed or executed. Do not enable in Hermes until the matching PM phase is accepted here.
+**Current gateway state:** `supported_actions` includes `MOVE_STOP` and `MOVE_TP` when `protection.status === proven`. Partial `EXIT` accepts optional `quantity`. Ledger acceptance for PM-0–PM-3 requires live payload evidence — software contracts are implemented and unit-tested.
 
 ## Promotion rule
 

@@ -5,6 +5,7 @@ import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
 import type { OrderInfo, PositionInfo } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
+import { reconcilePendingReceipts } from "./execution/receipt-reconciliation.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
 import { ProjectXOrderFlowService } from "./market/projectx-order-flow-service.js";
@@ -480,6 +481,20 @@ export class GlitchTopstepService {
       this.state.markReconciliationSucceeded(receivedAt);
 
       const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders);
+      const positionOpen = positions.some(
+        (position) => position.accountId === this.config.scope.accountId
+          && position.contractId === this.config.scope.contractId
+          && position.type !== 0
+          && Math.abs(position.size) > 0,
+      );
+      const receiptReconciliation = reconcilePendingReceipts(
+        this.executionStore,
+        orders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        positionOpen,
+        receivedAt,
+      );
       const requiresRecovery = this.executionStore.recoveryStatus().unresolvedMutations > 0
         || this.executionStore.terminalMutationsWithoutReceipts().length > 0
         || this.executionStore.intentsWithoutReceiptsOrMutations().length > 0;
@@ -497,7 +512,7 @@ export class GlitchTopstepService {
           this.packets?.invalidateAll();
         }
       }
-      if (latchCleared) {
+      if (latchCleared || receiptReconciliation.changed) {
         this.packets?.invalidateAll();
       }
     } catch (error) {

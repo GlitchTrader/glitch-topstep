@@ -110,6 +110,55 @@ export async function recoverExecutionMutations(
       });
     }
 
+    const uncertainModifyEntries = unresolved.filter(
+      (candidate) => candidate.operation === "modify_order" && candidate.state !== "prepared",
+    );
+    if (uncertainModifyEntries.length > 0 && historicalOrders.length === 0) {
+      const earliest = Math.min(
+        ...uncertainModifyEntries.map((mutation) => new Date(
+          mutation.submittingUtc ?? mutation.createdUtc,
+        ).getTime()),
+      );
+      historicalOrders = await api.searchOrders(
+        accountId,
+        new Date(earliest - 10 * 60 * 1000).toISOString(),
+        now.toISOString(),
+      );
+    }
+
+    for (const mutation of uncertainModifyEntries) {
+      const outcome = reconcileModifyMutation(mutation, historicalOrders, accountId, contractId);
+      if (outcome.recovered) {
+        store.markMutationSubmitted(
+          mutation.intentId,
+          outcome.orderId,
+          now.toISOString(),
+        );
+        changed = true;
+        resolved += 1;
+        resolutions.push({
+          intentId: mutation.intentId,
+          operation: mutation.operation,
+          outcome: "submitted",
+          code: "modify_recovered_from_projectx_order_state",
+          providerOrderId: outcome.orderId,
+          detail: outcome.detail,
+        });
+        continue;
+      }
+      store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+      changed = changed || mutation.state === "submitting";
+      ambiguous += 1;
+      resolutions.push({
+        intentId: mutation.intentId,
+        operation: mutation.operation,
+        outcome: "ambiguous",
+        code: "projectx_mutation_outcome_ambiguous",
+        providerOrderId: null,
+        detail: outcome.error,
+      });
+    }
+
     const contractStillOpen = positions.some(
       (position) => position.accountId === accountId
         && position.contractId === contractId
@@ -172,9 +221,11 @@ function reconstructOrphanIntentResolution(
 
   const operation = intent.action === "EXIT"
     ? "close_position"
-    : intent.action === "ENTER_LONG" || intent.action === "ENTER_SHORT"
-      ? "place_order"
-      : "no_mutation";
+    : intent.action === "MOVE_STOP" || intent.action === "MOVE_TP"
+      ? "modify_order"
+      : intent.action === "ENTER_LONG" || intent.action === "ENTER_SHORT"
+        ? "place_order"
+        : "no_mutation";
   return {
     intentId: intent.intentId,
     operation,
@@ -221,6 +272,50 @@ function reconstructTerminalResolution(
     };
   }
   throw new Error(`terminal_recovery_state_invalid:${mutation.state}`);
+}
+
+function reconcileModifyMutation(
+  mutation: StoredExecutionMutation,
+  orders: OrderInfo[],
+  accountId: number,
+  contractId: string,
+): { recovered: true; orderId: number; detail: string } | { recovered: false; error: string } {
+  const orderId = mutation.providerOrderId ?? requiredInteger(mutation.request.orderId, "orderId");
+  const observed = orders.find((order) => order.id === orderId);
+  if (!observed) {
+    return { recovered: false, error: "modify_order_outcome_ambiguous:order_not_found" };
+  }
+  if (observed.accountId !== accountId || observed.contractId !== contractId) {
+    return { recovered: false, error: "modify_order_outcome_ambiguous:order_identity_mismatch" };
+  }
+
+  const requestedStop = nullableInteger(mutation.request.stopPrice);
+  const requestedLimit = nullableInteger(mutation.request.limitPrice);
+  if (requestedStop !== null) {
+    if (observed.stopPrice !== requestedStop) {
+      return { recovered: false, error: "modify_order_outcome_ambiguous:stop_price_mismatch" };
+    }
+    return {
+      recovered: true,
+      orderId,
+      detail: `stop_price=${requestedStop}`,
+    };
+  }
+  if (requestedLimit !== null) {
+    if (observed.limitPrice !== requestedLimit) {
+      return { recovered: false, error: "modify_order_outcome_ambiguous:target_price_mismatch" };
+    }
+    return {
+      recovered: true,
+      orderId,
+      detail: `target_price=${requestedLimit}`,
+    };
+  }
+  return { recovered: false, error: "modify_order_outcome_ambiguous:request_price_missing" };
+}
+
+function nullableInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
 function reconcileEntryMutation(

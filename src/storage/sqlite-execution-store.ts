@@ -154,6 +154,16 @@ export class SqliteExecutionStore {
     return row ? this.parseJson<T>(row.payload_json, "execution_receipt") : null;
   }
 
+  public pendingReceiptIntentIds(): string[] {
+    const rows = this.database.prepare(`
+      SELECT intent_id
+      FROM execution_receipts
+      WHERE json_extract(payload_json, '$.status') = 'pending'
+      ORDER BY recorded_utc ASC
+    `).all() as SqlRow[];
+    return rows.map((row) => String(row.intent_id));
+  }
+
   public prepareMutation(
     intentId: string,
     operation: ExecutionOperation,
@@ -161,7 +171,11 @@ export class SqliteExecutionStore {
     customTag: string | null,
     createdUtc: string,
   ): void {
-    if (operation !== "place_order" && operation !== "close_position") {
+    if (
+      operation !== "place_order"
+      && operation !== "close_position"
+      && operation !== "modify_order"
+    ) {
       throw new Error(`execution_mutation_operation_invalid:${operation}`);
     }
 
@@ -186,10 +200,14 @@ export class SqliteExecutionStore {
         createdUtc,
       );
 
-      if (operation === "place_order") {
+      if (operation === "place_order" && this.isProtectedEntryRequest(request)) {
         this.setMeta("entry_submission_latch", intentId);
       }
     });
+  }
+
+  private isProtectedEntryRequest(request: Record<string, unknown>): boolean {
+    return request.stopLossBracket !== undefined || request.takeProfitBracket !== undefined;
   }
 
   public markMutationSubmitting(intentId: string, atUtc: string): void {
@@ -404,6 +422,34 @@ export class SqliteExecutionStore {
     `);
     this.applyMigration(2, `
       ALTER TABLE intents ADD COLUMN body_hash TEXT NOT NULL DEFAULT '';
+    `);
+    this.applyMigration(3, `
+      CREATE TABLE execution_outbox_v3 (
+        intent_id TEXT PRIMARY KEY REFERENCES intents(intent_id),
+        operation TEXT NOT NULL CHECK(operation IN ('place_order', 'close_position', 'modify_order')),
+        state TEXT NOT NULL CHECK(state IN (
+          'prepared', 'submitting', 'submitted', 'confirmed_not_submitted', 'rejected', 'ambiguous'
+        )),
+        custom_tag TEXT UNIQUE,
+        request_json TEXT NOT NULL,
+        created_utc TEXT NOT NULL,
+        submitting_utc TEXT,
+        resolved_utc TEXT,
+        provider_order_id INTEGER,
+        last_error TEXT
+      ) STRICT;
+      INSERT INTO execution_outbox_v3 (
+        intent_id, operation, state, custom_tag, request_json, created_utc,
+        submitting_utc, resolved_utc, provider_order_id, last_error
+      )
+      SELECT
+        intent_id, operation, state, custom_tag, request_json, created_utc,
+        submitting_utc, resolved_utc, provider_order_id, last_error
+      FROM execution_outbox;
+      DROP TABLE execution_outbox;
+      ALTER TABLE execution_outbox_v3 RENAME TO execution_outbox;
+      CREATE INDEX IF NOT EXISTS idx_execution_outbox_state
+        ON execution_outbox(state, created_utc);
     `);
   }
 
