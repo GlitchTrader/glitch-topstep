@@ -428,6 +428,12 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
       // keep polling
     }
     const st = await state();
+    if (st.instrumentOpenContracts !== 1) {
+      if (st.instrumentOpenContracts === 0 && i >= 5) {
+        throw new Error(`${label}: position_flat_before_live_protection`);
+      }
+      continue;
+    }
     const orders = st.openOrders ?? [];
     const hasStop = orders.some((order) => order.customTag === stop);
     const hasTarget = orders.some((order) => order.customTag === target);
@@ -438,10 +444,56 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
         has_stop: hasStop,
         has_target: hasTarget,
         open_orders: orders.length,
+        open_contracts: st.instrumentOpenContracts,
       });
     }
   }
   throw new Error(`${label}: live_protection_not_observed`);
+}
+
+async function waitPartialExitSettlement(
+  steps,
+  prefix,
+  trancheAId,
+  trancheBId,
+  timeoutSec = 180,
+) {
+  for (let i = 0; i < timeoutSec; i++) {
+    await sleep(1000);
+    try {
+      await waitReconciliationReady();
+    } catch {
+      // keep polling
+    }
+    const st = await state();
+    const own = await ownership();
+    const trancheA = own.tranches?.find((t) => t.intent_id === trancheAId);
+    const trancheB = own.tranches?.find((t) => t.intent_id === trancheBId);
+    const open = st.instrumentOpenContracts;
+    const aRem = trancheA?.remaining_qty ?? 0;
+    const bRem = trancheB?.remaining_qty ?? 0;
+    if (open === 1 && aRem === 1 && bRem === 0) {
+      return { st, own, trancheA };
+    }
+    if (open === 0 && i >= 10) {
+      steps.push({
+        step: `${prefix}_EXIT_B_UNEXPECTED_FLAT`,
+        open,
+        tranche_a_remaining: aRem,
+        tranche_b_remaining: bRem,
+      });
+      throw new Error(`${prefix}: partial_exit_flattened_entire_position`);
+    }
+    if (i % 15 === 14) {
+      steps.push({
+        step: `${prefix}_exit_b_settle_poll`,
+        open_contracts: open,
+        tranche_a_remaining: aRem,
+        tranche_b_remaining: bRem,
+      });
+    }
+  }
+  throw new Error(`${prefix}: partial_exit_settlement_timeout`);
 }
 
 async function waitArmedPacket(steps, label, timeoutSec = 180) {
@@ -578,6 +630,12 @@ async function runTrancheScenario(scenario, {
     if (stHook.instrumentOpenContracts !== 2) {
       throw new Error(`${prefix}: expected_two_contracts_after_restart_hook:${stHook.instrumentOpenContracts}`);
     }
+    await waitTwoTranches(steps, `${prefix}_post_restart_settle`, [
+      trancheAIntentIdResolved,
+      trancheBIntentIdResolved,
+    ], 120);
+    await sleep(15000);
+    await waitReconciliationReady();
   }
 
   const exitB = await submitIntent({
@@ -587,24 +645,23 @@ async function runTrancheScenario(scenario, {
     reason: "EXIT tranche B only",
   }, steps, `${prefix}_EXIT_B`);
   checks.exit_b = exitB.http === 202 && exitB.body.status === "pending";
-
-  for (let i = 0; i < 90; i++) {
-    await sleep(1000);
-    const st = await state();
-    if (st.instrumentOpenContracts === 1) break;
+  if (!checks.exit_b) {
+    throw new Error(`${prefix}_EXIT_B failed: ${exitB.body?.code ?? exitB.http}`);
   }
-  const stMid = await state();
-  const ownMid = await ownership();
-  const trancheAMid = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
+
+  const { st: stMid, own: ownMid, trancheA: trancheAMid } = await waitPartialExitSettlement(
+    steps,
+    prefix,
+    trancheAIntentIdResolved,
+    trancheBIntentIdResolved,
+  );
   steps.push({
     step: `${prefix}_AFTER_EXIT_B`,
     instrument_open: stMid.instrumentOpenContracts,
     tranche_a_remaining: trancheAMid?.remaining_qty,
     tranche_a_protection: trancheAMid?.protection?.status,
   });
-  checks.one_contract_left =
-    stMid.instrumentOpenContracts === 1
-    || (trancheAMid?.remaining_qty === 1 && stMid.instrumentOpenContracts >= 1);
+  checks.one_contract_left = stMid.instrumentOpenContracts === 1;
   checks.tranche_a_alive =
     trancheAMid !== undefined
     && trancheAMid.remaining_qty === 1
@@ -613,7 +670,7 @@ async function runTrancheScenario(scenario, {
   await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
 
   pkt = await packet();
-  const trancheA = ownMid.tranches?.find((t) => t.intent_id === trancheAIntentIdResolved);
+  const trancheA = trancheAMid;
   const stopBeforeA = trancheA?.protection?.stop?.price ?? pkt.protection?.stop?.price ?? sl;
   const newStopA = stopBeforeA + moveStopDelta;
 
