@@ -218,6 +218,35 @@ describe("durable execution recovery", () => {
     store.close();
   });
 
+  it("resolves an ambiguous entry from a durable provider order id when the custom tag is gone", async () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const value = intent("00000000-0000-4000-8000-000000000007");
+    store.registerIntent(value, "2026-07-21T12:00:05Z");
+    store.prepareMutation(
+      value.intentId,
+      "place_order",
+      { accountId, contractId, type: 2, side: 0, size: 1 },
+      "glt-filled",
+      "2026-07-21T12:00:06Z",
+    );
+    store.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
+    store.noteMutationProviderOrderId(value.intentId, 9002);
+
+    const result = await recoverExecutionMutations(
+      store,
+      { searchOrders: async () => [] },
+      accountId,
+      contractId,
+      [],
+      new Date("2026-07-21T12:01:00Z"),
+    );
+    assert.equal(result.resolved, 1);
+    assert.equal(result.ambiguous, 0);
+    assert.equal(result.resolutions[0]?.providerOrderId, 9002);
+    assert.equal(store.recoveryStatus().blockingAmbiguity, false);
+    store.close();
+  });
+
   it("reconstructs a receipt when submitted state survived but the receipt did not", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const value = intent("00000000-0000-4000-8000-000000000005");

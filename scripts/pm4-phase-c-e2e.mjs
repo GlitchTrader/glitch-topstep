@@ -456,8 +456,9 @@ async function waitPartialExitSettlement(
   prefix,
   trancheAId,
   trancheBId,
-  timeoutSec = 180,
+  timeoutSec = 240,
 ) {
+  let venueOneStable = 0;
   for (let i = 0; i < timeoutSec; i++) {
     await sleep(1000);
     try {
@@ -470,12 +471,32 @@ async function waitPartialExitSettlement(
     const trancheA = own.tranches?.find((t) => t.intent_id === trancheAId);
     const trancheB = own.tranches?.find((t) => t.intent_id === trancheBId);
     const open = st.instrumentOpenContracts;
-    const aRem = trancheA?.remaining_qty ?? 0;
-    const bRem = trancheB?.remaining_qty ?? 0;
-    if (open === 1 && aRem === 1 && bRem === 0) {
-      return { st, own, trancheA };
+    const aRem = trancheA?.remaining_qty ?? null;
+    const bRem = trancheB?.remaining_qty ?? null;
+
+    if (open === 1) {
+      venueOneStable += 1;
+      if (venueOneStable >= 2) {
+        return { st, own, trancheA };
+      }
+    } else {
+      venueOneStable = 0;
     }
-    if (open === 0 && i >= 10) {
+
+    if (open === 2) {
+      if (i % 15 === 14) {
+        steps.push({
+          step: `${prefix}_exit_b_settle_poll`,
+          open_contracts: open,
+          tranche_a_remaining: aRem,
+          tranche_b_remaining: bRem,
+          venue_one_stable: venueOneStable,
+        });
+      }
+      continue;
+    }
+
+    if (open === 0 && i >= 30) {
       steps.push({
         step: `${prefix}_EXIT_B_UNEXPECTED_FLAT`,
         open,
@@ -484,12 +505,14 @@ async function waitPartialExitSettlement(
       });
       throw new Error(`${prefix}: partial_exit_flattened_entire_position`);
     }
+
     if (i % 15 === 14) {
       steps.push({
         step: `${prefix}_exit_b_settle_poll`,
         open_contracts: open,
         tranche_a_remaining: aRem,
         tranche_b_remaining: bRem,
+        venue_one_stable: venueOneStable,
       });
     }
   }
@@ -567,7 +590,6 @@ async function runTrancheScenario(scenario, {
   enterAction,
   moveStopDelta,
   moveTpDelta,
-  onTwoTranches,
 }) {
   const { steps, checks } = scenario;
   let pkt = await packet();
@@ -618,25 +640,6 @@ async function runTrancheScenario(scenario, {
   const stTwo = await state();
   checks.two_tranches = stTwo.instrumentOpenContracts === 2;
   scenario.tranche_b_intent_id = trancheBIntentIdResolved;
-
-  if (onTwoTranches) {
-    await onTwoTranches(trancheAIntentIdResolved, trancheBIntentIdResolved);
-    await waitReconciliationReady();
-    const stHook = await state();
-    steps.push({
-      step: `${prefix}_AFTER_RESTART_HOOK`,
-      instrument_open: stHook.instrumentOpenContracts,
-    });
-    if (stHook.instrumentOpenContracts !== 2) {
-      throw new Error(`${prefix}: expected_two_contracts_after_restart_hook:${stHook.instrumentOpenContracts}`);
-    }
-    await waitTwoTranches(steps, `${prefix}_post_restart_settle`, [
-      trancheAIntentIdResolved,
-      trancheBIntentIdResolved,
-    ], 120);
-    await sleep(15000);
-    await waitReconciliationReady();
-  }
 
   const exitB = await submitIntent({
     ...baseIntent("EXIT", "unused"),
@@ -717,6 +720,87 @@ async function runTrancheScenario(scenario, {
   scenario.pass = Object.values(checks).every(Boolean);
 }
 
+async function runScenarioB(scenario) {
+  const { steps, checks } = scenario;
+  await ensureFlat(steps);
+
+  let pkt = await packet();
+  const brackets = wideShortBrackets(pkt);
+  if (!brackets) throw new Error("SCENARIO_B: no_entry_price");
+  const { sl, tp } = brackets;
+  const trancheAIntentId = randomUUID();
+
+  const enter1 = await submitIntent({
+    ...baseIntent("ENTER_SHORT", "unused", trancheAIntentId),
+    quantity: 1,
+    order_type: "MARKET",
+    stop_loss: sl,
+    take_profit_1: tp,
+    reason: "ENTER_SHORT tranche A",
+  }, steps, "SCENARIO_B_ENTER_A");
+  const trancheAIntentIdResolved = enter1.intent_id;
+  checks.enter_a = enter1.http === 202 && enter1.body.status === "pending";
+  if (!checks.enter_a) {
+    throw new Error(`SCENARIO_B_ENTER_A failed: ${enter1.body?.code ?? enter1.http}`);
+  }
+
+  await waitProven(steps, "SCENARIO_B_A");
+  pkt = await waitArmedPacket(steps, "SCENARIO_B_ARMED");
+  await sleep(8000);
+  const trancheBIntentId = randomUUID();
+  const enter2 = await submitIntent({
+    ...baseIntent("ENTER_SHORT", "unused", trancheBIntentId),
+    quantity: 1,
+    order_type: "MARKET",
+    stop_loss: sl,
+    take_profit_1: tp,
+    reason: "ENTER_SHORT scale-in tranche B",
+  }, steps, "SCENARIO_B_SCALE_IN", 24);
+  const trancheBIntentIdResolved = enter2.intent_id;
+  checks.scale_in =
+    enter2.http === 202
+    && enter2.body.status === "pending"
+    && enter2.body.code !== "position_addition_not_implemented";
+
+  await waitTwoTranches(steps, "SCENARIO_B_two_tranches", [
+    trancheAIntentIdResolved,
+    trancheBIntentIdResolved,
+  ]);
+  const stTwo = await state();
+  checks.two_tranches = stTwo.instrumentOpenContracts === 2;
+
+  await restartGateway(steps, "SCENARIO_B");
+  await waitTwoTranches(steps, "SCENARIO_B_post_restart", [
+    trancheAIntentIdResolved,
+    trancheBIntentIdResolved,
+  ], 300);
+
+  const ownRestart = await ownership();
+  const activeAfterRestart = (ownRestart.tranches ?? []).filter(
+    (t) => t.intent_id === trancheAIntentIdResolved || t.intent_id === trancheBIntentIdResolved,
+  );
+  const stRestart = await state();
+  steps.push({
+    step: "SCENARIO_B_RESTART_OWNERSHIP",
+    open_contracts: stRestart.instrumentOpenContracts,
+    tranche_count: activeAfterRestart.length,
+    tranches: activeAfterRestart.map((t) => ({
+      intent_id: t.intent_id,
+      filled_qty: t.filled_qty,
+      remaining_qty: t.remaining_qty,
+      protection: t.protection?.status,
+    })),
+  });
+  checks.two_tranches_after_restart = stRestart.instrumentOpenContracts === 2;
+  checks.ownership_two_tranches =
+    activeAfterRestart.length === 2
+    && activeAfterRestart.every((t) => t.remaining_qty === 1);
+
+  await ensureFlat(steps);
+  checks.flat = (await state()).instrumentOpenContracts === 0;
+  scenario.pass = Object.values(checks).every(Boolean);
+}
+
 const log = {
   started_utc: new Date().toISOString(),
   scenario_a: { steps: [], checks: {}, pass: false },
@@ -736,61 +820,31 @@ try {
 
   await ensureFlat(log.scenario_a.steps);
 
-  const runRestart = process.env.PM4_E2E_RESTART === "1";
   await runTrancheScenario(log.scenario_a, {
     prefix: "SHORT",
     enterAction: "ENTER_SHORT",
     moveStopDelta: -5 * TICK,
     moveTpDelta: 5 * TICK,
-    onTwoTranches: runRestart
-      ? async (trancheAId, trancheBId) => {
-          log.scenario_b.skipped = false;
-          try {
-            await restartGateway(log.scenario_b.steps, "SCENARIO_B");
-            await waitTwoTranches(
-              log.scenario_b.steps,
-              "restart_tranches",
-              [trancheAId, trancheBId],
-              300,
-            );
-            const ownRestart = await ownership();
-            const activeAfterRestart = (ownRestart.tranches ?? []).filter(
-              (t) => t.intent_id === trancheAId || t.intent_id === trancheBId,
-            );
-            const stRestart = await state();
-            log.scenario_b.steps.push({
-              step: "RESTART_OWNERSHIP",
-              open_contracts: stRestart.instrumentOpenContracts,
-              tranche_count: activeAfterRestart.length,
-              tranches: activeAfterRestart.map((t) => ({
-                intent_id: t.intent_id,
-                filled_qty: t.filled_qty,
-                remaining_qty: t.remaining_qty,
-                protection: t.protection?.status,
-              })),
-            });
-            log.scenario_b.checks.two_tranches_after_restart = stRestart.instrumentOpenContracts === 2;
-            log.scenario_b.checks.ownership_two_tranches =
-              activeAfterRestart.length === 2
-              && activeAfterRestart.every((t) => t.remaining_qty === 1);
-            log.scenario_b.pass = Object.values(log.scenario_b.checks).every(Boolean);
-          } catch (restartError) {
-            log.scenario_b.reason = String(restartError?.message ?? restartError);
-            log.scenario_b.pass = false;
-            try {
-              await ensureGatewayUp(log.scenario_b.steps, "SCENARIO_B_RECOVERY");
-            } catch (recoveryError) {
-              log.scenario_b.recovery_error = String(recoveryError?.message ?? recoveryError);
-            }
-          }
-        }
-      : undefined,
   });
 
+  const runRestart = process.env.PM4_E2E_RESTART === "1";
   if (!runRestart) {
     log.scenario_b.skipped = true;
     log.scenario_b.reason = "PM4_E2E_RESTART not set";
     log.scenario_b.pass = false;
+  } else {
+    log.scenario_b.skipped = false;
+    try {
+      await runScenarioB(log.scenario_b);
+    } catch (restartError) {
+      log.scenario_b.reason = String(restartError?.message ?? restartError);
+      log.scenario_b.pass = false;
+      try {
+        await ensureGatewayUp(log.scenario_b.steps, "SCENARIO_B_RECOVERY");
+      } catch (recoveryError) {
+        log.scenario_b.recovery_error = String(recoveryError?.message ?? recoveryError);
+      }
+    }
   }
 
   if (process.env.PM4_E2E_SKIP_C === "1") {

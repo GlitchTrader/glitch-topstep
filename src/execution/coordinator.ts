@@ -218,6 +218,11 @@ export class ExecutionCoordinator {
 
       try {
         const orderId = await this.api.placeOrder(request);
+        try {
+          this.store.noteMutationProviderOrderId(intent.intentId, orderId);
+        } catch {
+          // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
+        }
         this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
         return this.record({
           intentId: intent.intentId,
@@ -389,6 +394,11 @@ export class ExecutionCoordinator {
     try {
       if (partialExit) {
         const orderId = await this.api.placeOrder(request as PlaceOrderRequest);
+        try {
+          this.store.noteMutationProviderOrderId(intent.intentId, orderId);
+        } catch {
+          // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
+        }
         this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
         return this.record({
           intentId: intent.intentId,

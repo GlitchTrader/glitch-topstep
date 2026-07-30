@@ -86,6 +86,13 @@ export async function recoverExecutionMutations(
       if (!live || isTerminalMutationState(live.state)) {
         continue;
       }
+      if (
+        live.state === "submitting"
+        && live.submittingUtc
+        && now.getTime() - new Date(live.submittingUtc).getTime() < 15_000
+      ) {
+        continue;
+      }
       const outcome = reconcileEntryMutation(live, historicalOrders, accountId, contractId);
       if (outcome.orderId !== null) {
         store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
@@ -344,6 +351,29 @@ function reconcileEntryMutation(
   accountId: number,
   contractId: string,
 ): { orderId: number | null; error: string } {
+  if (mutation.providerOrderId !== null) {
+    const observed = orders.find((order) => order.id === mutation.providerOrderId);
+    if (observed) {
+      const request = mutation.request;
+      const expectedSide = requiredInteger(request.side, "side");
+      const expectedSize = requiredInteger(request.size, "size");
+      const expectedType = requiredInteger(request.type, "type");
+      if (
+        observed.accountId === accountId
+        && observed.contractId === contractId
+        && observed.side === expectedSide
+        && observed.size === expectedSize
+        && observed.type === expectedType
+      ) {
+        return { orderId: observed.id, error: "" };
+      }
+    }
+    return {
+      orderId: mutation.providerOrderId,
+      error: "",
+    };
+  }
+
   if (!mutation.customTag) {
     return {
       orderId: null,

@@ -219,6 +219,24 @@ export class SqliteExecutionStore {
     });
   }
 
+  public noteMutationProviderOrderId(intentId: string, orderId: number): void {
+    this.inTransaction(() => {
+      const current = this.database.prepare(`
+        SELECT state, provider_order_id
+        FROM execution_outbox
+        WHERE intent_id = ?
+      `).get(intentId) as SqlRow | undefined;
+      if (!current || !["submitting", "ambiguous"].includes(String(current.state))) {
+        throw new Error(`execution_mutation_provider_order_note_invalid:${intentId}`);
+      }
+      this.database.prepare(`
+        UPDATE execution_outbox
+        SET provider_order_id = ?
+        WHERE intent_id = ?
+      `).run(orderId, intentId);
+    });
+  }
+
   public markMutationSubmitted(intentId: string, orderId: number | null, atUtc: string): void {
     this.transitionMutation(intentId, ["submitting", "ambiguous"], "submitted", {
       resolvedUtc: atUtc,
@@ -246,7 +264,6 @@ export class SqliteExecutionStore {
   public markMutationAmbiguous(intentId: string, error: string, atUtc: string): void {
     this.transitionMutation(intentId, ["submitting", "ambiguous"], "ambiguous", {
       resolvedUtc: null,
-      providerOrderId: null,
       lastError: error,
     });
   }
