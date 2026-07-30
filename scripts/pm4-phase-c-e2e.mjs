@@ -263,9 +263,56 @@ function isVelocityRejected(res) {
     && String(res.body.detail ?? "").toLowerCase().includes("velocity control");
 }
 
+// ponytail: venue lockout resets on mutation attempts — fail fast, no recon interleave
+let velocityBlocked = false;
+const VELOCITY_COOLDOWN_MS = 180_000;
+const MAX_VELOCITY_WAITS = 2;
+
+function hadRecentVelocityInLog(withinMs = 30 * 60_000) {
+  const logPath = path.join(process.cwd(), "data", "pm4-phase-c-e2e.json");
+  if (!fs.existsSync(logPath)) return false;
+  try {
+    const prev = JSON.parse(fs.readFileSync(logPath, "utf8"));
+    const refTime = Math.max(
+      Date.parse(prev.finished_utc ?? 0) || 0,
+      Date.parse(prev.started_utc ?? 0) || 0,
+    );
+    if (!refTime || Date.now() - refTime > withinMs) return false;
+    const allSteps = [
+      ...(prev.scenario_a?.steps ?? []),
+      ...(prev.scenario_b?.steps ?? []),
+      ...(prev.scenario_c?.steps ?? []),
+    ];
+    return allSteps.some(
+      (s) => s.step?.includes("VELOCITY")
+        || (s.code === "projectx_mutation_rejected"
+          && String(s.detail ?? "").toLowerCase().includes("velocity control")),
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function maybePreSubmitVelocityCooldown(steps) {
+  if (!hadRecentVelocityInLog()) return;
+  const waitMs = 900_000;
+  console.warn(`[pm4-e2e] velocity in prior run within 30 min — pre-submit cooldown ${waitMs / 1000}s`);
+  steps.push({
+    step: "PRE_SUBMIT_VELOCITY_COOLDOWN",
+    wait_ms: waitMs,
+    started_utc: new Date().toISOString(),
+  });
+  await sleep(waitMs);
+  steps.push({
+    step: "PRE_SUBMIT_VELOCITY_COOLDOWN_DONE",
+    finished_utc: new Date().toISOString(),
+  });
+}
+
 async function submitIntent(body, steps, stepName, retries = 24) {
   let current = { ...body, intent_id: body.intent_id ?? randomUUID() };
-  let velocityAttempts = 0;
+  let velocityWaits = 0;
+  let velocityReconRetried = false;
   for (let attempt = 0; attempt < retries; attempt++) {
     await waitReconciliationReady();
     const pkt = await waitPacketReconciliationCurrent();
@@ -309,30 +356,43 @@ async function submitIntent(body, steps, stepName, retries = 24) {
     if (res.body.code === "intent_body_conflict") {
       return { ...res, intent_id: current.intent_id };
     }
+    if (isVelocityRejected(res)) {
+      velocityBlocked = true;
+      velocityWaits += 1;
+      if (velocityWaits <= MAX_VELOCITY_WAITS) {
+        steps.push({
+          step: `${stepName}_VELOCITY_WAIT`,
+          velocity_attempt: velocityWaits,
+          wait_ms: VELOCITY_COOLDOWN_MS,
+        });
+        current.intent_id = randomUUID();
+        await sleep(VELOCITY_COOLDOWN_MS);
+        continue;
+      }
+      return { ...res, intent_id: current.intent_id };
+    }
     if (
       isReconciliationRetry(res)
       || res.body.code === "stop_not_tick_aligned"
       || res.body.code === "target_not_tick_aligned"
       || String(res.body.detail ?? "").includes("stop_not_on_loss_side")
     ) {
+      if (velocityBlocked) {
+        if (velocityReconRetried) {
+          return { ...res, intent_id: current.intent_id };
+        }
+        velocityReconRetried = true;
+        steps.push({
+          step: `${stepName}_VELOCITY_RECON_COOLDOWN`,
+          wait_ms: VELOCITY_COOLDOWN_MS,
+        });
+        current.intent_id = randomUUID();
+        await sleep(VELOCITY_COOLDOWN_MS);
+        continue;
+      }
       current.intent_id = randomUUID();
       await sleep(isReconciliationRetry(res) ? 4000 : 1500);
       continue;
-    }
-    // ponytail: venue rate limit — backoff 60-120s, max 3 per intent
-    if (isVelocityRejected(res)) {
-      velocityAttempts += 1;
-      if (velocityAttempts < 3) {
-        const waitMs = 60_000 + Math.floor(Math.random() * 60_001);
-        steps.push({
-          step: `${stepName}_VELOCITY_WAIT`,
-          velocity_attempt: velocityAttempts,
-          wait_ms: waitMs,
-        });
-        current.intent_id = randomUUID();
-        await sleep(waitMs);
-        continue;
-      }
     }
     return { ...res, intent_id: current.intent_id };
   }
@@ -882,6 +942,7 @@ try {
     gateway_mode: hlth.gateway_mode,
   };
 
+  await maybePreSubmitVelocityCooldown(log.scenario_a.steps);
   await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
   await ensureFlat(log.scenario_a.steps);
 
