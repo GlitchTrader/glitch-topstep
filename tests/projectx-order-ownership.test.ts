@@ -214,17 +214,28 @@ describe("ProjectX order ownership", () => {
       assert.equal(entry.latestObservedOrder?.id, 9002);
       assert.deepEqual(entry.fills.map((fill) => fill.trade.id), [7001]);
       assert.equal(entry.effectiveFilledQuantity, 1);
-      assert.equal(entry.protection.status, "unknown");
+      assert.equal(entry.protection.status, "pending");
     });
   });
 
-  it("uses exact REST order identity without assigning nearby protective orders", () => {
+  it("binds protective child orders by custom tag when evidence is present", () => {
     withStores((execution, evidence, ownership) => {
       const value = intent("00000000-0000-4000-8000-000000009003");
       submittedEntry(execution, value, 9003);
       const entryOrder = order(9003);
       entryOrder.customTag = `glt-${value.intentId}`;
-      const nearbyStop = { ...order(9010, 1), type: 4, stopPrice: 19_990.25 };
+      const stopOrder = {
+        ...order(9010, 1),
+        type: 4,
+        stopPrice: 19_990.25,
+        customTag: `glt-${value.intentId}-SL`,
+      };
+      const targetOrder = {
+        ...order(9011, 1),
+        type: 1,
+        limitPrice: 20_020.25,
+        customTag: `glt-${value.intentId}-TP`,
+      };
       evidence.append({
         receivedUtc: "2026-07-21T12:00:12Z",
         providerTimestampUtc: null,
@@ -235,11 +246,27 @@ describe("ProjectX order ownership", () => {
         contractId: CONTRACT_ID,
         providerEntityId: null,
         rawPayload: null,
-        normalizedPayload: [entryOrder, nearbyStop],
+        normalizedPayload: [entryOrder, stopOrder, targetOrder],
+      });
+      const exactFill = trade(7003, 9003);
+      evidence.append({
+        receivedUtc: "2026-07-21T12:00:13Z",
+        providerTimestampUtc: exactFill.creationTimestamp,
+        source: "projectx_user_stream",
+        eventType: "trade",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: "7003",
+        relatedProviderEntityId: "9003",
+        rawPayload: exactFill,
+        normalizedPayload: exactFill,
       });
       const entry = ownership.current().entries[0]!;
       assert.equal(entry.latestObservedOrder?.id, 9003);
-      assert.equal(entry.protection.status, "unknown");
+      assert.equal(entry.protection.status, "proven");
+      assert.equal(entry.protection.stop.providerOrderId, 9010);
+      assert.equal(entry.protection.target.providerOrderId, 9011);
       assert.equal(entry.issues.some((issue) => issue.includes("9010")), false);
     });
   });

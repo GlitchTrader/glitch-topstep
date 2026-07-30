@@ -72,4 +72,28 @@ describe("Glitch intent contract", () => {
       decision_audit: { ...input.decision_audit, final_choice: "ENTER_LONG" },
     }), /entries require/);
   });
+
+  it("accepts MOVE_STOP and MOVE_TP amendment intents", () => {
+    const moveStop = {
+      ...baseIntent(),
+      action: "MOVE_STOP",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "MOVE_STOP" },
+      new_stop_price: 20_000,
+    };
+    const moveTp = {
+      ...baseIntent(),
+      action: "MOVE_TP",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "MOVE_TP" },
+      new_take_profit: 20_050,
+    };
+    const partialExit = {
+      ...baseIntent(),
+      action: "EXIT",
+      decision_audit: { ...baseIntent().decision_audit, final_choice: "EXIT" },
+      quantity: 1,
+    };
+    assert.equal(parseTradeIntent(moveStop).newStopPrice, 20_000);
+    assert.equal(parseTradeIntent(moveTp).newTakeProfit, 20_050);
+    assert.equal(parseTradeIntent(partialExit).quantity, 1);
+  });
 });

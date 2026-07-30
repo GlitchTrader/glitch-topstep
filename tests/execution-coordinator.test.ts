@@ -165,7 +165,8 @@ describe("execution coordinator serialization", () => {
         )),
       ]);
 
-      assert.equal(first.status, "submitted");
+      assert.equal(first.status, "pending");
+      assert.equal(first.code, "entry_submitted_pending_reconciliation");
       assert.equal(second.status, "rejected");
       assert.equal(second.code, "decision_packet_unknown_or_expired");
       assert.equal(placeOrderCalls, 1);
@@ -245,7 +246,8 @@ describe("execution coordinator serialization", () => {
       const conflicting = { ...base, reason: "Different body hash." };
       const first = await coordinator.handleWireIntent(base);
       const second = await coordinator.handleWireIntent(conflicting);
-      assert.equal(first.status, "submitted");
+      assert.equal(first.status, "pending");
+      assert.equal(first.code, "entry_submitted_pending_reconciliation");
       assert.equal(second.status, "rejected");
       assert.equal(second.code, "intent_body_conflict");
     } finally {
@@ -311,7 +313,7 @@ describe("execution coordinator serialization", () => {
         Array.from({ length: 100 }, () => coordinator.handleWireIntent(wireIntent)),
       );
       assert.equal(placeOrderCalls, 1);
-      assert.equal(receipts.every((receipt) => receipt.status === "submitted"), true);
+      assert.equal(receipts.every((receipt) => receipt.status === "pending"), true);
       assert.equal(new Set(receipts.map((receipt) => receipt.receipt_id)).size, 1);
     } finally {
       store.close();
@@ -419,7 +421,8 @@ describe("execution coordinator serialization", () => {
         packet.market.snapshot_hash,
         now.toISOString(),
       ));
-      assert.equal(receipt.status, "submitted");
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "entry_submitted_pending_reconciliation");
       const placed = captured;
       if (!placed?.stopLossBracket || !placed.takeProfitBracket) {
         throw new Error("expected signed bracket request");

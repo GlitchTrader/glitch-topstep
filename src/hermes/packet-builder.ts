@@ -6,6 +6,7 @@ import type {
   AccountVenueSnapshot,
   RiskSettings,
   TopstepPolicyState,
+  TradeAction,
 } from "../domain/models.js";
 import {
   buildExecutionGates,
@@ -22,6 +23,11 @@ import {
   evaluateSnapshotDataQuality,
   type SnapshotDataQuality,
 } from "../state/data-quality.js";
+import {
+  bindProtection,
+  intentIdFromStopTag,
+  type ResolvedProtection,
+} from "../ownership/protection.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -105,8 +111,23 @@ export interface DirectDecisionPacket {
     ambiguous_mutations: number;
     last_recovery_utc: string | null;
     last_recovery_error: string | null;
-    supported_actions: Array<"ENTER_LONG" | "ENTER_SHORT" | "HOLD" | "EXIT" | "NOTHING">;
+    supported_actions: TradeAction[];
     authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects";
+  };
+  protection: {
+    status: ResolvedProtection["status"];
+    reason: string;
+    intent_id: string | null;
+    stop: {
+      provider_order_id: number | null;
+      custom_tag: string | null;
+      price: number | null;
+    } | null;
+    target: {
+      provider_order_id: number | null;
+      custom_tag: string | null;
+      price: number | null;
+    } | null;
   };
   required_output_template: Record<string, unknown>;
 }
@@ -179,6 +200,77 @@ export function decisionStateHash(
     .digest("hex");
 }
 
+export function derivePacketProtection(
+  snapshot: AccountVenueSnapshot,
+  activeIntentId: string | null = null,
+): DirectDecisionPacket["protection"] {
+  const positionOpen = snapshot.instrumentOpenContracts > 0;
+  if (!positionOpen) {
+    return {
+      status: "unknown",
+      reason: "no_open_position",
+      intent_id: null,
+      stop: null,
+      target: null,
+    };
+  }
+
+  const intentId = activeIntentId
+    ?? snapshot.openOrders
+      .map((order) => (order.customTag ? intentIdFromStopTag(order.customTag) : null))
+      .find((candidate) => candidate !== null)
+    ?? null;
+  if (!intentId) {
+    return {
+      status: "pending",
+      reason: "active_entry_intent_unresolved",
+      intent_id: null,
+      stop: null,
+      target: null,
+    };
+  }
+
+  const protection = bindProtection(
+    intentId,
+    snapshot.openOrders,
+    snapshot.account.id,
+    snapshot.contract.id,
+    true,
+  );
+  return {
+    status: protection.status,
+    reason: protection.reason,
+    intent_id: intentId,
+    stop: protection.stop.providerOrderId === null
+      ? null
+      : {
+          provider_order_id: protection.stop.providerOrderId,
+          custom_tag: protection.stop.customTag,
+          price: protection.stop.price,
+        },
+    target: protection.target.providerOrderId === null
+      ? null
+      : {
+          provider_order_id: protection.target.providerOrderId,
+          custom_tag: protection.target.customTag,
+          price: protection.target.price,
+        },
+  };
+}
+
+export function deriveSupportedActions(
+  snapshot: AccountVenueSnapshot,
+  protection: DirectDecisionPacket["protection"],
+): TradeAction[] {
+  const base: TradeAction[] = snapshot.instrumentOpenContracts === 0
+    ? ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"]
+    : ["HOLD", "EXIT", "NOTHING"];
+  if (protection.status === "proven") {
+    return [...base.slice(0, base.length - 2), "MOVE_STOP", "MOVE_TP", ...base.slice(-2)];
+  }
+  return base;
+}
+
 export function buildDecisionPacket(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
@@ -224,6 +316,8 @@ export function buildDecisionPacket(
     now,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
+  const protection = derivePacketProtection(snapshot);
+  const supportedActions = deriveSupportedActions(snapshot, protection);
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -309,9 +403,10 @@ export function buildDecisionPacket(
       ambiguous_mutations: recovery.ambiguousMutations,
       last_recovery_utc: recovery.lastRecoveryUtc,
       last_recovery_error: recovery.lastRecoveryError,
-      supported_actions: ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"],
+      supported_actions: supportedActions,
       authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects",
     },
+    protection,
     required_output_template: {
       schema_version: "glitch.intent.v2",
       intent_id: "GENERATE_UUID",

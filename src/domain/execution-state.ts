@@ -1,4 +1,4 @@
-export type ExecutionOperation = "place_order" | "close_position" | "no_mutation";
+export type ExecutionOperation = "place_order" | "close_position" | "modify_order" | "no_mutation";
 
 export type ExecutionMutationState =
   | "prepared"

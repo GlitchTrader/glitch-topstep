@@ -9,6 +9,11 @@ import type {
   ProviderEvidenceQuery,
   StoredProviderEvidenceEvent,
 } from "../domain/provider-evidence.js";
+import {
+  aggregateProtectionStatus,
+  bindProtection,
+  latestOrderById,
+} from "./protection.js";
 
 export interface ProjectXOrderOwnershipOptions {
   accountId: number;
@@ -99,9 +104,15 @@ export class ProjectXOrderOwnershipService {
       for (const owner of owners) {
         owner.issues.push(issue);
         owner.status = "incomplete";
+        owner.protection = {
+          ...owner.protection,
+          status: "incomplete",
+          reason: issue,
+        };
       }
     }
 
+    const positionOpen = this.hasOpenPosition(entries);
     return {
       schema_version: "glitch.projectx.order_ownership.v1",
       generated_utc: this.now().toISOString(),
@@ -115,10 +126,14 @@ export class ProjectXOrderOwnershipService {
         (total, entry) => total + entry.fills.filter((fill) => !fill.trade.voided).length,
         0,
       ),
-      protection_status: "unknown",
+      protection_status: aggregateProtectionStatus(entries, positionOpen),
       issues,
       authority: "Only explicit durable provider identities are attributed; price and timing proximity are never ownership evidence.",
     };
+  }
+
+  private hasOpenPosition(entries: EntryOrderOwnership[]): boolean {
+    return entries.some((entry) => entry.effectiveFilledQuantity > 0);
   }
 
   private buildEntry(row: SubmittedEntryRow): EntryOrderOwnership {
@@ -259,6 +274,19 @@ export class ProjectXOrderOwnershipService {
         ? "provider_observed"
         : "provider_acknowledged";
 
+    const openOrders = this.openOrdersEvidence();
+    const positionOpen = effectiveFilledQuantity > 0;
+    const protection = bindProtection(
+      row.intent_id,
+      openOrders,
+      this.options.accountId,
+      this.options.contractId,
+      positionOpen,
+    );
+    if (protection.status === "incomplete") {
+      identityComplete = false;
+    }
+
     return {
       intentId: row.intent_id,
       account: intent?.account ?? null,
@@ -274,12 +302,54 @@ export class ProjectXOrderOwnershipService {
       latestObservedOrder,
       fills,
       effectiveFilledQuantity,
-      protection: {
-        status: "unknown",
-        reason: "provider_child_order_relation_not_observed",
-      },
+      protection,
       issues,
     };
+  }
+
+  private openOrdersEvidence(): OrderInfo[] {
+    const snapshots = this.queryEvidence({
+      source: "projectx_rest",
+      eventType: "open_orders_snapshot",
+      accountId: this.options.accountId,
+      contractId: this.options.contractId,
+      limit: 10_000,
+    });
+    const orders: OrderInfo[] = [];
+    for (const event of snapshots) {
+      if (!Array.isArray(event.normalizedPayload)) {
+        continue;
+      }
+      for (const value of event.normalizedPayload) {
+        if (isOrderInfo(value)) {
+          orders.push(value);
+        }
+      }
+    }
+    const realtime = this.queryEvidence({
+      source: "projectx_user_stream",
+      eventType: "order",
+      accountId: this.options.accountId,
+      contractId: this.options.contractId,
+      limit: 10_000,
+    });
+    const historical = this.queryEvidence({
+      source: "projectx_rest",
+      eventType: "historical_order",
+      accountId: this.options.accountId,
+      contractId: this.options.contractId,
+      limit: 10_000,
+    });
+    for (const event of [...realtime, ...historical]) {
+      const order = orderFromEvidence(event, Number(event.providerEntityId));
+      if (order) {
+        orders.push(order);
+      }
+    }
+    return latestOrderById(orders).filter(
+      (order) => order.accountId === this.options.accountId
+        && order.contractId === this.options.contractId,
+    );
   }
 
   private orderEvidence(providerOrderId: number): StoredProviderEvidenceEvent[] {
