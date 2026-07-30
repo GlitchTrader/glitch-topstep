@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -24,11 +25,35 @@ function apiBase() {
   return `http://127.0.0.1:${gatewayPort()}`;
 }
 
-function psQuote(value) {
-  return `'${String(value).replace(/'/g, "''")}'`;
+function gatewayChildEnv() {
+  return { ...process.env, ...env };
 }
 
-async function runPowerShell(command, timeoutMs = 120_000) {
+function isTcpPortOpen(port, host = "127.0.0.1", timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host });
+    const finish = (open) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(open);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+async function isGatewayReachable() {
+  try {
+    const r = await fetch(`${apiBase()}/health`, { signal: AbortSignal.timeout(3000) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function runPowerShell(command, timeoutMs = 15_000) {
   return new Promise((resolve, reject) => {
     const child = spawn("powershell", ["-NoProfile", "-Command", command], {
       cwd: process.cwd(),
@@ -50,57 +75,45 @@ async function runPowerShell(command, timeoutMs = 120_000) {
   });
 }
 
-async function isPortListening(port) {
-  const { stdout } = await runPowerShell(
-    `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Measure-Object).Count`,
-  );
-  return Number(stdout) > 0;
-}
-
 async function killGatewayOnPort(port) {
-  for (let attempt = 0; attempt < 15; attempt++) {
-    if (!(await isPortListening(port))) return;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (!(await isTcpPortOpen(port))) return;
     await runPowerShell(
       `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
     );
     await sleep(2000);
   }
-  if (await isPortListening(port)) {
+  if (await isTcpPortOpen(port)) {
     throw new Error(`port_${port}_still_in_use`);
   }
 }
 
 async function startGatewayProcess(steps, label) {
   const port = gatewayPort();
-  if (await isPortListening(port)) {
-    steps.push({ step: `${label}_START_SKIPPED`, reason: "port_already_listening", port });
+  if (await isGatewayReachable()) {
+    steps.push({ step: `${label}_START_SKIPPED`, reason: "gateway_already_reachable", port });
     return;
   }
-  const cwd = psQuote(process.cwd());
+  if (await isTcpPortOpen(port)) {
+    throw new Error(`port_${port}_in_use_without_health`);
+  }
   const dataDir = env.GLITCH_DATA_DIR ?? "data";
   const dataDirAbs = path.isAbsolute(dataDir) ? dataDir : path.join(process.cwd(), dataDir);
-  const stdoutLog = psQuote(path.join(dataDirAbs, "gateway.stdout.log"));
-  const stderrLog = psQuote(path.join(dataDirAbs, "gateway.stderr.log"));
-  const dataDirQuoted = psQuote(dataDirAbs);
-  // ponytail: skip npm build on E2E restart; mirror start.ps1 node launch with .env loaded
-  const ps = `
-Set-Location ${cwd}
-Get-Content '.env' | ForEach-Object {
-  $line = $_.Trim()
-  if (-not $line -or $line.StartsWith('#') -or -not $line.Contains('=')) { return }
-  $eq = $line.IndexOf('=')
-  $name = $line.Substring(0, $eq).Trim()
-  $value = $line.Substring($eq + 1).Trim()
-  if ($name) { Set-Item -Path "env:$name" -Value $value }
-}
-New-Item -ItemType Directory -Force -Path ${dataDirQuoted} | Out-Null
-Start-Process -FilePath 'node' -ArgumentList '--enable-source-maps','dist/src/index.js' -WorkingDirectory ${cwd} -WindowStyle Hidden -RedirectStandardOutput ${stdoutLog} -RedirectStandardError ${stderrLog}
-`.trim();
-  const { code, stderr } = await runPowerShell(ps);
-  if (code !== 0) {
-    throw new Error(`gateway_start_failed: exit=${code} stderr=${stderr}`);
-  }
-  steps.push({ step: `${label}_START_TRIGGERED`, port });
+  fs.mkdirSync(dataDirAbs, { recursive: true });
+  const stdoutLog = path.join(dataDirAbs, "gateway.stdout.log");
+  const stderrLog = path.join(dataDirAbs, "gateway.stderr.log");
+  const outFd = fs.openSync(stdoutLog, "a");
+  const errFd = fs.openSync(stderrLog, "a");
+  const child = spawn("node", ["--enable-source-maps", "dist/src/index.js"], {
+    cwd: process.cwd(),
+    detached: true,
+    stdio: ["ignore", outFd, errFd],
+    env: gatewayChildEnv(),
+  });
+  child.unref();
+  fs.closeSync(outFd);
+  fs.closeSync(errFd);
+  steps.push({ step: `${label}_START_TRIGGERED`, port, pid: child.pid });
   await sleep(3000);
 }
 
@@ -293,7 +306,7 @@ async function waitHealthReady(options = {}) {
         state_complete: hlth.data_quality?.state_complete ?? false,
         userStream: us ?? null,
         quote_age_ms: quoteAge,
-        port_listening: await isPortListening(gatewayPort()),
+        gateway_reachable: true,
       };
       if (
         hlth.status === "ok"
@@ -308,7 +321,8 @@ async function waitHealthReady(options = {}) {
       lastSnapshot = {
         iteration: i,
         fetch_error: lastError,
-        port_listening: await isPortListening(gatewayPort()).catch(() => null),
+        gateway_reachable: await isGatewayReachable(),
+        port_open: await isTcpPortOpen(gatewayPort()),
       };
     }
     await sleep(2000);
@@ -329,7 +343,7 @@ async function restartGateway(steps, label) {
 async function waitNoWorkingOrders(steps, label, timeoutSec = 120) {
   for (let i = 0; i < timeoutSec; i++) {
     const own = await ownership();
-    const working = own.working_orders ?? 0;
+    const working = own.working_orders ?? own.workingOrders ?? 0;
     if (working === 0) return;
     if (i % 15 === 14) {
       steps.push({ step: `${label}_working_poll`, working_orders: working });
@@ -340,10 +354,30 @@ async function waitNoWorkingOrders(steps, label, timeoutSec = 120) {
   throw new Error(`working_orders_still_open:${own.working_orders ?? "unknown"}`);
 }
 
+async function cancelWorkingOrders(steps, label) {
+  const script = path.join(process.cwd(), "scripts", "cancel-open-orders.mjs");
+  if (!fs.existsSync(script)) {
+    return null;
+  }
+  steps.push({ step: `${label}_CANCEL_WORKING_ORDERS` });
+  return new Promise((resolve, reject) => {
+    const child = spawn("node", [script], { cwd: process.cwd(), stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    child.stdout?.on("data", (chunk) => { out += chunk; });
+    child.stderr?.on("data", (chunk) => { out += chunk; });
+    child.on("close", (code) => {
+      if (code !== 0) reject(new Error(`cancel_orders_exit_${code}:${out.trim()}`));
+      else resolve(out.trim());
+    });
+    child.on("error", reject);
+  });
+}
+
 async function ensureFlat(steps) {
   let st = await state();
   let own = await ownership();
-  if (st.instrumentOpenContracts === 0 && (own.working_orders ?? 0) === 0) return;
+  const workingOrders = own.working_orders ?? own.workingOrders ?? 0;
+  if (st.instrumentOpenContracts === 0 && workingOrders === 0) return;
   if (st.instrumentOpenContracts !== 0) {
     const res = await submitIntent(
       { ...baseIntent("EXIT", "unused"), reason: "PRE_EXIT flat" },
@@ -357,6 +391,11 @@ async function ensureFlat(steps) {
       if (st.instrumentOpenContracts === 0) break;
     }
     if (st.instrumentOpenContracts !== 0) throw new Error("still_not_flat");
+  }
+  own = await ownership();
+  if ((own.working_orders ?? own.workingOrders ?? 0) !== 0) {
+    await cancelWorkingOrders(steps, "PRE_FLAT");
+    await sleep(2000);
   }
   await waitNoWorkingOrders(steps, "PRE_FLAT");
 }
@@ -486,6 +525,15 @@ async function runTrancheScenario(scenario, {
 
   if (onTwoTranches) {
     await onTwoTranches(trancheAIntentIdResolved, trancheBIntentIdResolved);
+    await waitReconciliationReady();
+    const stHook = await state();
+    steps.push({
+      step: `${prefix}_AFTER_RESTART_HOOK`,
+      instrument_open: stHook.instrumentOpenContracts,
+    });
+    if (stHook.instrumentOpenContracts !== 2) {
+      throw new Error(`${prefix}: expected_two_contracts_after_restart_hook:${stHook.instrumentOpenContracts}`);
+    }
   }
 
   const exitB = await submitIntent({
