@@ -6,6 +6,7 @@ import type {
 import type { OrderInfo, PositionInfo } from "../domain/models.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import { maybeKill } from "./kill-hook.js";
 
 export interface ExecutionRecoveryApi {
   searchOrders(
@@ -50,6 +51,8 @@ export async function recoverExecutionMutations(
     ...terminalWithoutReceipts.map(reconstructTerminalResolution),
   ];
   try {
+    // After durable work is loaded, before outbox/provider reconciliation mutates state.
+    maybeKill("during_recovery");
     for (const mutation of unresolved.filter((candidate) => candidate.state === "prepared")) {
       store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
       changed = true;
