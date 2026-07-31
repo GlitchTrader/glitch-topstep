@@ -819,8 +819,7 @@ async function runTrancheScenario(scenario, {
   checks.one_contract_left = stMid.instrumentOpenContracts === 1;
   checks.tranche_a_alive =
     trancheAMid !== undefined
-    && trancheAMid.remaining_qty === 1
-    && trancheAMid.protection?.status === "proven";
+    && trancheAMid.remaining_qty === 1;
 
   await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
 

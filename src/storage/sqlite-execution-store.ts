@@ -119,6 +119,18 @@ export class SqliteExecutionStore {
     });
   }
 
+  public registeredIntentPayload(intentId: string): TradeIntent | null {
+    const row = this.database.prepare(`
+      SELECT payload_json
+      FROM intents
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    if (!row) {
+      return null;
+    }
+    return this.parseJson<TradeIntent>(String(row.payload_json), "intent");
+  }
+
   public recordReceipt(receipt: Record<string, unknown>): void {
     const receiptId = this.requiredString(receipt.receipt_id, "receipt_id");
     const intentId = typeof receipt.intent_id === "string" ? receipt.intent_id : null;

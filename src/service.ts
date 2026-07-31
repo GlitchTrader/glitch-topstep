@@ -48,6 +48,7 @@ export class GlitchTopstepService {
   private orderFlow: ProjectXOrderFlowService | null = null;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
+  private coordinator: ExecutionCoordinator | null = null;
   private ownershipService: ProjectXOrderOwnershipService | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
@@ -285,6 +286,7 @@ export class GlitchTopstepService {
       () => this.packets?.invalidateAll(),
       () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
     );
+    this.coordinator = coordinator;
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
       () => {
@@ -535,6 +537,20 @@ export class GlitchTopstepService {
       }
       if (latchCleared || receiptReconciliation.changed) {
         this.packets?.invalidateAll();
+      }
+      const liveSnapshot = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      if (
+        this.coordinator
+        && liveSnapshot.instrumentOpenContracts > 0
+        && this.config.tradingMode === "armed"
+      ) {
+        const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
+        if (rearmed) {
+          this.packets?.invalidateAll();
+        }
       }
     } catch (error) {
       this.state.markReconciliationFailed(error);

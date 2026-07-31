@@ -14,6 +14,7 @@ import {
   bindProtection,
   latestOrderById,
 } from "./protection.js";
+import { isWorkingOrder } from "./working-orders.js";
 import {
   buildTranches,
   filterProvenExitAllocations,
@@ -362,7 +363,8 @@ export class ProjectXOrderOwnershipService {
     }
     return latestOrderById(orders).filter(
       (order) => order.accountId === this.options.accountId
-        && order.contractId === this.options.contractId,
+        && order.contractId === this.options.contractId
+        && isWorkingOrder(order),
     );
   }
 
