@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VenueStateStore } from "../src/state/venue-state.js";
+import { VenueStateStore, sumInstrumentNetContracts } from "../src/state/venue-state.js";
 
 const stamp = "2026-07-21T12:00:00Z";
 
@@ -141,5 +141,44 @@ describe("venue state truth", () => {
     assert.equal(snapshot.stateComplete, true);
     assert.equal(snapshot.unrealizedPnl, 35);
     assert.equal(snapshot.conservativeEquity, 135);
+  });
+
+  it("counts instrument open contracts as net long minus short, not sum of abs legs", () => {
+    const positions = [
+      {
+        id: 10,
+        accountId: 1,
+        contractId: "MNQ",
+        creationTimestamp: stamp,
+        type: 2 as const,
+        size: 1,
+        averagePrice: 20_000,
+      },
+      {
+        id: 11,
+        accountId: 1,
+        contractId: "MNQ",
+        creationTimestamp: stamp,
+        type: 2 as const,
+        size: 1,
+        averagePrice: 20_010,
+      },
+      {
+        id: 12,
+        accountId: 1,
+        contractId: "MNQ",
+        creationTimestamp: stamp,
+        type: 1 as const,
+        size: 1,
+        averagePrice: 20_005,
+      },
+    ];
+    assert.equal(sumInstrumentNetContracts(positions, "MNQ"), 1);
+
+    const state = readyState();
+    state.replacePositions(positions, stamp);
+    const snapshot = state.buildSnapshot(1, "MNQ");
+    assert.equal(snapshot.instrumentOpenContracts, 1);
+    assert.equal(snapshot.totalOpenContracts, 1);
   });
 });

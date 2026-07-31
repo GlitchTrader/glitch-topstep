@@ -16,6 +16,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { instrumentNetSignedLots } from "../state/venue-state.js";
 import { gatewayModePermitsLiveOrders } from "./gateway-mode.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
@@ -305,6 +306,7 @@ export class ExecutionCoordinator {
     }
     const position = contractPositions[0]!;
     const positionSize = snapshot.instrumentOpenContracts;
+    const netSignedLots = instrumentNetSignedLots(contractPositions, this.config.scope.contractId);
     let exitQuantity = intent.quantity
       ?? (intent.exitFraction !== undefined
         ? Math.max(1, Math.min(positionSize, Math.round(positionSize * intent.exitFraction)))
@@ -380,7 +382,7 @@ export class ExecutionCoordinator {
           accountId: this.config.scope.accountId,
           contractId: this.config.scope.contractId,
           type: 2,
-          side: position.size > 0 ? 1 : 0,
+          side: netSignedLots > 0 ? 1 : 0,
           size: exitQuantity,
           customTag: `glt-${intent.intentId}`.slice(0, 64),
         }

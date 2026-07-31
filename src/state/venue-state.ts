@@ -14,6 +14,75 @@ import type {
   VenueStreamState,
 } from "../domain/models.js";
 
+function instrumentLegLots(position: PositionInfo): number {
+  if (position.type === 0 || position.size === 0) {
+    return 0;
+  }
+  return Math.abs(position.size);
+}
+
+/** Net open lots for one contract: |long − short|, not sum(abs) across offsetting legs. */
+export function sumInstrumentNetContracts(
+  positions: readonly PositionInfo[],
+  contractId: string,
+): number {
+  let longLots = 0;
+  let shortLots = 0;
+  for (const position of positions) {
+    if (position.contractId !== contractId) {
+      continue;
+    }
+    const lots = instrumentLegLots(position);
+    if (lots === 0) {
+      continue;
+    }
+    if (position.type === 1) {
+      longLots += lots;
+    } else if (position.type === 2) {
+      shortLots += lots;
+    }
+  }
+  return Math.abs(longLots - shortLots);
+}
+
+/** Signed net lots: positive = net long, negative = net short. */
+export function instrumentNetSignedLots(
+  positions: readonly PositionInfo[],
+  contractId: string,
+): number {
+  let longLots = 0;
+  let shortLots = 0;
+  for (const position of positions) {
+    if (position.contractId !== contractId) {
+      continue;
+    }
+    const lots = instrumentLegLots(position);
+    if (lots === 0) {
+      continue;
+    }
+    if (position.type === 1) {
+      longLots += lots;
+    } else if (position.type === 2) {
+      shortLots += lots;
+    }
+  }
+  return longLots - shortLots;
+}
+
+export function sumAccountNetContracts(positions: readonly PositionInfo[]): number {
+  const contractIds = new Set<string>();
+  for (const position of positions) {
+    if (position.type !== 0 && position.size !== 0) {
+      contractIds.add(position.contractId);
+    }
+  }
+  let total = 0;
+  for (const contractId of contractIds) {
+    total += sumInstrumentNetContracts(positions, contractId);
+  }
+  return total;
+}
+
 interface Timed<T> {
   value: T;
   receivedAt: string;
@@ -224,10 +293,8 @@ export class VenueStateStore {
     const openOrders = [...this.orders.values()]
       .map((entry) => entry.value)
       .filter((order) => order.accountId === accountId);
-    const totalOpenContracts = positions.reduce((sum, position) => sum + Math.abs(position.size), 0);
-    const instrumentOpenContracts = positions
-      .filter((position) => position.contractId === contractId)
-      .reduce((sum, position) => sum + Math.abs(position.size), 0);
+    const totalOpenContracts = sumAccountNetContracts(positions);
+    const instrumentOpenContracts = sumInstrumentNetContracts(positions, contractId);
 
     const positionDataIssues = new Set<string>();
     const unrealizedPnl = positions.reduce((sum, position) => {

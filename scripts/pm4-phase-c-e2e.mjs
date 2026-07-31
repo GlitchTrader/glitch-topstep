@@ -599,6 +599,7 @@ async function waitPartialExitSettlement(
   timeoutSec = 240,
 ) {
   let venueOneStable = 0;
+  let ownershipStable = 0;
   for (let i = 0; i < timeoutSec; i++) {
     await sleep(1000);
     try {
@@ -616,11 +617,18 @@ async function waitPartialExitSettlement(
 
     if (open === 1) {
       venueOneStable += 1;
-      if (venueOneStable >= 2) {
-        return { st, own, trancheA };
-      }
     } else {
       venueOneStable = 0;
+    }
+
+    if (aRem === 1 && bRem === 0) {
+      ownershipStable += 1;
+    } else {
+      ownershipStable = 0;
+    }
+
+    if (venueOneStable >= 2 || ownershipStable >= 2) {
+      return { st, own, trancheA };
     }
 
     if (open === 2) {
