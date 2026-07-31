@@ -145,12 +145,16 @@ function alignTick(price) {
   return Math.round(price / TICK) * TICK;
 }
 
+// 250 ticks = 62.5 MNQ points. Live open/RTH swings routinely travel 25+ points in under a
+// minute, so the old 100-tick geometry was getting stopped or targeted before EXIT_B could run.
+const WIDE_BRACKET_TICKS = 250;
+
 function wideShortBrackets(pkt) {
   const ask = alignTick(pkt.market?.ask ?? pkt.market?.last ?? pkt.market?.bid);
   if (!ask) return null;
   return {
-    sl: alignTick(ask + 100 * TICK),
-    tp: alignTick(ask - 100 * TICK),
+    sl: alignTick(ask + WIDE_BRACKET_TICKS * TICK),
+    tp: alignTick(ask - WIDE_BRACKET_TICKS * TICK),
   };
 }
 
@@ -158,8 +162,8 @@ function wideLongBrackets(pkt) {
   const bid = alignTick(pkt.market?.bid ?? pkt.market?.last ?? pkt.market?.ask);
   if (!bid) return null;
   return {
-    sl: alignTick(bid - 100 * TICK),
-    tp: alignTick(bid + 100 * TICK),
+    sl: alignTick(bid - WIDE_BRACKET_TICKS * TICK),
+    tp: alignTick(bid + WIDE_BRACKET_TICKS * TICK),
   };
 }
 
