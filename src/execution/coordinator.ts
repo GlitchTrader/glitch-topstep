@@ -698,8 +698,23 @@ export class ExecutionCoordinator {
             target_price: targetPrice,
           },
         });
-      } catch {
-        // ponytail: retry on next reconciliation if venue rejects
+      } catch (error) {
+        // An unprotected position is the one state this gateway exists to prevent, so a
+        // rejected re-arm has to be visible rather than retried in silence.
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "tranche_protection_rearm_failed",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            remaining_qty: size,
+            stop_price: stopPrice,
+            target_price: targetPrice,
+            cover_side: coverSide,
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        });
       }
     }
     return changed;
