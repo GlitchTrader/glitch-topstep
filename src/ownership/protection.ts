@@ -139,6 +139,35 @@ export function bindProtection(
   };
 }
 
+/**
+ * Price the venue last held for a protective leg, cancelled orders included.
+ *
+ * MOVE_STOP edits the working order in place, so the intent registered when the tranche opened
+ * still carries the original price. Re-placing a leg from that payload would silently widen a
+ * stop the operator had already tightened, so the newest order carrying the leg's tag wins and
+ * the intent is only a fallback for a leg the venue never accepted.
+ */
+export function lastProtectivePrice(
+  orders: readonly OrderInfo[],
+  customTag: string,
+  expectedType: number,
+  accountId: number,
+  contractId: string,
+): number | null {
+  const legs = orders
+    .filter((order) => order.accountId === accountId
+      && order.contractId === contractId
+      && order.customTag === customTag
+      && order.type === expectedType)
+    .sort((left, right) => left.updateTimestamp.localeCompare(right.updateTimestamp)
+      || left.id - right.id);
+  const latest = legs.at(-1);
+  if (!latest) {
+    return null;
+  }
+  return expectedType === STOP_ORDER_TYPE ? latest.stopPrice : latest.limitPrice;
+}
+
 export function latestOrderById(orders: readonly OrderInfo[]): OrderInfo[] {
   const latest = new Map<number, OrderInfo>();
   for (const order of orders) {

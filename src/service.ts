@@ -537,6 +537,16 @@ export class GlitchTopstepService {
       if (latchCleared || receiptReconciliation.changed) {
         this.packets?.invalidateAll();
       }
+      const liveSnapshot = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      if (this.coordinator && liveSnapshot.instrumentOpenContracts > 0) {
+        const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
+        if (rearmed) {
+          this.packets?.invalidateAll();
+        }
+      }
     } catch (error) {
       this.state.markReconciliationFailed(error);
       throw error;

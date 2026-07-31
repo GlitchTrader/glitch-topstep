@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   bindProtection,
+  lastProtectivePrice,
   protectionCustomTags,
   resolveProtectiveLeg,
 } from "../src/ownership/protection.js";
@@ -95,5 +96,21 @@ describe("protection ownership", () => {
     );
     assert.equal(protection.status, "pending");
     assert.match(protection.reason, /target_child_not_observed/);
+  });
+
+  it("recovers the moved stop price, not the price the tranche opened with", () => {
+    // MOVE_STOP edits the working order in place, so re-placing a cancelled leg from the
+    // entry intent would hand back the wider original stop.
+    const tags = protectionCustomTags(INTENT_ID);
+    const opened = order(9301, tags.stop, 4, 19_950);
+    const tightened = { ...opened, stopPrice: 20_010, updateTimestamp: "2026-07-21T12:40:00Z" };
+    assert.equal(
+      lastProtectivePrice([opened, tightened], tags.stop, 4, ACCOUNT_ID, CONTRACT_ID),
+      20_010,
+    );
+    assert.equal(
+      lastProtectivePrice([], tags.stop, 4, ACCOUNT_ID, CONTRACT_ID),
+      null,
+    );
   });
 });

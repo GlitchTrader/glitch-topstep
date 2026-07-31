@@ -6,6 +6,8 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
   bindProtection,
   intentIdFromStopTag,
+  lastProtectivePrice,
+  protectionCustomTags,
   type ResolvedProtection,
 } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
@@ -36,6 +38,8 @@ export interface ExecutionReceipt {
 
 export class ExecutionCoordinator {
   private executionQueue: Promise<void> = Promise.resolve();
+  /** ponytail: in-memory latch; restart clears and may re-place once per tranche */
+  private readonly rearmLatched = new Set<string>();
 
   public constructor(
     private readonly config: AppConfig,
@@ -594,6 +598,111 @@ export class ExecutionCoordinator {
 
   private attributableTranches(): TrancheView[] {
     return this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+  }
+
+  /**
+   * Re-place SL/TP for tranches the venue left holding contracts with no protective order.
+   *
+   * Auto OCO cancels the whole bracket group when a partial exit fills, so the surviving
+   * tranche is genuinely naked on the venue rather than merely misattributed: the account
+   * shows open contracts and zero working orders. Attribution alone cannot recover that, and
+   * an unprotected position is the one state this gateway exists to prevent.
+   */
+  public async rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
+    if (this.config.tradingMode !== "armed" || snapshot.instrumentOpenContracts === 0) {
+      return false;
+    }
+    const contractPositions = snapshot.positions.filter(
+      (position) => position.accountId === this.config.scope.accountId
+        && position.contractId === this.config.scope.contractId
+        && position.type !== 0
+        && Math.abs(position.size) > 0,
+    );
+    const netSigned = instrumentNetSignedLots(contractPositions, this.config.scope.contractId);
+    if (netSigned === 0) {
+      return false;
+    }
+    const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
+    let changed = false;
+
+    for (const tranche of this.attributableTranches()) {
+      const protection = bindProtection(
+        tranche.intent_id,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+        tranche.entry_order_id,
+      );
+      if (protection.status === "proven") {
+        this.rearmLatched.delete(tranche.intent_id);
+        continue;
+      }
+      if (this.rearmLatched.has(tranche.intent_id)) {
+        continue;
+      }
+      const tags = protectionCustomTags(tranche.intent_id);
+      const entry = this.store.registeredIntentPayload(tranche.intent_id);
+      const stopPrice = lastProtectivePrice(
+        snapshot.openOrders,
+        tags.stop,
+        4,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ) ?? entry?.stopLoss ?? null;
+      const targetPrice = lastProtectivePrice(
+        snapshot.openOrders,
+        tags.target,
+        1,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ) ?? entry?.takeProfit1 ?? null;
+      if (stopPrice === null || targetPrice === null) {
+        continue;
+      }
+      const size = tranche.remaining_qty;
+      try {
+        if (!protection.stop.providerOrderId) {
+          await this.api.placeOrder({
+            accountId: this.config.scope.accountId,
+            contractId: this.config.scope.contractId,
+            type: 4,
+            side: coverSide,
+            size,
+            stopPrice,
+            customTag: tags.stop,
+          });
+        }
+        if (!protection.target.providerOrderId) {
+          await this.api.placeOrder({
+            accountId: this.config.scope.accountId,
+            contractId: this.config.scope.contractId,
+            type: 1,
+            side: coverSide,
+            size,
+            limitPrice: targetPrice,
+            customTag: tags.target,
+          });
+        }
+        this.rearmLatched.add(tranche.intent_id);
+        changed = true;
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "tranche_protection_rearmed",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            remaining_qty: size,
+            stop_price: stopPrice,
+            target_price: targetPrice,
+          },
+        });
+      } catch {
+        // ponytail: retry on next reconciliation if venue rejects
+      }
+    }
+    return changed;
   }
 
   private async cancelTrancheProtectionOrders(
