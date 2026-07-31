@@ -313,9 +313,9 @@ export function sanitizeRearmProtectionPrices(
   tickSize: number,
 ): { stopPrice: number; targetPrice: number; adjusted: boolean } {
   const mark = coverSide === 0
-    ? (quote?.bestAsk ?? quote?.lastPrice ?? null)
-    : (quote?.bestBid ?? quote?.lastPrice ?? null);
-  if (mark === null || !(tickSize > 0)) {
+    ? Math.max(quote?.bestAsk ?? Number.NEGATIVE_INFINITY, quote?.lastPrice ?? Number.NEGATIVE_INFINITY)
+    : Math.min(quote?.bestBid ?? Number.POSITIVE_INFINITY, quote?.lastPrice ?? Number.POSITIVE_INFINITY);
+  if (!Number.isFinite(mark) || !(tickSize > 0)) {
     return { stopPrice, targetPrice, adjusted: false };
   }
   const width = Math.max(Math.abs(stopPrice - targetPrice), tickSize * 4);
