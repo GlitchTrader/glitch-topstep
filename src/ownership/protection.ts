@@ -6,6 +6,7 @@ export interface ProtectionCustomTags {
   entry: string;
   stop: string;
   target: string;
+  generation: number;
 }
 
 export interface ProtectiveLeg {
@@ -22,18 +23,69 @@ export interface ResolvedProtection {
   target: ProtectiveLeg;
 }
 
+export type ProtectiveLegKind = "SL" | "TP";
+
 const STOP_ORDER_TYPE = 4;
 const TARGET_ORDER_TYPE = 1;
 
-export function protectionCustomTags(intentId: string): ProtectionCustomTags {
+function protectionTagBase(intentId: string): string {
+  // Leave room for `-rNN-SL` / `-rNN-TP` on later re-arm generations.
   const entry = `glt-${intentId}`.slice(0, 64);
-  const base = entry.length <= 60 ? entry : entry.slice(0, 60);
-  return { entry: base, stop: `${base}-SL`, target: `${base}-TP` };
+  return entry.length <= 56 ? entry : entry.slice(0, 56);
+}
+
+export function protectionCustomTags(
+  intentId: string,
+  generation = 0,
+): ProtectionCustomTags {
+  const base = protectionTagBase(intentId);
+  if (generation <= 0) {
+    return { entry: base, stop: `${base}-SL`, target: `${base}-TP`, generation: 0 };
+  }
+  return {
+    entry: base,
+    stop: `${base}-r${generation}-SL`,
+    target: `${base}-r${generation}-TP`,
+    generation,
+  };
+}
+
+export function parseProtectiveTag(
+  customTag: string,
+): { intentId: string; leg: ProtectiveLegKind; generation: number } | null {
+  const match = /^glt-(.+?)(?:-r(\d+))?-(SL|TP)$/.exec(customTag);
+  if (!match) {
+    return null;
+  }
+  return {
+    intentId: match[1]!,
+    generation: match[2] ? Number(match[2]) : 0,
+    leg: match[3] as ProtectiveLegKind,
+  };
 }
 
 export function intentIdFromStopTag(customTag: string): string | null {
-  const match = /^glt-(.+)-SL$/.exec(customTag);
-  return match ? match[1]! : null;
+  const parsed = parseProtectiveTag(customTag);
+  return parsed?.leg === "SL" ? parsed.intentId : null;
+}
+
+export function nextUnusedProtectionGeneration(
+  intentId: string,
+  orders: readonly OrderInfo[],
+  accountId: number,
+): number {
+  let highest = -1;
+  for (const order of orders) {
+    if (order.accountId !== accountId || !order.customTag) {
+      continue;
+    }
+    const parsed = parseProtectiveTag(order.customTag);
+    if (parsed?.intentId !== intentId) {
+      continue;
+    }
+    highest = Math.max(highest, parsed.generation);
+  }
+  return highest + 1;
 }
 
 /**
@@ -75,6 +127,53 @@ export function resolveProtectiveLeg(
   };
 }
 
+function resolveIntentProtectiveLeg(
+  intentId: string,
+  leg: ProtectiveLegKind,
+  expectedType: number,
+  orders: readonly OrderInfo[],
+  accountId: number,
+  contractId: string,
+  entryOrderId: number | null,
+): ProtectiveLeg {
+  const onInstrument = orders.filter(
+    (order) => order.accountId === accountId && order.contractId === contractId,
+  );
+  const tagged = onInstrument
+    .filter((order) => {
+      if (!order.customTag || order.type !== expectedType) {
+        return false;
+      }
+      const parsed = parseProtectiveTag(order.customTag);
+      return parsed?.intentId === intentId && parsed.leg === leg;
+    })
+    .sort((left, right) => {
+      const leftGeneration = parseProtectiveTag(left.customTag ?? "")?.generation ?? 0;
+      const rightGeneration = parseProtectiveTag(right.customTag ?? "")?.generation ?? 0;
+      return rightGeneration - leftGeneration
+        || right.updateTimestamp.localeCompare(left.updateTimestamp)
+        || right.id - left.id;
+    });
+  if (tagged.length > 0) {
+    const order = tagged[0]!;
+    const price = expectedType === STOP_ORDER_TYPE ? order.stopPrice : order.limitPrice;
+    return {
+      customTag: order.customTag ?? protectionCustomTags(intentId).stop,
+      providerOrderId: order.id,
+      price,
+      observedOrder: order,
+    };
+  }
+  return resolveProtectiveLeg(
+    protectionCustomTags(intentId)[leg === "SL" ? "stop" : "target"],
+    expectedType,
+    orders,
+    accountId,
+    contractId,
+    entryOrderId,
+  );
+}
+
 export function bindProtection(
   intentId: string,
   orders: readonly OrderInfo[],
@@ -83,17 +182,18 @@ export function bindProtection(
   positionOpen: boolean,
   entryOrderId: number | null = null,
 ): ResolvedProtection {
-  const tags = protectionCustomTags(intentId);
-  const stop = resolveProtectiveLeg(
-    tags.stop,
+  const stop = resolveIntentProtectiveLeg(
+    intentId,
+    "SL",
     STOP_ORDER_TYPE,
     orders,
     accountId,
     contractId,
     entryOrderId,
   );
-  const target = resolveProtectiveLeg(
-    tags.target,
+  const target = resolveIntentProtectiveLeg(
+    intentId,
+    "TP",
     TARGET_ORDER_TYPE,
     orders,
     accountId,
@@ -159,6 +259,36 @@ export function lastProtectivePrice(
       && order.contractId === contractId
       && order.customTag === customTag
       && order.type === expectedType)
+    .sort((left, right) => left.updateTimestamp.localeCompare(right.updateTimestamp)
+      || left.id - right.id);
+  const latest = legs.at(-1);
+  if (!latest) {
+    return null;
+  }
+  return expectedType === STOP_ORDER_TYPE ? latest.stopPrice : latest.limitPrice;
+}
+
+export function lastProtectivePriceForIntent(
+  orders: readonly OrderInfo[],
+  intentId: string,
+  leg: ProtectiveLegKind,
+  expectedType: number,
+  accountId: number,
+  contractId: string,
+): number | null {
+  const legs = orders
+    .filter((order) => {
+      if (
+        order.accountId !== accountId
+        || order.contractId !== contractId
+        || order.type !== expectedType
+        || !order.customTag
+      ) {
+        return false;
+      }
+      const parsed = parseProtectiveTag(order.customTag);
+      return parsed?.intentId === intentId && parsed.leg === leg;
+    })
     .sort((left, right) => left.updateTimestamp.localeCompare(right.updateTimestamp)
       || left.id - right.id);
   const latest = legs.at(-1);

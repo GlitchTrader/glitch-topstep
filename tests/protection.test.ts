@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import {
   bindProtection,
   lastProtectivePrice,
+  lastProtectivePriceForIntent,
+  nextUnusedProtectionGeneration,
   protectionCustomTags,
   resolveProtectiveLeg,
 } from "../src/ownership/protection.js";
@@ -111,6 +113,47 @@ describe("protection ownership", () => {
     assert.equal(
       lastProtectivePrice([], tags.stop, 4, ACCOUNT_ID, CONTRACT_ID),
       null,
+    );
+  });
+
+  it("binds re-armed protective legs that had to advance past a used custom tag", () => {
+    const rearmed = protectionCustomTags(INTENT_ID, 1);
+    const protection = bindProtection(
+      INTENT_ID,
+      [order(9401, rearmed.stop, 4, 19_990), order(9402, rearmed.target, 1, 20_020)],
+      ACCOUNT_ID,
+      CONTRACT_ID,
+      true,
+    );
+    assert.equal(protection.status, "proven");
+    assert.equal(protection.stop.customTag, rearmed.stop);
+    assert.equal(protection.target.customTag, rearmed.target);
+  });
+
+  it("chooses the next unused protection tag generation from venue history", () => {
+    const original = protectionCustomTags(INTENT_ID, 0);
+    const firstRearm = protectionCustomTags(INTENT_ID, 1);
+    assert.equal(
+      nextUnusedProtectionGeneration(
+        INTENT_ID,
+        [order(9501, original.stop, 4, 19_990), order(9502, firstRearm.target, 1, 20_020)],
+        ACCOUNT_ID,
+      ),
+      2,
+    );
+    assert.equal(
+      lastProtectivePriceForIntent(
+        [
+          order(9501, original.stop, 4, 19_950),
+          { ...order(9503, firstRearm.stop, 4, 20_010), updateTimestamp: "2026-07-21T13:00:00Z" },
+        ],
+        INTENT_ID,
+        "SL",
+        4,
+        ACCOUNT_ID,
+        CONTRACT_ID,
+      ),
+      20_010,
     );
   });
 });

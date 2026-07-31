@@ -6,7 +6,9 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
   bindProtection,
   intentIdFromStopTag,
-  lastProtectivePrice,
+  lastProtectivePriceForIntent,
+  latestOrderById,
+  nextUnusedProtectionGeneration,
   protectionCustomTags,
   type ResolvedProtection,
 } from "../ownership/protection.js";
@@ -623,9 +625,10 @@ export class ExecutionCoordinator {
       return false;
     }
     const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
-    let changed = false;
-
-    for (const tranche of this.attributableTranches()) {
+    const candidates = this.attributableTranches().filter((tranche) => {
+      if (this.rearmLatched.has(tranche.intent_id)) {
+        return false;
+      }
       const protection = bindProtection(
         tranche.intent_id,
         snapshot.openOrders,
@@ -636,23 +639,57 @@ export class ExecutionCoordinator {
       );
       if (protection.status === "proven") {
         this.rearmLatched.delete(tranche.intent_id);
-        continue;
+        return false;
       }
-      if (this.rearmLatched.has(tranche.intent_id)) {
-        continue;
-      }
-      const tags = protectionCustomTags(tranche.intent_id);
-      const entry = this.store.registeredIntentPayload(tranche.intent_id);
-      const stopPrice = lastProtectivePrice(
+      return true;
+    });
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    // Open-order snapshots drop cancelled legs, but ProjectX still treats their custom tags as
+    // used. Recent order history is the venue truth for both the next free tag generation and
+    // the stop/target prices MOVE_STOP may have already tightened.
+    const historyStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recentOrders = latestOrderById([
+      ...snapshot.openOrders,
+      ...await this.api.searchOrders(this.config.scope.accountId, historyStart),
+    ]);
+    let changed = false;
+
+    for (const tranche of candidates) {
+      const protection = bindProtection(
+        tranche.intent_id,
         snapshot.openOrders,
-        tags.stop,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+        tranche.entry_order_id,
+      );
+      // Rearm always advances past generation 0: that tag pair was consumed by the original
+      // Auto OCO bracket, and ProjectX rejects reused custom tags even after cancel.
+      const generation = Math.max(
+        1,
+        nextUnusedProtectionGeneration(
+          tranche.intent_id,
+          recentOrders,
+          this.config.scope.accountId,
+        ),
+      );
+      const tags = protectionCustomTags(tranche.intent_id, generation);
+      const entry = this.store.registeredIntentPayload(tranche.intent_id);
+      const stopPrice = lastProtectivePriceForIntent(
+        recentOrders,
+        tranche.intent_id,
+        "SL",
         4,
         this.config.scope.accountId,
         this.config.scope.contractId,
       ) ?? entry?.stopLoss ?? null;
-      const targetPrice = lastProtectivePrice(
-        snapshot.openOrders,
-        tags.target,
+      const targetPrice = lastProtectivePriceForIntent(
+        recentOrders,
+        tranche.intent_id,
+        "TP",
         1,
         this.config.scope.accountId,
         this.config.scope.contractId,
@@ -696,6 +733,7 @@ export class ExecutionCoordinator {
             remaining_qty: size,
             stop_price: stopPrice,
             target_price: targetPrice,
+            custom_tag_generation: generation,
           },
         });
       } catch (error) {
@@ -712,6 +750,7 @@ export class ExecutionCoordinator {
             stop_price: stopPrice,
             target_price: targetPrice,
             cover_side: coverSide,
+            custom_tag_generation: generation,
             detail: error instanceof Error ? error.message : String(error),
           },
         });
