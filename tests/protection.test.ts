@@ -7,8 +7,9 @@ import {
   nextUnusedProtectionGeneration,
   protectionCustomTags,
   resolveProtectiveLeg,
+  sanitizeRearmProtectionPrices,
 } from "../src/ownership/protection.js";
-import type { OrderInfo } from "../src/domain/models.js";
+import type { OrderInfo, QuoteInfo } from "../src/domain/models.js";
 
 const ACCOUNT_ID = 101;
 const CONTRACT_ID = "CON.F.US.MNQ.U26";
@@ -155,5 +156,17 @@ describe("protection ownership", () => {
       ),
       20_010,
     );
+  });
+
+  it("moves a re-armed short stop above the live ask instead of covering immediately", () => {
+    const quote = {
+      lastPrice: 20_050,
+      bestBid: 20_049,
+      bestAsk: 20_050,
+    } as QuoteInfo;
+    const sanitized = sanitizeRearmProtectionPrices(0, 20_010, 19_900, quote, 0.25);
+    assert.equal(sanitized.adjusted, true);
+    assert.ok(sanitized.stopPrice > quote.bestAsk);
+    assert.ok(sanitized.targetPrice < quote.bestAsk);
   });
 });

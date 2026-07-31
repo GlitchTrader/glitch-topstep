@@ -514,6 +514,11 @@ async function cancelWorkingOrders(steps, label) {
   });
 }
 
+function isProtectiveOrder(order) {
+  return typeof order?.customTag === "string"
+    && /^glt-.+-(?:r\d+-)?(SL|TP)$/.test(order.customTag);
+}
+
 async function assertNoOpenOrders(steps, label) {
   let st = await state();
   if (countOpenOrders(st) > 0) {
@@ -525,6 +530,25 @@ async function assertNoOpenOrders(steps, label) {
   if (countOpenOrders(st) > 0) {
     throw new Error(`${label}: open_orders_not_empty:${countOpenOrders(st)}`);
   }
+}
+
+async function assertScaleInReady(steps, label) {
+  // Scale-in is legal while protective brackets remain. Cancelling them to chase a zero-order
+  // snapshot leaves the position naked; re-arm then re-places the original stop, which is often
+  // already through the market after a live swing and flattens the whole test.
+  const st = await state();
+  const orders = st?.openOrders ?? st?.open_orders ?? [];
+  const nonProtective = (Array.isArray(orders) ? orders : []).filter((order) => !isProtectiveOrder(order));
+  if (nonProtective.length > 0) {
+    throw new Error(
+      `${label}: non_protective_orders_present:${nonProtective.map((order) => order.customTag ?? order.id).join(",")}`,
+    );
+  }
+  steps.push({
+    step: `${label}_SCALE_IN_READY`,
+    open_contracts: st.instrumentOpenContracts,
+    protective_orders: Array.isArray(orders) ? orders.length : 0,
+  });
 }
 
 async function ensureFlat(steps) {
@@ -773,7 +797,7 @@ async function runTrancheScenario(scenario, {
   await waitReconciliationReady();
   await waitPacketReconciliationCurrent(180);
   await sleep(5000);
-  await assertNoOpenOrders(steps, `${prefix}_PRE_SCALE_IN`);
+  await assertScaleInReady(steps, `${prefix}_PRE_SCALE_IN`);
   const trancheBIntentId = randomUUID();
   const enter2 = await submitIntent({
     ...baseIntent(enterAction, "unused", trancheBIntentId),

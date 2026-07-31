@@ -10,6 +10,7 @@ import {
   latestOrderById,
   nextUnusedProtectionGeneration,
   protectionCustomTags,
+  sanitizeRearmProtectionPrices,
   type ResolvedProtection,
 } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
@@ -678,7 +679,7 @@ export class ExecutionCoordinator {
       );
       const tags = protectionCustomTags(tranche.intent_id, generation);
       const entry = this.store.registeredIntentPayload(tranche.intent_id);
-      const stopPrice = lastProtectivePriceForIntent(
+      const historicalStop = lastProtectivePriceForIntent(
         recentOrders,
         tranche.intent_id,
         "SL",
@@ -686,7 +687,7 @@ export class ExecutionCoordinator {
         this.config.scope.accountId,
         this.config.scope.contractId,
       ) ?? entry?.stopLoss ?? null;
-      const targetPrice = lastProtectivePriceForIntent(
+      const historicalTarget = lastProtectivePriceForIntent(
         recentOrders,
         tranche.intent_id,
         "TP",
@@ -694,9 +695,18 @@ export class ExecutionCoordinator {
         this.config.scope.accountId,
         this.config.scope.contractId,
       ) ?? entry?.takeProfit1 ?? null;
-      if (stopPrice === null || targetPrice === null) {
+      if (historicalStop === null || historicalTarget === null) {
         continue;
       }
+      const sanitized = sanitizeRearmProtectionPrices(
+        coverSide,
+        historicalStop,
+        historicalTarget,
+        snapshot.quote,
+        snapshot.contract.tickSize,
+      );
+      const stopPrice = sanitized.stopPrice;
+      const targetPrice = sanitized.targetPrice;
       const size = tranche.remaining_qty;
       try {
         if (!protection.stop.providerOrderId) {
@@ -734,6 +744,7 @@ export class ExecutionCoordinator {
             stop_price: stopPrice,
             target_price: targetPrice,
             custom_tag_generation: generation,
+            prices_adjusted_for_market: sanitized.adjusted,
           },
         });
       } catch (error) {

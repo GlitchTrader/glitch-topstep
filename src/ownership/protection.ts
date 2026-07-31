@@ -1,4 +1,4 @@
-import type { OrderInfo } from "../domain/models.js";
+import type { OrderInfo, QuoteInfo } from "../domain/models.js";
 
 export type ProtectionStatus = "unknown" | "pending" | "proven" | "incomplete";
 
@@ -296,6 +296,57 @@ export function lastProtectivePriceForIntent(
     return null;
   }
   return expectedType === STOP_ORDER_TYPE ? latest.stopPrice : latest.limitPrice;
+}
+
+/**
+ * Keep a re-armed bracket on the non-marketable side of the live quote.
+ *
+ * Auto OCO cancel + re-arm can race a live swing: the historical stop is still the right
+ * distance, but the market has already traded through it. Re-placing that price would cover
+ * the position immediately instead of protecting it.
+ */
+export function sanitizeRearmProtectionPrices(
+  coverSide: 0 | 1,
+  stopPrice: number,
+  targetPrice: number,
+  quote: QuoteInfo | null,
+  tickSize: number,
+): { stopPrice: number; targetPrice: number; adjusted: boolean } {
+  const mark = coverSide === 0
+    ? (quote?.bestAsk ?? quote?.lastPrice ?? null)
+    : (quote?.bestBid ?? quote?.lastPrice ?? null);
+  if (mark === null || !(tickSize > 0)) {
+    return { stopPrice, targetPrice, adjusted: false };
+  }
+  const width = Math.max(Math.abs(stopPrice - targetPrice), tickSize * 4);
+  let nextStop = stopPrice;
+  let nextTarget = targetPrice;
+  if (coverSide === 0) {
+    if (nextStop <= mark) {
+      nextStop = mark + width;
+    }
+    if (nextTarget >= mark) {
+      nextTarget = mark - width;
+    }
+    if (nextTarget >= nextStop) {
+      nextTarget = nextStop - width;
+    }
+  } else {
+    if (nextStop >= mark) {
+      nextStop = mark - width;
+    }
+    if (nextTarget <= mark) {
+      nextTarget = mark + width;
+    }
+    if (nextTarget <= nextStop) {
+      nextTarget = nextStop + width;
+    }
+  }
+  return {
+    stopPrice: nextStop,
+    targetPrice: nextTarget,
+    adjusted: nextStop !== stopPrice || nextTarget !== targetPrice,
+  };
 }
 
 export function latestOrderById(orders: readonly OrderInfo[]): OrderInfo[] {
