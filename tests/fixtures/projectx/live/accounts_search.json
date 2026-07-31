@@ -1,0 +1,18 @@
+[
+  {
+    "id": 25775680,
+    "name": "50KTC-V2-DLL-645601-97590973",
+    "balance": 49989.34,
+    "canTrade": true,
+    "isVisible": true,
+    "simulated": true
+  },
+  {
+    "id": 26080387,
+    "name": "PRAC-V2-645601-15979101",
+    "balance": 150378.16,
+    "canTrade": true,
+    "isVisible": true,
+    "simulated": true
+  }
+]

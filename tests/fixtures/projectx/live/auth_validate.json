@@ -1,0 +1,6 @@
+{
+  "endpoint": "/api/Auth/validate",
+  "outcome": "succeeded",
+  "session_token_present": "[REDACTED]",
+  "captured_utc": "2026-07-31T18:46:59.951Z"
+}

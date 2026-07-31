@@ -1,0 +1,241 @@
+{
+  "available": true,
+  "evidence_path": "data\\projectx-evidence.sqlite",
+  "samples": [
+    {
+      "event_type": "account",
+      "source": "projectx_user_stream",
+      "raw_payload": {
+        "action": 1,
+        "data": {
+          "id": 26080387,
+          "name": "PRAC-V2-645601-15979101",
+          "balance": 150378.16,
+          "canTrade": true,
+          "isVisible": true,
+          "simulated": true
+        }
+      }
+    },
+    {
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "contracts_snapshot",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "depth",
+      "source": "projectx_market_stream",
+      "raw_payload": {
+        "contractId": "CON.F.US.MNQ.U26",
+        "payload": [
+          {
+            "timestamp": "2026-07-31T18:47:04.3443496+00:00",
+            "type": 4,
+            "price": 28426,
+            "volume": 6,
+            "currentVolume": 0
+          },
+          {
+            "timestamp": "2026-07-31T18:47:04.3443512+00:00",
+            "type": 3,
+            "price": 28426.5,
+            "volume": 5,
+            "currentVolume": 0
+          }
+        ]
+      }
+    },
+    {
+      "event_type": "historical_order",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "historical_trade",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "market_closed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "market_connected_and_subscribed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "market_connecting",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "market_reconnect_failed",
+      "source": "projectx_lifecycle",
+      "raw_payload": {
+        "name": "Error",
+        "message": "Invocation canceled due to the underlying connection being closed."
+      }
+    },
+    {
+      "event_type": "market_reconnected_and_subscribed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "market_reconnecting",
+      "source": "projectx_lifecycle",
+      "raw_payload": {
+        "name": "Error",
+        "message": "Server timeout elapsed without receiving a message from the server."
+      }
+    },
+    {
+      "event_type": "market_trade",
+      "source": "projectx_market_stream",
+      "raw_payload": {
+        "contractId": "CON.F.US.MNQ.U26",
+        "payload": [
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28426,
+            "timestamp": "2026-07-31T18:47:04.136+00:00",
+            "type": 1,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          }
+        ]
+      }
+    },
+    {
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "order",
+      "source": "projectx_user_stream",
+      "raw_payload": {
+        "action": 1,
+        "data": {
+          "id": 3348158587,
+          "accountId": 26080387,
+          "contractId": "CON.F.US.MNQ.U26",
+          "symbolId": "F.US.MNQ",
+          "creationTimestamp": "2026-07-31T14:28:51.477795+00:00",
+          "updateTimestamp": "2026-07-31T14:34:48.6786816+00:00",
+          "status": 3,
+          "type": 1,
+          "side": 1,
+          "size": 1,
+          "limitPrice": 28345.75,
+          "fillVolume": 0,
+          "customTag": "glt-3a95b5a2-3c68-4ef2-8cfd-962d9aead4c9-TP",
+          "trailDistance": 405,
+          "trailPrice": 101.25,
+          "parentOrderId": 3348158584,
+          "linkedOrderId": 3348158586
+        }
+      }
+    },
+    {
+      "event_type": "position",
+      "source": "projectx_user_stream",
+      "raw_payload": {
+        "action": 2,
+        "data": {
+          "id": 806869468,
+          "accountId": 26080387,
+          "contractId": "CON.F.US.MNQ.U26",
+          "contractDisplayName": "MNQU26",
+          "creationTimestamp": "2026-07-31T14:28:51.496433+00:00",
+          "type": 0,
+          "size": 0,
+          "averagePrice": 28248
+        }
+      }
+    },
+    {
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "raw_payload": null
+    },
+    {
+      "event_type": "quote",
+      "source": "projectx_market_stream",
+      "raw_payload": {
+        "contractId": "CON.F.US.MNQ.U26",
+        "payload": {
+          "symbol": "F.US.MNQ",
+          "bestBid": 28426,
+          "bestAsk": 28426.5,
+          "lastUpdated": "2026-07-31T18:47:04.3541069+00:00",
+          "timestamp": "2026-07-31T18:47:04.328+00:00",
+          "contract": "CON.F.US.MNQ.U26"
+        }
+      }
+    },
+    {
+      "event_type": "trade",
+      "source": "projectx_user_stream",
+      "raw_payload": {
+        "action": 1,
+        "data": {
+          "id": 2935109671,
+          "accountId": 26080387,
+          "contractId": "CON.F.US.MNQ.U26",
+          "creationTimestamp": "2026-07-31T14:29:57.387903+00:00",
+          "price": 28248,
+          "fees": 0.36,
+          "commissions": 0.25,
+          "side": 0,
+          "size": 1,
+          "voided": false,
+          "orderId": 3348171017
+        }
+      }
+    },
+    {
+      "event_type": "user_closed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "user_connected_and_subscribed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "user_connecting",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "user_reconnect_failed",
+      "source": "projectx_lifecycle",
+      "raw_payload": {
+        "name": "Error",
+        "message": "Invocation canceled due to the underlying connection being closed."
+      }
+    },
+    {
+      "event_type": "user_reconnected_and_subscribed",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
+      "event_type": "user_reconnecting",
+      "source": "projectx_lifecycle",
+      "raw_payload": {
+        "name": "Error",
+        "message": "Server timeout elapsed without receiving a message from the server."
+      }
+    }
+  ]
+}

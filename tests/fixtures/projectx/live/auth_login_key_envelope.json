@@ -1,0 +1,9 @@
+{
+  "http_status": 200,
+  "envelope": {
+    "token": "[REDACTED]",
+    "success": true,
+    "errorCode": 0,
+    "errorMessage": null
+  }
+}
