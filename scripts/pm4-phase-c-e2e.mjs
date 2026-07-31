@@ -1042,6 +1042,16 @@ try {
   process.exit(log.all_pass ? 0 : 1);
 } catch (e) {
   log.fatal = String(e?.message ?? e);
+  // A fatal error can leave contracts open with nobody watching them, so flatten before
+  // exiting. Record what happened here rather than letting it mask the original failure.
+  log.fatal_cleanup = [];
+  try {
+    await ensureGatewayUp(log.fatal_cleanup, "FATAL_CLEANUP");
+    await ensureFlat(log.fatal_cleanup);
+    await cancelWorkingOrders(log.fatal_cleanup, "FATAL_CLEANUP");
+  } catch (cleanupError) {
+    log.fatal_cleanup_error = String(cleanupError?.message ?? cleanupError);
+  }
   log.finished_utc = new Date().toISOString();
   fs.writeFileSync("data/pm4-phase-c-e2e.json", JSON.stringify(log, null, 2));
   console.error(e);
