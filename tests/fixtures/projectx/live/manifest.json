@@ -1,6 +1,6 @@
 {
   "schema_version": "glitch.projectx.fixture_capture.v1",
-  "captured_utc": "2026-07-31T19:32:11.617Z",
+  "captured_utc": "2026-07-31T19:46:20.143Z",
   "environment": "projectx_shadow_read_only",
   "api_url": "https://api.topstepx.com",
   "scope": {
@@ -58,6 +58,10 @@
     {
       "name": "stream_subscriptions_proof",
       "path": "tests\\fixtures\\projectx\\live\\stream_subscriptions_proof.json"
+    },
+    {
+      "name": "reconnect_proof",
+      "path": "tests\\fixtures\\projectx\\live\\reconnect_proof.json"
     }
   ],
   "secret_scan": "passed",

@@ -1,0 +1,203 @@
+{
+  "schema_version": "glitch.projectx.reconnect_proof.v1",
+  "captured_utc": "2026-07-31T19:46:20.143Z",
+  "mode": "live_acceptance_gap",
+  "scope": {
+    "account_id": 26080387,
+    "account_name": "PRAC-V2-645601-15979101",
+    "contract_id": "CON.F.US.MNQ.U26",
+    "instrument": "MNQ"
+  },
+  "phases": [
+    {
+      "label": "baseline",
+      "recorded_utc": "2026-07-31T19:46:20.183Z",
+      "operational_generation": 1,
+      "reconciliation_generation": 1,
+      "reconciliation_state": "succeeded",
+      "user_stream_state": "connected",
+      "market_stream_state": "connected",
+      "state_complete": true,
+      "reconciliation_current": true,
+      "issued_packet_snapshot_hash": "8d7b2092d4605108f9dc26550089f9d3f31a4822d3f686f1f9bddb45e7e30986",
+      "issued_packet_resolvable": true
+    },
+    {
+      "label": "after_stream_gap",
+      "recorded_utc": "2026-07-31T19:46:20.186Z",
+      "operational_generation": 2,
+      "reconciliation_generation": 1,
+      "reconciliation_state": "succeeded",
+      "user_stream_state": "connected",
+      "market_stream_state": "reconnecting",
+      "state_complete": false,
+      "reconciliation_current": false,
+      "issued_packet_snapshot_hash": "8d7b2092d4605108f9dc26550089f9d3f31a4822d3f686f1f9bddb45e7e30986",
+      "issued_packet_resolvable": false
+    },
+    {
+      "label": "after_reconciliation",
+      "recorded_utc": "2026-07-31T19:46:20.437Z",
+      "operational_generation": 2,
+      "reconciliation_generation": 2,
+      "reconciliation_state": "succeeded",
+      "user_stream_state": "connected",
+      "market_stream_state": "connected",
+      "state_complete": true,
+      "reconciliation_current": true,
+      "issued_packet_snapshot_hash": "987e7c608b188170668c0af732a977920e2f1f4b5a4f1eab7620034a221d907c",
+      "issued_packet_resolvable": true
+    }
+  ],
+  "evidence_timeline": [
+    {
+      "sequence": 1,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:18:45.700Z"
+    },
+    {
+      "sequence": 3,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:18:45.700Z"
+    },
+    {
+      "sequence": 4,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:18:45.700Z"
+    },
+    {
+      "sequence": 60247,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:41:12.713Z"
+    },
+    {
+      "sequence": 60248,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:41:12.713Z"
+    },
+    {
+      "sequence": 60249,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:41:12.713Z"
+    },
+    {
+      "sequence": 62887,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:42:09.837Z"
+    },
+    {
+      "sequence": 62888,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:42:09.837Z"
+    },
+    {
+      "sequence": 68027,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:04.060Z"
+    },
+    {
+      "sequence": 68028,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:04.060Z"
+    },
+    {
+      "sequence": 68029,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:04.060Z"
+    },
+    {
+      "sequence": 68198,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:07.074Z"
+    },
+    {
+      "sequence": 69258,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:43.342Z"
+    },
+    {
+      "sequence": 69260,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:43.342Z"
+    },
+    {
+      "sequence": 69261,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:44:43.342Z"
+    },
+    {
+      "sequence": 69398,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:45:05.413Z"
+    },
+    {
+      "sequence": 69400,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:45:05.413Z"
+    },
+    {
+      "sequence": 69401,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:45:05.413Z"
+    },
+    {
+      "sequence": 73662,
+      "event_type": "accounts_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:46:10.536Z"
+    },
+    {
+      "sequence": 73664,
+      "event_type": "positions_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:46:10.536Z"
+    },
+    {
+      "sequence": 73665,
+      "event_type": "open_orders_snapshot",
+      "source": "projectx_rest",
+      "generation": 1,
+      "received_utc": "2026-07-31T19:46:10.536Z"
+    }
+  ],
+  "proof_passed": true,
+  "proof_failures": []
+}
