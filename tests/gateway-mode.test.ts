@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
-import { buildExecutionGates, resolveGatewayMode } from "../src/execution/gateway-mode.js";
+import {
+  buildExecutionGates,
+  gatewayModePermitsLiveOrders,
+  resolveGatewayMode,
+} from "../src/execution/gateway-mode.js";
 import { snapshot, orderFlowWithTrades } from "./fixtures.js";
 import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
@@ -134,10 +138,63 @@ describe("armed runtime gate", () => {
       "quote_stale",
       "reconciliation_current",
       "order_flow_trades_60s",
+      "risk_reduction_technically_supported",
       "new_exposure_technically_supported",
     ]);
     assert.ok(packet.execution.gates.every((gate) => gate.passed));
     assert.equal(packet.execution.new_exposure_technically_supported, true);
+  });
+
+  it("keeps EXIT permitted under degraded_armed while new exposure is blocked", () => {
+    const current = snapshot();
+    const now = new Date("2026-07-21T12:00:05Z");
+    current.capturedAt = now.toISOString();
+    current.quote = { ...current.quote!, timestamp: now.toISOString() };
+    current.instrumentOpenContracts = 1;
+    current.totalOpenContracts = 1;
+    current.positions = [{
+      id: 1,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      type: 1,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    current.openOrders = [{
+      id: 9201,
+      accountId: 101,
+      contractId: "CON.F.US.MNQ.U26",
+      creationTimestamp: "2026-07-21T12:00:08Z",
+      updateTimestamp: "2026-07-21T12:00:09Z",
+      status: 1,
+      type: 4,
+      side: 1,
+      size: 1,
+      limitPrice: null,
+      stopPrice: 19_990,
+      customTag: "glt-00000000-0000-4000-8000-00000000a001-SL",
+    }];
+    const appConfig = config("armed");
+    const packet = buildDecisionPacket(
+      current,
+      appConfig.policy,
+      appConfig.risk,
+      healthyRecovery(),
+      appConfig.scope.instrument,
+      appConfig.tradingMode,
+      appConfig.packetLeaseMs,
+      now,
+      undefined,
+      orderFlowWithTrades(0),
+    );
+    assert.equal(packet.execution.gateway_mode, "degraded_armed");
+    const riskGate = packet.execution.gates.find(
+      (gate) => gate.id === "risk_reduction_technically_supported",
+    );
+    assert.equal(riskGate?.passed, true);
+    assert.ok(packet.execution.supported_actions.includes("EXIT"));
+    assert.equal(gatewayModePermitsLiveOrders(packet.execution.gateway_mode), false);
   });
 });
 

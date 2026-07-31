@@ -218,7 +218,7 @@ describe("durable execution recovery", () => {
     store.close();
   });
 
-  it("resolves an ambiguous entry from a durable provider order id when the custom tag is gone", async () => {
+  it("keeps recovery ambiguous when a durable provider order id is absent from history", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const value = intent("00000000-0000-4000-8000-000000000007");
     store.registerIntent(value, "2026-07-21T12:00:05Z");
@@ -240,9 +240,54 @@ describe("durable execution recovery", () => {
       [],
       new Date("2026-07-21T12:01:00Z"),
     );
+    assert.equal(result.resolved, 0);
+    assert.equal(result.ambiguous, 1);
+    assert.equal(result.resolutions[0]?.outcome, "ambiguous");
+    assert.match(result.resolutions[0]?.detail ?? "", /provider_order_id_not_found/);
+    assert.equal(store.recoveryStatus().blockingAmbiguity, true);
+    store.close();
+  });
+
+  it("resolves an entry from a durable provider order id when history still matches identity", async () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const value = intent("00000000-0000-4000-8000-000000000008");
+    store.registerIntent(value, "2026-07-21T12:00:05Z");
+    store.prepareMutation(
+      value.intentId,
+      "place_order",
+      { accountId, contractId, type: 2, side: 0, size: 1 },
+      "glt-filled-match",
+      "2026-07-21T12:00:06Z",
+    );
+    store.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
+    store.noteMutationProviderOrderId(value.intentId, 9003);
+
+    const result = await recoverExecutionMutations(
+      store,
+      {
+        searchOrders: async () => [{
+          id: 9003,
+          accountId,
+          contractId,
+          creationTimestamp: "2026-07-21T12:00:08Z",
+          updateTimestamp: "2026-07-21T12:00:08Z",
+          status: 2,
+          type: 2,
+          side: 0,
+          size: 1,
+          limitPrice: null,
+          stopPrice: null,
+          customTag: null,
+        }],
+      },
+      accountId,
+      contractId,
+      [],
+      new Date("2026-07-21T12:01:00Z"),
+    );
     assert.equal(result.resolved, 1);
     assert.equal(result.ambiguous, 0);
-    assert.equal(result.resolutions[0]?.providerOrderId, 9002);
+    assert.equal(result.resolutions[0]?.providerOrderId, 9003);
     assert.equal(store.recoveryStatus().blockingAmbiguity, false);
     store.close();
   });

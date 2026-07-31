@@ -13,6 +13,7 @@ import {
   sanitizeRearmProtectionPrices,
   type ResolvedProtection,
 } from "../ownership/protection.js";
+import { isProtectiveCustomTag } from "../ownership/scale-in.js";
 import type { TrancheView } from "../ownership/tranches.js";
 import {
   type ModifyOrderRequest,
@@ -22,7 +23,10 @@ import {
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import { instrumentNetSignedLots } from "../state/venue-state.js";
-import { gatewayModePermitsLiveOrders } from "./gateway-mode.js";
+import {
+  gatewayModePermitsLiveOrders,
+  gatewayModePermitsRiskReduction,
+} from "./gateway-mode.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -283,7 +287,7 @@ export class ExecutionCoordinator {
         code: "position_already_flat",
       });
     }
-    if (!gatewayModePermitsLiveOrders(issuedPacket.execution.gateway_mode)) {
+    if (!gatewayModePermitsRiskReduction(issuedPacket.execution.gateway_mode)) {
       return this.record({
         intentId: intent.intentId,
         status: "shadowed",
@@ -607,14 +611,31 @@ export class ExecutionCoordinator {
    * Re-place SL/TP for tranches the venue left holding contracts with no protective order.
    *
    * Auto OCO cancels the whole bracket group when a partial exit fills, so the surviving
-   * tranche is genuinely naked on the venue rather than merely misattributed: the account
-   * shows open contracts and zero working orders. Attribution alone cannot recover that, and
-   * an unprotected position is the one state this gateway exists to prevent.
+   * tranche is genuinely naked. Runs on the same executionQueue as wire intents so EXIT/MOVE
+   * cannot race a rearm. Defers while non-protective working orders or an open EXIT exist.
    */
-  public async rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
+  public rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
+    const result = this.executionQueue.then(() => this.rearmTrancheProtectionSerial(snapshot));
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async rearmTrancheProtectionSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
     if (this.config.tradingMode !== "armed" || snapshot.instrumentOpenContracts === 0) {
       return false;
     }
+    const nonProtective = snapshot.openOrders.filter(
+      (order) => order.accountId === this.config.scope.accountId
+        && order.contractId === this.config.scope.contractId
+        && !isProtectiveCustomTag(order.customTag),
+    );
+    if (nonProtective.length > 0 || this.store.hasOpenExitMutation()) {
+      return false;
+    }
+    const exitTargets = this.store.submittedExitTargetIntentIds();
     const contractPositions = snapshot.positions.filter(
       (position) => position.accountId === this.config.scope.accountId
         && position.contractId === this.config.scope.contractId
@@ -627,7 +648,7 @@ export class ExecutionCoordinator {
     }
     const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
     const candidates = this.attributableTranches().filter((tranche) => {
-      if (this.rearmLatched.has(tranche.intent_id)) {
+      if (this.rearmLatched.has(tranche.intent_id) || exitTargets.has(tranche.intent_id)) {
         return false;
       }
       const protection = bindProtection(

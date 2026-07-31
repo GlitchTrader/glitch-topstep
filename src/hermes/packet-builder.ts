@@ -10,6 +10,7 @@ import type {
 } from "../domain/models.js";
 import {
   buildExecutionGates,
+  gatewayModePermitsRiskReduction,
   resolveGatewayMode,
   type EffectiveGatewayMode,
   type ExecutionGate,
@@ -298,10 +299,14 @@ export function deriveSupportedActions(
   snapshot: AccountVenueSnapshot,
   protection: DirectDecisionPacket["protection"],
   remainingCapacity = 0,
+  exitPermitted = true,
 ): TradeAction[] {
-  const base: TradeAction[] = snapshot.instrumentOpenContracts === 0
-    ? ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"]
-    : ["HOLD", "EXIT", "NOTHING"];
+  const flat = snapshot.instrumentOpenContracts === 0;
+  const base: TradeAction[] = flat
+    ? (exitPermitted
+      ? ["ENTER_LONG", "ENTER_SHORT", "HOLD", "EXIT", "NOTHING"]
+      : ["ENTER_LONG", "ENTER_SHORT", "HOLD", "NOTHING"])
+    : (exitPermitted ? ["HOLD", "EXIT", "NOTHING"] : ["HOLD", "NOTHING"]);
   const scaleInAction = deriveScaleInSupportedAction(
     snapshot,
     snapshot.contract.id,
@@ -313,7 +318,8 @@ export function deriveSupportedActions(
     base.unshift(scaleInAction);
   }
   if (protection.status === "proven") {
-    return [...base.slice(0, base.length - 2), "MOVE_STOP", "MOVE_TP", ...base.slice(-2)];
+    const tail = exitPermitted ? 2 : 1;
+    return [...base.slice(0, base.length - tail), "MOVE_STOP", "MOVE_TP", ...base.slice(-tail)];
   }
   return base;
 }
@@ -365,7 +371,15 @@ export function buildDecisionPacket(
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
   const protection = derivePacketProtection(snapshot, null, tranches);
-  const supportedActions = deriveSupportedActions(snapshot, protection, remainingCapacity);
+  // EXIT is live under degraded_armed; only disabled/shadow omit or shadow the submit path.
+  const exitPermitted = tradingMode !== "disabled"
+    && (tradingMode === "shadow" || gatewayModePermitsRiskReduction(gatewayMode.effective));
+  const supportedActions = deriveSupportedActions(
+    snapshot,
+    protection,
+    remainingCapacity,
+    exitPermitted,
+  );
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",

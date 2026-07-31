@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "project": "glitch-topstep",
-  "updated": "2026-07-30",
+  "updated": "2026-07-31",
   "roadmap_ref": "docs/ROADMAP.md",
   "items": [
     {
@@ -101,7 +101,7 @@
     {
       "id": "TS-R4-00",
       "title": "Nonterminal intents until native bracket and position proof (NT GL-AI-07 parity)",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -114,7 +114,9 @@
         "TS-R4-01"
       ],
       "evidence": [
-        "2026-07-27: reconcile-only ambiguous recovery already implemented; entry still returns submitted on API return (gap documented in docs/PARITY.md)."
+        "2026-07-27: reconcile-only ambiguous recovery already implemented; entry still returns submitted on API return (gap documented in docs/PARITY.md).",
+        "2026-07-29: GitHub #17 closed — nonterminal until provider-native protection proof.",
+        "2026-07-30/31: live PRAC PM4 E2E — entry pending until protection proven; MOVE_STOP/MOVE_TP pending until reconcile; restart scenario B keeps two protected tranches (PR #38, commit 619af4c)."
       ],
       "sources": [
         "docs/PARITY.md",
@@ -343,7 +345,7 @@
     {
       "id": "TS-R4-03",
       "title": "MOVE_STOP, MOVE_TP, and exact-leg mutation",
-      "status": "backlog",
+      "status": "done",
       "priority": "P1",
       "owner_role": "coder",
       "acceptance": [
@@ -354,15 +356,20 @@
       "depends_on": [
         "TS-R4-02"
       ],
-      "evidence": [],
+      "evidence": [
+        "2026-07-30: GitHub #24/#25 implemented — exact-leg modify via bindProtection; tests/position-management.test.ts.",
+        "2026-07-31: live PRAC PM4 scenario A/C — MOVE_STOP and MOVE_TP on survivor tranche after targeted EXIT (data/pm4-phase-c-e2e.json, PR #38)."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership"
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/24",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/25"
       ]
     },
     {
       "id": "TS-R4-04",
       "title": "Multi-tranche protected additions and full exit cleanup",
-      "status": "backlog",
+      "status": "done",
       "priority": "P1",
       "owner_role": "coder",
       "acceptance": [
@@ -372,10 +379,39 @@
       "depends_on": [
         "TS-R4-02"
       ],
-      "evidence": [],
+      "evidence": [
+        "2026-07-31: GitHub #26/#27 — scale-in, targeted partial EXIT, per-tranche ownership; live A/B/C all_pass on PRAC-V2-645601-15979101 (PR #38, 619af4c).",
+        "2026-07-31: ownership derives remaining_qty from venue open contracts; newest open_orders_snapshot only (no ghost brackets after restart)."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership"
+        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/26",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/27"
       ]
+    },
+    {
+      "id": "TS-R4-05",
+      "title": "Rearm naked-tranche protection on the execution queue with a real gate",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "rearmTrancheProtection runs on the same executionQueue as wire intents.",
+        "Rearm defers when non-protective working orders exist or an open EXIT targets the tranche.",
+        "openOrdersEvidence is read once per ownership.current() call.",
+        "Unit fixture covers latch, generation tags, and EXIT-pending deferral."
+      ],
+      "depends_on": [
+        "TS-R4-04"
+      ],
+      "evidence": [
+        "2026-07-31: rearmTrancheProtection queued on executionQueue; defers on non-protective working orders or hasOpenExitMutation; skips exit-targeted tranches; openOrdersEvidence once per current(); tests rearms naked tranche + defers while EXIT open."
+      ],
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/ownership/projectx-order-ownership.ts"
+      ],
+      "stop_line": "Do not invent OCO/linkedOrderId for rearm without PRAC proof; document orphan-leg risk separately."
     },
     {
       "id": "TS-R5-01",
@@ -707,7 +743,7 @@
     {
       "id": "TS-AUDIT-02",
       "title": "Stop the entry armed gate from stranding an exit",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -725,15 +761,15 @@
         "Net effect: an open position cannot be closed by Hermes exactly when quotes thin out, the tape goes quiet, or reconciliation lags. On an account with a hard trailing loss floor that is the wrong failure direction.",
         "docs/AUTHORITY.md permits deterministic rejection for factual execution invalidity; a quiet tape or a stale quote does not make closing an existing position factually invalid.",
         "The sibling NinjaTrader rail already carries this contract: GL-AI-08 requires that an identity-valid attributable EXIT bypass entry-only license, compliance, session, and new-risk gates while AI-disabled stays a hard block.",
-        "packet.execution.supported_actions always advertises EXIT, so the packet currently overstates what the gateway will submit."
+        "packet.execution.supported_actions always advertises EXIT, so the packet currently overstates what the gateway will submit.",
+        "2026-07-31: gatewayModePermitsRiskReduction(armed|degraded_armed); EXIT uses it; gate risk_reduction_technically_supported on packet; fixtures for quiet-tape EXIT and trading_disabled_by_operator (tests/gateway-mode.test.ts, tests/position-management.test.ts)."
       ],
       "sources": [
         "src/execution/coordinator.ts",
         "src/execution/gateway-mode.ts",
         "src/hermes/packet-builder.ts",
         "docs/AUTHORITY.md"
-      ],
-      "stop_line": "This widens live-order authority. It requires explicit operator approval before implementation, and bounded shadow proof before any armed run."
+      ]
     },
     {
       "id": "TS-AUDIT-03",
@@ -793,7 +829,7 @@
     {
       "id": "TS-PM4-01",
       "title": "PM4 Phase C live E2E harness (scenarios A/B/C)",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "tests",
       "acceptance": [
@@ -808,12 +844,14 @@
         "2026-07-30 fix scripts/pm4-phase-c-e2e.mjs: kill port until free, start node with .env (no npm build), health diagnostics, recovery without second kill, ensureFlat waits working_orders=0.",
         "2026-07-30: scenarios A and B pass live; C failed because ensureFlat read ownership.working_orders (absent) instead of state.openOrders — fixed to cancel orphan brackets via ProjectX before scenario C.",
         "2026-07-30: scenario A MOVE failed after partial EXIT_B + restart — ownership proven != live openOrders; harness waits for SL/TP custom tags on state.openOrders before MOVE.",
-        "2026-07-30 root cause: handleExit used first position row size (1) instead of instrumentOpenContracts (2) when ProjectX reports split lots; partial EXIT called closePosition and flattened. Fixed in coordinator.ts + regression test."
+        "2026-07-30 root cause: handleExit used first position row size (1) instead of instrumentOpenContracts (2) when ProjectX reports split lots; partial EXIT called closePosition and flattened. Fixed in coordinator.ts + regression test.",
+        "2026-07-31T14:21:17Z–14:31:35Z: PM4_E2E_RESTART=1 all_pass true on PRAC-V2-645601-15979101 — A SHORT, B restart ownership_two_tranches, C LONG mirror; gateway 619af4c / PR #38."
       ],
       "sources": [
         "scripts/pm4-phase-c-e2e.mjs",
         "docs/PARITY.md",
-        "start.ps1"
+        "start.ps1",
+        "https://github.com/GlitchTrader/glitch-topstep/pull/38"
       ]
     }
   ]

@@ -91,7 +91,8 @@ export class ProjectXOrderOwnershipService {
       ORDER BY outbox.created_utc ASC, outbox.intent_id ASC
     `).all() as unknown as SubmittedEntryRow[];
 
-    const entries = rows.map((row) => this.buildEntry(row, venueOpenContracts > 0));
+    const openOrders = this.openOrdersEvidence();
+    const entries = rows.map((row) => this.buildEntry(row, venueOpenContracts > 0, openOrders));
     const issues: string[] = [];
     const providerOrderOwners = new Map<number, EntryOrderOwnership[]>();
     for (const entry of entries) {
@@ -152,7 +153,11 @@ export class ProjectXOrderOwnershipService {
     };
   }
 
-  private buildEntry(row: SubmittedEntryRow, instrumentOpen: boolean): EntryOrderOwnership {
+  private buildEntry(
+    row: SubmittedEntryRow,
+    instrumentOpen: boolean,
+    openOrders: OrderInfo[],
+  ): EntryOrderOwnership {
     const issues: string[] = [];
     let identityComplete = true;
     const request = parseRecord(row.request_json, "execution_request", issues);
@@ -290,7 +295,6 @@ export class ProjectXOrderOwnershipService {
         ? "provider_observed"
         : "provider_acknowledged";
 
-    const openOrders = this.openOrdersEvidence();
     const protection = bindProtection(
       row.intent_id,
       openOrders,
