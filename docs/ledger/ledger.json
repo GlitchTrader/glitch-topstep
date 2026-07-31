@@ -183,7 +183,7 @@
     {
       "id": "TS-R2-03",
       "title": "Reconcile account, contract, positions, and conservative PnL with TopstepX UI",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -195,11 +195,15 @@
         "TS-R2-01"
       ],
       "evidence": [
-        "2026-07-31: capture fixtures include accounts_search, open_positions, open_orders, gateway_health for PRAC-V2-645601-15979101 / CON.F.US.MNQ.U26.",
-        "Human checklist against TopstepX UI still required before marking done."
+        "2026-07-31: TopstepX UI PRAC-V2-645601-15979101 — BAL $150,378.16, RP&L $378.16, UP&L $0, MNQU26, flat, MLL $145,500 (150K Combine allowance per https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit).",
+        "2026-07-31: gateway /packet — balance 150378.16, instrument_open 0, contract CON.F.US.MNQ.U26 (MNQU6); operator_provided_floor hard_loss_floor_usd 145500, current_buffer_usd 4878.16 after .env reconcile.",
+        "2026-07-31: prior mismatch (148000 floor) traced to express_funded_eod + INITIAL_MAXIMUM_LOSS=2000 (50K table); PRAC 150K requires $4,500 allowance / $145,500 floor or trading_combine_eod.",
+        "2026-07-31: fixtures tests/fixtures/projectx/live/accounts_search.json and open_positions.json match UI at capture time."
       ],
       "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "tests/fixtures/projectx/live/manifest.json",
+        "https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit"
       ]
     },
     {
