@@ -766,7 +766,9 @@ async function runTrancheScenario(scenario, {
   checks.proven_a = pkt.protection?.status === "proven";
 
   pkt = await waitArmedPacket(steps, `${prefix}_ARMED`);
-  await sleep(8000);
+  await waitReconciliationReady();
+  await waitPacketReconciliationCurrent(180);
+  await sleep(5000);
   await assertNoOpenOrders(steps, `${prefix}_PRE_SCALE_IN`);
   const trancheBIntentId = randomUUID();
   const enter2 = await submitIntent({
