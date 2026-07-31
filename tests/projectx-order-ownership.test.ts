@@ -271,6 +271,106 @@ describe("ProjectX order ownership", () => {
     });
   });
 
+  it("ignores cancelled brackets that only remain in older open-order snapshots", () => {
+    withStores((execution, evidence, ownership) => {
+      const closed = intent("00000000-0000-4000-8000-000000009031");
+      const liveA = intent("00000000-0000-4000-8000-000000009032");
+      const liveB = intent("00000000-0000-4000-8000-000000009033");
+      submittedEntry(execution, closed, 9031);
+      submittedEntry(execution, liveA, 9032);
+      submittedEntry(execution, liveB, 9033);
+      for (const [tradeId, orderId] of [[7031, 9031], [7032, 9032], [7033, 9033]] as const) {
+        const fill = trade(tradeId, orderId);
+        evidence.append({
+          receivedUtc: `2026-07-21T12:00:${10 + tradeId - 7031}Z`,
+          providerTimestampUtc: fill.creationTimestamp,
+          source: "projectx_user_stream",
+          eventType: "trade",
+          generation: 1,
+          accountId: ACCOUNT_ID,
+          contractId: CONTRACT_ID,
+          providerEntityId: String(tradeId),
+          relatedProviderEntityId: String(orderId),
+          rawPayload: fill,
+          normalizedPayload: fill,
+        });
+      }
+
+      const ghostStop = {
+        ...order(9131, 1),
+        type: 4,
+        stopPrice: 19_990.25,
+        customTag: `glt-${closed.intentId}-SL`,
+      };
+      const ghostTarget = {
+        ...order(9132, 1),
+        type: 1,
+        limitPrice: 20_020.25,
+        customTag: `glt-${closed.intentId}-TP`,
+      };
+      const liveStopA = {
+        ...order(9141, 1),
+        type: 4,
+        stopPrice: 19_980.25,
+        customTag: `glt-${liveA.intentId}-SL`,
+      };
+      const liveTargetA = {
+        ...order(9142, 1),
+        type: 1,
+        limitPrice: 20_030.25,
+        customTag: `glt-${liveA.intentId}-TP`,
+      };
+      const liveStopB = {
+        ...order(9151, 1),
+        type: 4,
+        stopPrice: 19_970.25,
+        customTag: `glt-${liveB.intentId}-SL`,
+      };
+      const liveTargetB = {
+        ...order(9152, 1),
+        type: 1,
+        limitPrice: 20_040.25,
+        customTag: `glt-${liveB.intentId}-TP`,
+      };
+
+      evidence.append({
+        receivedUtc: "2026-07-21T12:01:00Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [ghostStop, ghostTarget, liveStopA, liveTargetA],
+      });
+      evidence.append({
+        receivedUtc: "2026-07-21T12:02:00Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [liveStopA, liveTargetA, liveStopB, liveTargetB],
+      });
+
+      const snapshot = ownership.current(2);
+      const byIntent = new Map(
+        snapshot.tranches.map((tranche) => [tranche.intent_id, tranche.remaining_qty]),
+      );
+      assert.equal(byIntent.get(closed.intentId), 0);
+      assert.equal(byIntent.get(liveA.intentId), 1);
+      assert.equal(byIntent.get(liveB.intentId), 1);
+      const closedEntry = snapshot.entries.find((entry) => entry.intentId === closed.intentId);
+      assert.equal(closedEntry?.protection.stop.providerOrderId, null);
+      assert.equal(closedEntry?.protection.target.providerOrderId, null);
+    });
+  });
+
   it("downgrades contradictory fills and overfills to incomplete", () => {
     withStores((execution, evidence, ownership) => {
       const value = intent("00000000-0000-4000-8000-000000009004");

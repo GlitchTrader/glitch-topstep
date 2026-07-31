@@ -741,15 +741,11 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
     const active = (own.tranches ?? []).filter(
       (t) => intentIds.includes(t.intent_id) && t.remaining_qty > 0,
     );
+    // Venue open=2 plus two filled entries is not enough: stale protective ghosts can steal
+    // remaining_qty from one of the live intents. Wait until ownership attributes 1+1.
     if (
       st.instrumentOpenContracts === 2
       && filledEntries.length === 2
-      && filledEntries.every((entry) => entry.effectiveFilledQuantity >= 1)
-    ) {
-      return own;
-    }
-    if (
-      st.instrumentOpenContracts === 2
       && active.length === 2
       && active.every((t) => t.remaining_qty === 1)
     ) {
@@ -761,6 +757,7 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
         open_contracts: st.instrumentOpenContracts,
         filled_entries: filledEntries.length,
         active_tranches: active.length,
+        remaining: active.map((t) => t.remaining_qty),
       });
     }
   }
@@ -833,9 +830,23 @@ async function runTrancheScenario(scenario, {
     target_intent_id: trancheBIntentIdResolved,
     reason: "EXIT tranche B only",
   }, steps, `${prefix}_EXIT_B`);
-  checks.exit_b = exitB.http === 202 && exitB.body.status === "pending";
+  // Live MNQ can stop/TP tranche B between the two-tranche wait and EXIT. The ownership
+  // outcome we care about is the same: B flat, A still holding one protected contract.
+  const marketClosedB =
+    exitB.http === 202
+    && exitB.body.status === "ignored"
+    && exitB.body.code === "target_tranche_already_flat";
+  checks.exit_b =
+    (exitB.http === 202 && exitB.body.status === "pending")
+    || marketClosedB;
   if (!checks.exit_b) {
     throw new Error(`${prefix}_EXIT_B failed: ${exitB.body?.code ?? exitB.http}`);
+  }
+  if (marketClosedB) {
+    steps.push({
+      step: `${prefix}_EXIT_B_MARKET_ALREADY_FLAT`,
+      target_intent_id: trancheBIntentIdResolved,
+    });
   }
 
   const { st: stMid, own: ownMid, trancheA: trancheAMid } = await waitPartialExitSettlement(

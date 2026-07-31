@@ -352,7 +352,16 @@ export function sanitizeRearmProtectionPrices(
 export function latestOrderById(orders: readonly OrderInfo[]): OrderInfo[] {
   const latest = new Map<number, OrderInfo>();
   for (const order of orders) {
-    latest.set(order.id, order);
+    const previous = latest.get(order.id);
+    if (!previous) {
+      latest.set(order.id, order);
+      continue;
+    }
+    const previousTs = previous.updateTimestamp || previous.creationTimestamp || "";
+    const nextTs = order.updateTimestamp || order.creationTimestamp || "";
+    if (nextTs.localeCompare(previousTs) >= 0) {
+      latest.set(order.id, order);
+    }
   }
   return [...latest.values()];
 }

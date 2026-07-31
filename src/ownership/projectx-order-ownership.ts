@@ -324,6 +324,10 @@ export class ProjectXOrderOwnershipService {
   }
 
   private openOrdersEvidence(): OrderInfo[] {
+    // Only the newest open-order snapshot is venue truth for membership. Older snapshots still
+    // contain brackets that later cancelled; unioning them with latestOrderById keeps those
+    // ghosts "working" forever because a cancel removes the id from later snapshots instead of
+    // overwriting it. Realtime order events cover the gap until the next reconcile.
     const snapshots = this.queryEvidence({
       source: "projectx_rest",
       eventType: "open_orders_snapshot",
@@ -332,11 +336,9 @@ export class ProjectXOrderOwnershipService {
       limit: 10_000,
     });
     const orders: OrderInfo[] = [];
-    for (const event of snapshots) {
-      if (!Array.isArray(event.normalizedPayload)) {
-        continue;
-      }
-      for (const value of event.normalizedPayload) {
+    const latestSnapshot = snapshots.at(-1);
+    if (latestSnapshot && Array.isArray(latestSnapshot.normalizedPayload)) {
+      for (const value of latestSnapshot.normalizedPayload) {
         if (isOrderInfo(value)) {
           orders.push(value);
         }
@@ -349,14 +351,13 @@ export class ProjectXOrderOwnershipService {
       contractId: this.options.contractId,
       limit: 10_000,
     });
-    const historical = this.queryEvidence({
-      source: "projectx_rest",
-      eventType: "historical_order",
-      accountId: this.options.accountId,
-      contractId: this.options.contractId,
-      limit: 10_000,
-    });
-    for (const event of [...realtime, ...historical]) {
+    for (const event of realtime) {
+      if (
+        latestSnapshot !== undefined
+        && event.sequence <= latestSnapshot.sequence
+      ) {
+        continue;
+      }
       const order = orderFromEvidence(event, Number(event.providerEntityId));
       if (order) {
         orders.push(order);
