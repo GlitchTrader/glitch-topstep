@@ -83,6 +83,15 @@ export function sumAccountNetContracts(positions: readonly PositionInfo[]): numb
   return total;
 }
 
+/**
+ * A successful reconciliation has proven the current operational generation. An in-flight
+ * cycle keeps the previous proof; a stream gap bumps `generation` and invalidates it.
+ */
+export function isReconciliationCurrent(operational: VenueOperationalStatus): boolean {
+  return operational.reconciliation.lastSucceededAt !== null
+    && operational.reconciliation.generation === operational.generation;
+}
+
 interface Timed<T> {
   value: T;
   receivedAt: string;
@@ -237,11 +246,16 @@ export class VenueStateStore {
     this.setStream(kind, "degraded", error, at, true);
   }
 
+  /**
+   * `reconciliation.generation` tracks the generation the last *successful* reconciliation
+   * proved, so starting or failing a cycle never retracts a proof we already have. A cycle in
+   * flight does not make the previous snapshot wrong; only a stream gap (which bumps
+   * `generation`) does.
+   */
   public markReconciliationStarted(at = nowUtc()): void {
     this.reconciliation = {
       ...this.reconciliation,
       state: "running",
-      generation: this.generation,
       lastStartedAt: at,
       lastError: null,
     };
@@ -261,7 +275,6 @@ export class VenueStateStore {
     this.reconciliation = {
       ...this.reconciliation,
       state: "failed",
-      generation: this.generation,
       lastError: this.errorText(error),
       lastStartedAt: this.reconciliation.lastStartedAt ?? at,
     };
@@ -321,7 +334,7 @@ export class VenueStateStore {
       ...this.stateIssues(quote, operational),
       ...positionDataIssues,
     ];
-    const capturedAt = this.latestStateTimestamp(accountId, contractId);
+    const capturedAt = this.latestStateTimestamp(accountId);
     return {
       capturedAt,
       account: account.value,
@@ -354,10 +367,7 @@ export class VenueStateStore {
     if (!quote) issues.push("quote_missing");
     if (operational.userStream.state !== "connected") issues.push(`user_stream_${operational.userStream.state}`);
     if (operational.marketStream.state !== "connected") issues.push(`market_stream_${operational.marketStream.state}`);
-    if (
-      operational.reconciliation.state !== "succeeded"
-      || operational.reconciliation.generation !== operational.generation
-    ) {
+    if (!isReconciliationCurrent(operational)) {
       issues.push("reconciliation_not_current");
     }
     return issues;
@@ -396,16 +406,16 @@ export class VenueStateStore {
     return error instanceof Error ? `${error.name}:${error.message}` : String(error);
   }
 
-  private latestStateTimestamp(accountId: number, contractId: string): string {
-    const accountPositionQuoteTimes = [...this.positions.values()]
-      .filter((entry) => entry.value.accountId === accountId)
-      .map((entry) => this.quotes.get(entry.value.contractId)?.receivedAt ?? new Date(0).toISOString());
+  /**
+   * How current our view of the account is. Quotes are deliberately excluded: a quiet market
+   * delivers no ticks, and that says nothing about whether account, position and order state
+   * are synchronized. Price freshness is a separate concern, reported as `quote_stale`.
+   */
+  private latestStateTimestamp(accountId: number): string {
     const required = [
       this.accounts.get(accountId)?.receivedAt ?? this.accountSnapshotAt,
       this.positionSnapshotAt,
       this.orderSnapshotAt,
-      this.quotes.get(contractId)?.receivedAt ?? new Date(0).toISOString(),
-      ...accountPositionQuoteTimes,
     ];
     const oldest = Math.min(...required.map((value) => new Date(value).getTime()));
     return new Date(oldest).toISOString();

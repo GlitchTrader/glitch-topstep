@@ -55,6 +55,10 @@ export interface OrderInfo {
   fillVolume?: number;
   filledPrice?: number | null;
   customTag?: string | null;
+  /** Set by the venue on bracket children; points at the entry order that spawned them. */
+  parentOrderId?: number | null;
+  /** Set by the venue on one OCO leg; points at its sibling. */
+  linkedOrderId?: number | null;
 }
 
 export interface TradeInfo {

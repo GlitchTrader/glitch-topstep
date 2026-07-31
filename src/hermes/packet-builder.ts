@@ -24,6 +24,7 @@ import {
   type SnapshotDataQuality,
 } from "../state/data-quality.js";
 import {
+  aggregateProtectionStatus,
   bindProtection,
   intentIdFromStopTag,
   type ResolvedProtection,
@@ -222,9 +223,12 @@ export function derivePacketProtection(
 
   const activeTranches = tranches.filter((tranche) => tranche.remaining_qty > 0);
   if (activeTranches.length > 0) {
-    const first = activeTranches[0]!;
+    // The position is protected only when every tranche holding contracts is protected.
+    const status = aggregateProtectionStatus(activeTranches, true);
+    const first = activeTranches.find((tranche) => tranche.protection.status !== "proven")
+      ?? activeTranches[0]!;
     return {
-      status: first.protection.status,
+      status,
       reason: first.protection.reason,
       intent_id: first.intent_id,
       stop: first.protection.stop.provider_order_id === null

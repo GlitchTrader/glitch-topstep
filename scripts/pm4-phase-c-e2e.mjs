@@ -145,12 +145,16 @@ function alignTick(price) {
   return Math.round(price / TICK) * TICK;
 }
 
+// 400 ticks = 100 MNQ points. Live open/RTH swings routinely travel 30-60 points in under a
+// minute after partial exits, so tighter geometry gets the survivor stopped before MOVE_STOP.
+const WIDE_BRACKET_TICKS = 400;
+
 function wideShortBrackets(pkt) {
   const ask = alignTick(pkt.market?.ask ?? pkt.market?.last ?? pkt.market?.bid);
   if (!ask) return null;
   return {
-    sl: alignTick(ask + 100 * TICK),
-    tp: alignTick(ask - 100 * TICK),
+    sl: alignTick(ask + WIDE_BRACKET_TICKS * TICK),
+    tp: alignTick(ask - WIDE_BRACKET_TICKS * TICK),
   };
 }
 
@@ -158,8 +162,8 @@ function wideLongBrackets(pkt) {
   const bid = alignTick(pkt.market?.bid ?? pkt.market?.last ?? pkt.market?.ask);
   if (!bid) return null;
   return {
-    sl: alignTick(bid - 100 * TICK),
-    tp: alignTick(bid + 100 * TICK),
+    sl: alignTick(bid - WIDE_BRACKET_TICKS * TICK),
+    tp: alignTick(bid + WIDE_BRACKET_TICKS * TICK),
   };
 }
 
@@ -510,6 +514,11 @@ async function cancelWorkingOrders(steps, label) {
   });
 }
 
+function isProtectiveOrder(order) {
+  return typeof order?.customTag === "string"
+    && /^glt-.+-(?:r\d+-)?(SL|TP)$/.test(order.customTag);
+}
+
 async function assertNoOpenOrders(steps, label) {
   let st = await state();
   if (countOpenOrders(st) > 0) {
@@ -521,6 +530,25 @@ async function assertNoOpenOrders(steps, label) {
   if (countOpenOrders(st) > 0) {
     throw new Error(`${label}: open_orders_not_empty:${countOpenOrders(st)}`);
   }
+}
+
+async function assertScaleInReady(steps, label) {
+  // Scale-in is legal while protective brackets remain. Cancelling them to chase a zero-order
+  // snapshot leaves the position naked; re-arm then re-places the original stop, which is often
+  // already through the market after a live swing and flattens the whole test.
+  const st = await state();
+  const orders = st?.openOrders ?? st?.open_orders ?? [];
+  const nonProtective = (Array.isArray(orders) ? orders : []).filter((order) => !isProtectiveOrder(order));
+  if (nonProtective.length > 0) {
+    throw new Error(
+      `${label}: non_protective_orders_present:${nonProtective.map((order) => order.customTag ?? order.id).join(",")}`,
+    );
+  }
+  steps.push({
+    step: `${label}_SCALE_IN_READY`,
+    open_contracts: st.instrumentOpenContracts,
+    protective_orders: Array.isArray(orders) ? orders.length : 0,
+  });
 }
 
 async function ensureFlat(steps) {
@@ -554,12 +582,17 @@ async function ensureFlat(steps) {
 
 function protectionTags(intentId) {
   const entry = `glt-${intentId}`.slice(0, 64);
-  const base = entry.length <= 60 ? entry : entry.slice(0, 60);
+  const base = entry.length <= 56 ? entry : entry.slice(0, 56);
   return { stop: `${base}-SL`, target: `${base}-TP` };
 }
 
+function isProtectiveTagForIntent(customTag, intentId, leg) {
+  if (typeof customTag !== "string") return false;
+  const escaped = intentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^glt-${escaped}(?:-r\\d+)?-${leg}$`).test(customTag);
+}
+
 async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
-  const { stop, target } = protectionTags(intentId);
   for (let i = 0; i < timeoutSec; i++) {
     await sleep(1000);
     try {
@@ -575,8 +608,8 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
       continue;
     }
     const orders = st.openOrders ?? [];
-    const hasStop = orders.some((order) => order.customTag === stop);
-    const hasTarget = orders.some((order) => order.customTag === target);
+    const hasStop = orders.some((order) => isProtectiveTagForIntent(order.customTag, intentId, "SL"));
+    const hasTarget = orders.some((order) => isProtectiveTagForIntent(order.customTag, intentId, "TP"));
     if (hasStop && hasTarget) return;
     if (i % 15 === 14) {
       steps.push({
@@ -585,6 +618,7 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
         has_target: hasTarget,
         open_orders: orders.length,
         open_contracts: st.instrumentOpenContracts,
+        protective_tags: orders.map((order) => order.customTag).filter(Boolean),
       });
     }
   }
@@ -707,15 +741,11 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
     const active = (own.tranches ?? []).filter(
       (t) => intentIds.includes(t.intent_id) && t.remaining_qty > 0,
     );
+    // Venue open=2 plus two filled entries is not enough: stale protective ghosts can steal
+    // remaining_qty from one of the live intents. Wait until ownership attributes 1+1.
     if (
       st.instrumentOpenContracts === 2
       && filledEntries.length === 2
-      && filledEntries.every((entry) => entry.effectiveFilledQuantity >= 1)
-    ) {
-      return own;
-    }
-    if (
-      st.instrumentOpenContracts === 2
       && active.length === 2
       && active.every((t) => t.remaining_qty === 1)
     ) {
@@ -727,6 +757,7 @@ async function waitTwoTranches(steps, label, intentIds, timeoutSec = 300) {
         open_contracts: st.instrumentOpenContracts,
         filled_entries: filledEntries.length,
         active_tranches: active.length,
+        remaining: active.map((t) => t.remaining_qty),
       });
     }
   }
@@ -769,7 +800,7 @@ async function runTrancheScenario(scenario, {
   await waitReconciliationReady();
   await waitPacketReconciliationCurrent(180);
   await sleep(5000);
-  await assertNoOpenOrders(steps, `${prefix}_PRE_SCALE_IN`);
+  await assertScaleInReady(steps, `${prefix}_PRE_SCALE_IN`);
   const trancheBIntentId = randomUUID();
   const enter2 = await submitIntent({
     ...baseIntent(enterAction, "unused", trancheBIntentId),
@@ -799,9 +830,23 @@ async function runTrancheScenario(scenario, {
     target_intent_id: trancheBIntentIdResolved,
     reason: "EXIT tranche B only",
   }, steps, `${prefix}_EXIT_B`);
-  checks.exit_b = exitB.http === 202 && exitB.body.status === "pending";
+  // Live MNQ can stop/TP tranche B between the two-tranche wait and EXIT. The ownership
+  // outcome we care about is the same: B flat, A still holding one protected contract.
+  const marketClosedB =
+    exitB.http === 202
+    && exitB.body.status === "ignored"
+    && exitB.body.code === "target_tranche_already_flat";
+  checks.exit_b =
+    (exitB.http === 202 && exitB.body.status === "pending")
+    || marketClosedB;
   if (!checks.exit_b) {
     throw new Error(`${prefix}_EXIT_B failed: ${exitB.body?.code ?? exitB.http}`);
+  }
+  if (marketClosedB) {
+    steps.push({
+      step: `${prefix}_EXIT_B_MARKET_ALREADY_FLAT`,
+      target_intent_id: trancheBIntentIdResolved,
+    });
   }
 
   const { st: stMid, own: ownMid, trancheA: trancheAMid } = await waitPartialExitSettlement(
@@ -821,7 +866,14 @@ async function runTrancheScenario(scenario, {
     trancheAMid !== undefined
     && trancheAMid.remaining_qty === 1;
 
-  await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
+  if (trancheAMid?.protection?.status === "proven") {
+    steps.push({
+      step: `${prefix}_POST_EXIT_B_ALREADY_PROVEN`,
+      tranche_a_protection: trancheAMid.protection.status,
+    });
+  } else {
+    await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
+  }
 
   pkt = await packet();
   const trancheA = trancheAMid;
@@ -1042,6 +1094,16 @@ try {
   process.exit(log.all_pass ? 0 : 1);
 } catch (e) {
   log.fatal = String(e?.message ?? e);
+  // A fatal error can leave contracts open with nobody watching them, so flatten before
+  // exiting. Record what happened here rather than letting it mask the original failure.
+  log.fatal_cleanup = [];
+  try {
+    await ensureGatewayUp(log.fatal_cleanup, "FATAL_CLEANUP");
+    await ensureFlat(log.fatal_cleanup);
+    await cancelWorkingOrders(log.fatal_cleanup, "FATAL_CLEANUP");
+  } catch (cleanupError) {
+    log.fatal_cleanup_error = String(cleanupError?.message ?? cleanupError);
+  }
   log.finished_utc = new Date().toISOString();
   fs.writeFileSync("data/pm4-phase-c-e2e.json", JSON.stringify(log, null, 2));
   console.error(e);

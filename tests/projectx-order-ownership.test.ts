@@ -209,7 +209,7 @@ describe("ProjectX order ownership", () => {
         normalizedPayload: unrelated,
       });
 
-      const entry = ownership.current().entries[0]!;
+      const entry = ownership.current(1).entries[0]!;
       assert.equal(entry.status, "provider_observed");
       assert.equal(entry.latestObservedOrder?.id, 9002);
       assert.deepEqual(entry.fills.map((fill) => fill.trade.id), [7001]);
@@ -262,12 +262,112 @@ describe("ProjectX order ownership", () => {
         rawPayload: exactFill,
         normalizedPayload: exactFill,
       });
-      const entry = ownership.current().entries[0]!;
+      const entry = ownership.current(1).entries[0]!;
       assert.equal(entry.latestObservedOrder?.id, 9003);
       assert.equal(entry.protection.status, "proven");
       assert.equal(entry.protection.stop.providerOrderId, 9010);
       assert.equal(entry.protection.target.providerOrderId, 9011);
       assert.equal(entry.issues.some((issue) => issue.includes("9010")), false);
+    });
+  });
+
+  it("ignores cancelled brackets that only remain in older open-order snapshots", () => {
+    withStores((execution, evidence, ownership) => {
+      const closed = intent("00000000-0000-4000-8000-000000009031");
+      const liveA = intent("00000000-0000-4000-8000-000000009032");
+      const liveB = intent("00000000-0000-4000-8000-000000009033");
+      submittedEntry(execution, closed, 9031);
+      submittedEntry(execution, liveA, 9032);
+      submittedEntry(execution, liveB, 9033);
+      for (const [tradeId, orderId] of [[7031, 9031], [7032, 9032], [7033, 9033]] as const) {
+        const fill = trade(tradeId, orderId);
+        evidence.append({
+          receivedUtc: `2026-07-21T12:00:${10 + tradeId - 7031}Z`,
+          providerTimestampUtc: fill.creationTimestamp,
+          source: "projectx_user_stream",
+          eventType: "trade",
+          generation: 1,
+          accountId: ACCOUNT_ID,
+          contractId: CONTRACT_ID,
+          providerEntityId: String(tradeId),
+          relatedProviderEntityId: String(orderId),
+          rawPayload: fill,
+          normalizedPayload: fill,
+        });
+      }
+
+      const ghostStop = {
+        ...order(9131, 1),
+        type: 4,
+        stopPrice: 19_990.25,
+        customTag: `glt-${closed.intentId}-SL`,
+      };
+      const ghostTarget = {
+        ...order(9132, 1),
+        type: 1,
+        limitPrice: 20_020.25,
+        customTag: `glt-${closed.intentId}-TP`,
+      };
+      const liveStopA = {
+        ...order(9141, 1),
+        type: 4,
+        stopPrice: 19_980.25,
+        customTag: `glt-${liveA.intentId}-SL`,
+      };
+      const liveTargetA = {
+        ...order(9142, 1),
+        type: 1,
+        limitPrice: 20_030.25,
+        customTag: `glt-${liveA.intentId}-TP`,
+      };
+      const liveStopB = {
+        ...order(9151, 1),
+        type: 4,
+        stopPrice: 19_970.25,
+        customTag: `glt-${liveB.intentId}-SL`,
+      };
+      const liveTargetB = {
+        ...order(9152, 1),
+        type: 1,
+        limitPrice: 20_040.25,
+        customTag: `glt-${liveB.intentId}-TP`,
+      };
+
+      evidence.append({
+        receivedUtc: "2026-07-21T12:01:00Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [ghostStop, ghostTarget, liveStopA, liveTargetA],
+      });
+      evidence.append({
+        receivedUtc: "2026-07-21T12:02:00Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [liveStopA, liveTargetA, liveStopB, liveTargetB],
+      });
+
+      const snapshot = ownership.current(2);
+      const byIntent = new Map(
+        snapshot.tranches.map((tranche) => [tranche.intent_id, tranche.remaining_qty]),
+      );
+      assert.equal(byIntent.get(closed.intentId), 0);
+      assert.equal(byIntent.get(liveA.intentId), 1);
+      assert.equal(byIntent.get(liveB.intentId), 1);
+      const closedEntry = snapshot.entries.find((entry) => entry.intentId === closed.intentId);
+      assert.equal(closedEntry?.protection.stop.providerOrderId, null);
+      assert.equal(closedEntry?.protection.target.providerOrderId, null);
     });
   });
 
@@ -407,6 +507,34 @@ describe("multi-tranche ownership reconstruction", () => {
       execution.markMutationSubmitting(exitIntent.intentId, "2026-07-21T12:10:02Z");
       execution.markMutationSubmitted(exitIntent.intentId, 9410, "2026-07-21T12:10:03Z");
 
+      // The targeted exit cancels the closed tranche's brackets; the survivor keeps working
+      // stop and target orders, which is how the venue tells us who still owns the contract.
+      evidence.append({
+        receivedUtc: "2026-07-21T12:10:05Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [
+          {
+            ...order(9110, 1),
+            type: 4,
+            stopPrice: 19_990.25,
+            customTag: `glt-${first.intentId}-SL`,
+          },
+          {
+            ...order(9111, 1),
+            type: 1,
+            limitPrice: 20_020.25,
+            customTag: `glt-${first.intentId}-TP`,
+          },
+        ],
+      });
+
       execution.close();
       evidence.close();
 
@@ -416,7 +544,7 @@ describe("multi-tranche ownership reconstruction", () => {
         ownershipOptions,
         () => new Date("2026-07-21T12:11:00Z"),
       );
-      const snapshot = ownership.current();
+      const snapshot = ownership.current(1);
       ownership.close();
 
       assert.equal(snapshot.tranches.length, 2);

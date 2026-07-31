@@ -2,6 +2,7 @@ import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type { AccountVenueSnapshot, RiskSettings, TradingMode } from "../domain/models.js";
 import { validateScaleIn } from "../ownership/scale-in.js";
+import { isReconciliationCurrent } from "../state/venue-state.js";
 import {
   evaluateSnapshotDataQuality,
   type SnapshotDataQuality,
@@ -73,8 +74,7 @@ function armedSafetyGates(
   quality: SnapshotDataQuality,
 ): ExecutionGate[] {
   const reconciliation = snapshot.operational.reconciliation;
-  const reconciliationCurrent = reconciliation.state === "succeeded"
-    && reconciliation.generation === snapshot.operational.generation;
+  const reconciliationCurrent = isReconciliationCurrent(snapshot.operational);
   const tape60 = orderFlow.observation?.windows.find((window) => window.window_seconds === 60);
   const quoteStale = quality.quoteAgeMs !== null && quality.quoteAgeMs > risk.maxQuoteAgeMs;
 

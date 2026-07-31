@@ -2,7 +2,7 @@ import type { AccountVenueSnapshot, PositionInfo, TradeAction } from "../domain/
 
 export type ScaleInAction = "ENTER_LONG" | "ENTER_SHORT";
 
-const PROTECTIVE_TAG_PATTERN = /^glt-.+-(SL|TP)$/;
+const PROTECTIVE_TAG_PATTERN = /^glt-.+-(?:r\d+-)?(SL|TP)$/;
 
 export interface ScaleInValidation {
   allowed: boolean;

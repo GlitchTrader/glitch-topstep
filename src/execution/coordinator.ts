@@ -6,7 +6,11 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
   bindProtection,
   intentIdFromStopTag,
+  lastProtectivePriceForIntent,
+  latestOrderById,
+  nextUnusedProtectionGeneration,
   protectionCustomTags,
+  sanitizeRearmProtectionPrices,
   type ResolvedProtection,
 } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
@@ -325,9 +329,7 @@ export class ExecutionCoordinator {
           detail: intent.targetIntentId,
         });
       }
-      const attributableQty = tranche.remaining_qty > 0
-        ? tranche.remaining_qty
-        : Math.min(tranche.filled_qty, positionSize);
+      const attributableQty = tranche.remaining_qty;
       if (attributableQty <= 0) {
         return this.record({
           intentId: intent.intentId,
@@ -456,7 +458,7 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const attributableTranches = this.attributableTranches(snapshot);
+    const attributableTranches = this.attributableTranches();
     if (intent.targetIntentId === undefined && attributableTranches.length > 1) {
       return this.record({
         intentId: intent.intentId,
@@ -597,19 +599,18 @@ export class ExecutionCoordinator {
     return null;
   }
 
-  private attributableTranches(snapshot: AccountVenueSnapshot): TrancheView[] {
-    const all = this.tranches();
-    const open = all.filter((tranche) => tranche.remaining_qty > 0);
-    if (open.length > 0) {
-      return open;
-    }
-    if (snapshot.instrumentOpenContracts > 0) {
-      return all.filter((tranche) => tranche.filled_qty > 0);
-    }
-    return open;
+  private attributableTranches(): TrancheView[] {
+    return this.tranches().filter((tranche) => tranche.remaining_qty > 0);
   }
 
-  /** Re-place SL/TP when venue brackets were lost (e.g. after targeted partial EXIT). */
+  /**
+   * Re-place SL/TP for tranches the venue left holding contracts with no protective order.
+   *
+   * Auto OCO cancels the whole bracket group when a partial exit fills, so the surviving
+   * tranche is genuinely naked on the venue rather than merely misattributed: the account
+   * shows open contracts and zero working orders. Attribution alone cannot recover that, and
+   * an unprotected position is the one state this gateway exists to prevent.
+   */
   public async rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
     if (this.config.tradingMode !== "armed" || snapshot.instrumentOpenContracts === 0) {
       return false;
@@ -625,11 +626,9 @@ export class ExecutionCoordinator {
       return false;
     }
     const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
-    let changed = false;
-
-    for (const tranche of this.attributableTranches(snapshot)) {
-      if (tranche.remaining_qty <= 0) {
-        continue;
+    const candidates = this.attributableTranches().filter((tranche) => {
+      if (this.rearmLatched.has(tranche.intent_id)) {
+        return false;
       }
       const protection = bindProtection(
         tranche.intent_id,
@@ -637,19 +636,91 @@ export class ExecutionCoordinator {
         this.config.scope.accountId,
         this.config.scope.contractId,
         true,
+        tranche.entry_order_id,
       );
       if (protection.status === "proven") {
         this.rearmLatched.delete(tranche.intent_id);
-        continue;
+        return false;
       }
-      if (this.rearmLatched.has(tranche.intent_id)) {
-        continue;
-      }
+      return true;
+    });
+    if (candidates.length === 0) {
+      return false;
+    }
+
+    // Open-order snapshots drop cancelled legs, but ProjectX still treats their custom tags as
+    // used. Recent order history is the venue truth for both the next free tag generation and
+    // the stop/target prices MOVE_STOP may have already tightened.
+    const historyStart = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recentOrders = latestOrderById([
+      ...snapshot.openOrders,
+      ...await this.api.searchOrders(this.config.scope.accountId, historyStart),
+    ]);
+    let changed = false;
+
+    for (const tranche of candidates) {
+      const protection = bindProtection(
+        tranche.intent_id,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+        tranche.entry_order_id,
+      );
+      // Rearm always advances past generation 0: that tag pair was consumed by the original
+      // Auto OCO bracket, and ProjectX rejects reused custom tags even after cancel.
+      const generation = Math.max(
+        1,
+        nextUnusedProtectionGeneration(
+          tranche.intent_id,
+          recentOrders,
+          this.config.scope.accountId,
+        ),
+      );
+      const tags = protectionCustomTags(tranche.intent_id, generation);
       const entry = this.store.registeredIntentPayload(tranche.intent_id);
-      if (entry?.stopLoss === undefined || entry.takeProfit1 === undefined) {
+      const historicalStop = lastProtectivePriceForIntent(
+        recentOrders,
+        tranche.intent_id,
+        "SL",
+        4,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ) ?? entry?.stopLoss ?? null;
+      const historicalTarget = lastProtectivePriceForIntent(
+        recentOrders,
+        tranche.intent_id,
+        "TP",
+        1,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ) ?? entry?.takeProfit1 ?? null;
+      if (historicalStop === null || historicalTarget === null) {
         continue;
       }
-      const tags = protectionCustomTags(tranche.intent_id);
+      if (!snapshot.quote) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "tranche_protection_rearm_deferred",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            remaining_qty: tranche.remaining_qty,
+            detail: "quote_unavailable_for_marketable_stop_guard",
+          },
+        });
+        continue;
+      }
+      const sanitized = sanitizeRearmProtectionPrices(
+        coverSide,
+        historicalStop,
+        historicalTarget,
+        snapshot.quote,
+        snapshot.contract.tickSize,
+      );
+      const stopPrice = sanitized.stopPrice;
+      const targetPrice = sanitized.targetPrice;
       const size = tranche.remaining_qty;
       try {
         if (!protection.stop.providerOrderId) {
@@ -659,7 +730,7 @@ export class ExecutionCoordinator {
             type: 4,
             side: coverSide,
             size,
-            stopPrice: entry.stopLoss,
+            stopPrice,
             customTag: tags.stop,
           });
         }
@@ -670,7 +741,7 @@ export class ExecutionCoordinator {
             type: 1,
             side: coverSide,
             size,
-            limitPrice: entry.takeProfit1,
+            limitPrice: targetPrice,
             customTag: tags.target,
           });
         }
@@ -684,12 +755,30 @@ export class ExecutionCoordinator {
           payload: {
             tranche_intent_id: tranche.intent_id,
             remaining_qty: size,
-            stop_price: entry.stopLoss,
-            target_price: entry.takeProfit1,
+            stop_price: stopPrice,
+            target_price: targetPrice,
+            custom_tag_generation: generation,
+            prices_adjusted_for_market: sanitized.adjusted,
           },
         });
-      } catch {
-        // ponytail: retry on next reconciliation if venue rejects
+      } catch (error) {
+        // An unprotected position is the one state this gateway exists to prevent, so a
+        // rejected re-arm has to be visible rather than retried in silence.
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "tranche_protection_rearm_failed",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            remaining_qty: size,
+            stop_price: stopPrice,
+            target_price: targetPrice,
+            cover_side: coverSide,
+            custom_tag_generation: generation,
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        });
       }
     }
     return changed;
@@ -726,7 +815,7 @@ export class ExecutionCoordinator {
     intent?: TradeIntent,
   ): { intentId: string; protection: ResolvedProtection } | null {
     const allTranches = this.tranches();
-    const attributableTranches = this.attributableTranches(snapshot);
+    const attributableTranches = this.attributableTranches();
 
     const positionOpen = snapshot.instrumentOpenContracts > 0;
 
@@ -743,6 +832,7 @@ export class ExecutionCoordinator {
           this.config.scope.accountId,
           this.config.scope.contractId,
           positionOpen,
+          tranche.entry_order_id,
         ),
       };
     }
@@ -757,6 +847,7 @@ export class ExecutionCoordinator {
           this.config.scope.accountId,
           this.config.scope.contractId,
           positionOpen,
+          tranche.entry_order_id,
         ),
       };
     }
