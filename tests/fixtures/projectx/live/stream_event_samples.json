@@ -34,17 +34,45 @@
         "contractId": "CON.F.US.MNQ.U26",
         "payload": [
           {
-            "timestamp": "2026-07-31T18:47:04.3443496+00:00",
+            "timestamp": "2026-07-31T19:32:13.7395731+00:00",
+            "type": 5,
+            "price": 28444,
+            "volume": 1925,
+            "currentVolume": 3
+          },
+          {
+            "timestamp": "2026-07-31T19:32:13.7404837+00:00",
+            "type": 5,
+            "price": 28444.25,
+            "volume": 1945,
+            "currentVolume": 1
+          },
+          {
+            "timestamp": "2026-07-31T19:32:13.7405703+00:00",
+            "type": 5,
+            "price": 28444.5,
+            "volume": 1987,
+            "currentVolume": 1
+          },
+          {
+            "timestamp": "2026-07-31T19:32:13.742012+00:00",
+            "type": 5,
+            "price": 28445,
+            "volume": 2303,
+            "currentVolume": 1
+          },
+          {
+            "timestamp": "2026-07-31T19:32:13.7421036+00:00",
             "type": 4,
-            "price": 28426,
-            "volume": 6,
+            "price": 28444.5,
+            "volume": 2,
             "currentVolume": 0
           },
           {
-            "timestamp": "2026-07-31T18:47:04.3443512+00:00",
+            "timestamp": "2026-07-31T19:32:13.742101+00:00",
             "type": 3,
-            "price": 28426.5,
-            "volume": 5,
+            "price": 28445,
+            "volume": 7,
             "currentVolume": 0
           }
         ]
@@ -104,9 +132,121 @@
         "payload": [
           {
             "symbolId": "F.US.MNQ",
-            "price": 28426,
-            "timestamp": "2026-07-31T18:47:04.136+00:00",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.716+00:00",
             "type": 1,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.716+00:00",
+            "type": 1,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.716+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444,
+            "timestamp": "2026-07-31T19:32:13.72+00:00",
+            "type": 1,
+            "volume": 3,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444,
+            "timestamp": "2026-07-31T19:32:13.72+00:00",
+            "type": 1,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444,
+            "timestamp": "2026-07-31T19:32:13.72+00:00",
+            "type": 1,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444,
+            "timestamp": "2026-07-31T19:32:13.72+00:00",
+            "type": 1,
+            "volume": 4,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 1,
+            "volume": 3,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.25,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.25,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28444.5,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28445,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
+            "volume": 1,
+            "contractId": "CON.F.US.MNQ.U26"
+          },
+          {
+            "symbolId": "F.US.MNQ",
+            "price": 28445,
+            "timestamp": "2026-07-31T19:32:13.724+00:00",
+            "type": 0,
             "volume": 1,
             "contractId": "CON.F.US.MNQ.U26"
           }
@@ -173,10 +313,14 @@
         "contractId": "CON.F.US.MNQ.U26",
         "payload": {
           "symbol": "F.US.MNQ",
-          "bestBid": 28426,
-          "bestAsk": 28426.5,
-          "lastUpdated": "2026-07-31T18:47:04.3541069+00:00",
-          "timestamp": "2026-07-31T18:47:04.328+00:00",
+          "lastPrice": 28445,
+          "bestBid": 28444.5,
+          "bestAsk": 28445,
+          "change": 207.25,
+          "changePercent": 0.0073,
+          "volume": 2646308,
+          "lastUpdated": "2026-07-31T19:32:13.7532163+00:00",
+          "timestamp": "2026-07-31T19:32:13.716+00:00",
           "contract": "CON.F.US.MNQ.U26"
         }
       }
@@ -237,5 +381,6 @@
         "message": "Server timeout elapsed without receiving a message from the server."
       }
     }
-  ]
+  ],
+  "corpus_note": "Merged current evidence DB samples with retained stream_event_samples.json entries."
 }

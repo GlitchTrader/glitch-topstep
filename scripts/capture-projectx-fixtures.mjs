@@ -21,6 +21,7 @@ for (const line of fs.readFileSync(path.join(ROOT, ".env"), "utf8").split(/\r?\n
 const { loadConfig } = await import(pathToFileURL(path.join(ROOT, "dist", "src", "config.js")).href);
 const { ProjectXApiClient } = await import(pathToFileURL(path.join(ROOT, "dist", "src", "projectx", "client.js")).href);
 const { redactSecrets } = await import(pathToFileURL(path.join(ROOT, "dist", "src", "storage", "sqlite-provider-evidence-store.js")).href);
+const { buildStreamSubscriptionProof } = await import(pathToFileURL(path.join(ROOT, "dist", "src", "projectx", "stream-subscriptions.js")).href);
 
 const config = loadConfig();
 const capturedUtc = new Date().toISOString();
@@ -104,6 +105,33 @@ function sampleStreamFixtures(evidencePath) {
   }
 }
 
+function loadPreviousStreamSamples() {
+  const filePath = path.join(OUT_DIR, "stream_event_samples.json");
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    return Array.isArray(parsed.samples) ? parsed.samples : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergeStreamSamples(currentSamples, previousSamples) {
+  const byKey = new Map();
+  for (const sample of previousSamples) {
+    byKey.set(`${sample.source}:${sample.event_type}`, sample);
+  }
+  for (const sample of currentSamples) {
+    byKey.set(`${sample.source}:${sample.event_type}`, sample);
+  }
+  return [...byKey.values()].sort((left, right) => {
+    const eventCompare = String(left.event_type).localeCompare(String(right.event_type));
+    return eventCompare !== 0 ? eventCompare : String(left.source).localeCompare(String(right.source));
+  });
+}
+
 async function fetchGatewayHealth() {
   const url = `http://${config.localGateway.host}:${config.localGateway.port}/health`;
   const response = await fetch(url, {
@@ -164,15 +192,42 @@ writeFixture("history_bars_1m_2h", await api.retrieveBars({
 }));
 
 // Phase 3/4 — gateway reconciliation + stream sample from local evidence
-writeFixture("gateway_health", await fetchGatewayHealth());
+const gatewayHealth = await fetchGatewayHealth();
+writeFixture("gateway_health", gatewayHealth);
 
 const dataDir = path.isAbsolute(config.dataDir)
   ? config.dataDir
   : path.join(ROOT, config.dataDir);
-writeFixture("stream_event_samples", sampleStreamFixtures(path.join(dataDir, "projectx-evidence.sqlite")));
+const streamSamples = sampleStreamFixtures(path.join(dataDir, "projectx-evidence.sqlite"));
+const mergedStreamSamples = mergeStreamSamples(
+  streamSamples.samples ?? [],
+  loadPreviousStreamSamples(),
+);
+writeFixture("stream_event_samples", {
+  ...streamSamples,
+  samples: mergedStreamSamples,
+  corpus_note: "Merged current evidence DB samples with retained stream_event_samples.json entries.",
+});
+
+const streamProof = buildStreamSubscriptionProof({
+  capturedUtc,
+  scope: {
+    account_id: config.scope.accountId,
+    account_name: config.scope.accountName,
+    contract_id: config.scope.contractId,
+    instrument: config.scope.instrument,
+  },
+  health: gatewayHealth.health,
+  samples: mergedStreamSamples,
+  liveSamples: streamSamples.samples ?? [],
+});
+writeFixture("stream_subscriptions_proof", streamProof);
+if (!streamProof.proof_passed) {
+  throw new Error(`stream_subscriptions_proof_failed:${streamProof.proof_failures.join(",")}`);
+}
 
 manifest.secret_scan = "passed";
-manifest.note = "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB.";
+manifest.note = "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB; stream_subscriptions_proof validates TS-R2-04.";
 const manifestPath = path.join(OUT_DIR, "manifest.json");
 const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
 scanForLeaks(manifestText, "manifest");
