@@ -7,7 +7,7 @@
     {
       "id": "TS-R1-01",
       "title": "Process-kill recovery fixtures across outbox and provider lifecycle",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "tests",
       "acceptance": [
@@ -17,9 +17,15 @@
         "Actual process-kill fixture after provider response but before receipt proves terminal state recovery."
       ],
       "depends_on": [],
-      "evidence": [],
+      "evidence": [
+        "2026-07-31: src/execution/kill-hook.ts env-gated process.exit(73) at ten lifecycle points.",
+        "2026-07-31: tests/kill-matrix-child.ts + tests/kill-matrix.test.ts spawn a real child with fake provider; every kill point keeps one durable intent identity and placeOrderCalls<=1; recovery outcomes asserted (orphan/prepared→confirmed_not_submitted; submitting without provider→ambiguous+blocking; accept/submitted→submitted; receipt before JSONL survives).",
+        "GitHub #16 acceptance mirror for the fake-provider kill matrix; ProjectX shadow kill portions remain under TS-R1-04 / #18."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
+        "tests/kill-matrix.test.ts",
+        "src/execution/kill-hook.ts"
       ]
     },
     {
@@ -33,7 +39,11 @@
         "Recovery health blocks new exposure until ambiguity and settlement are cleared after restart."
       ],
       "depends_on": [],
-      "evidence": [],
+      "evidence": [
+        "2026-07-31: process-level reopen fixture in tests/kill-matrix.test.ts proves submitting outbox + entry latch + blockingNewExposure survive store close/reopen on the same SQLite path.",
+        "2026-07-31: sqlite-execution-store.test.ts also reopens file-backed recovery state (TS-R1-02 smoke).",
+        "Full OS reboot / service-task startup fixture still required before marking done."
+      ],
       "sources": [
         "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
       ]

@@ -27,6 +27,7 @@ import {
   gatewayModePermitsLiveOrders,
   gatewayModePermitsRiskReduction,
 } from "./gateway-mode.js";
+import { maybeKill } from "./kill-hook.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -99,6 +100,8 @@ export class ExecutionCoordinator {
         code: "intent_already_processing_or_recovery_required",
       });
     }
+
+    maybeKill("after_intent_before_outbox");
 
     const issuedPacket = intent.action === "NOTHING" || intent.action === "HOLD"
       ? null
@@ -226,7 +229,9 @@ export class ExecutionCoordinator {
         new Date().toISOString(),
       );
       this.invalidateIssuedPackets();
+      maybeKill("after_prepared_before_provider");
       this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+      maybeKill("after_submitting_before_transport");
 
       try {
         const orderId = await this.api.placeOrder(request);
@@ -235,7 +240,9 @@ export class ExecutionCoordinator {
         } catch {
           // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
         }
+        maybeKill("after_accept_before_submitted");
         this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        maybeKill("after_submitted_before_receipt");
         return this.record({
           intentId: intent.intentId,
           status: "pending",
@@ -425,6 +432,7 @@ export class ExecutionCoordinator {
           detail: `exit_quantity=${exitQuantity};remaining=${positionSize - exitQuantity}`,
         });
       }
+      maybeKill("during_close_position");
       await this.api.closePosition(request.accountId, request.contractId);
       this.store.markMutationSubmitted(intent.intentId, null, new Date().toISOString());
       return this.record({
@@ -1002,6 +1010,7 @@ export class ExecutionCoordinator {
       ...(input.detail === undefined ? {} : { detail: input.detail }),
     };
     this.store.recordReceipt({ ...receipt });
+    maybeKill("after_receipt_before_jsonl");
     try {
       await this.ledger.append({
         schema_version: "glitch.direct.event.v1",
