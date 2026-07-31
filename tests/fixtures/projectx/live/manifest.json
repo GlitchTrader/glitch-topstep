@@ -1,0 +1,61 @@
+{
+  "schema_version": "glitch.projectx.fixture_capture.v1",
+  "captured_utc": "2026-07-31T18:46:59.951Z",
+  "environment": "projectx_shadow_read_only",
+  "api_url": "https://api.topstepx.com",
+  "scope": {
+    "account_id": 26080387,
+    "account_name": "PRAC-V2-645601-15979101",
+    "contract_id": "CON.F.US.MNQ.U26",
+    "instrument": "MNQ",
+    "live_market_data": false
+  },
+  "files": [
+    {
+      "name": "auth_login",
+      "path": "tests\\fixtures\\projectx\\live\\auth_login.json"
+    },
+    {
+      "name": "auth_validate",
+      "path": "tests\\fixtures\\projectx\\live\\auth_validate.json"
+    },
+    {
+      "name": "accounts_search",
+      "path": "tests\\fixtures\\projectx\\live\\accounts_search.json"
+    },
+    {
+      "name": "contracts_available",
+      "path": "tests\\fixtures\\projectx\\live\\contracts_available.json"
+    },
+    {
+      "name": "open_positions",
+      "path": "tests\\fixtures\\projectx\\live\\open_positions.json"
+    },
+    {
+      "name": "open_orders",
+      "path": "tests\\fixtures\\projectx\\live\\open_orders.json"
+    },
+    {
+      "name": "historical_orders_24h",
+      "path": "tests\\fixtures\\projectx\\live\\historical_orders_24h.json"
+    },
+    {
+      "name": "historical_trades_24h",
+      "path": "tests\\fixtures\\projectx\\live\\historical_trades_24h.json"
+    },
+    {
+      "name": "history_bars_1m_2h",
+      "path": "tests\\fixtures\\projectx\\live\\history_bars_1m_2h.json"
+    },
+    {
+      "name": "gateway_health",
+      "path": "tests\\fixtures\\projectx\\live\\gateway_health.json"
+    },
+    {
+      "name": "stream_event_samples",
+      "path": "tests\\fixtures\\projectx\\live\\stream_event_samples.json"
+    }
+  ],
+  "secret_scan": "passed",
+  "note": "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB."
+}

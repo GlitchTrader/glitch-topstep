@@ -137,7 +137,7 @@
     {
       "id": "TS-R2-01",
       "title": "Authenticate with real TopstepX ProjectX key in shadow mode",
-      "status": "blocked",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -145,17 +145,20 @@
         "Login and validate responses match observed or official contracts; parsers are not loosened to suppress errors."
       ],
       "depends_on": [],
-      "evidence": [],
-      "blocked_reason": "No ProjectX API subscription or credentials available in the initial scaffold.",
+      "evidence": [
+        "2026-07-31: live gateway armed on PRAC account; scripts/capture-projectx-fixtures.mjs login+validate succeeded (read-only).",
+        "2026-07-31: tests/fixtures/projectx/live/auth_login.json and auth_validate.json (no raw token persisted; secret_scan passed)."
+      ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#1-verify-projectx-payload-contracts"
+        "docs/HANDOFF.md#1-verify-projectx-payload-contracts",
+        "scripts/capture-projectx-fixtures.mjs"
       ]
     },
     {
       "id": "TS-R2-02",
       "title": "Capture sanitized official ProjectX payload fixtures",
-      "status": "blocked",
+      "status": "ready",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -166,17 +169,21 @@
       "depends_on": [
         "TS-R2-01"
       ],
-      "evidence": [],
-      "blocked_reason": "Requires successful TS-R2-01 authentication against a real ProjectX session.",
+      "evidence": [
+        "2026-07-31: npm run capture:fixtures wrote tests/fixtures/projectx/live/* (REST + gateway health + stream_event_samples from evidence DB).",
+        "2026-07-31: manifest.json secret_scan=passed; redactSecrets + literal credential scan in capture script.",
+        "Remaining: raw login/validate envelope shapes (currently outcome metadata only); deliberate reconnect/disconnect corpus for TS-R2-05."
+      ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#1-verify-projectx-payload-contracts"
+        "docs/HANDOFF.md#1-verify-projectx-payload-contracts",
+        "tests/fixtures/projectx/live/manifest.json"
       ]
     },
     {
       "id": "TS-R2-03",
       "title": "Reconcile account, contract, positions, and conservative PnL with TopstepX UI",
-      "status": "blocked",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -187,16 +194,22 @@
       "depends_on": [
         "TS-R2-01"
       ],
-      "evidence": [],
-      "blocked_reason": "Requires successful TS-R2-01 authentication and a configured Topstep account.",
+      "evidence": [
+        "2026-07-31: TopstepX UI PRAC-V2-645601-15979101 — BAL $150,378.16, RP&L $378.16, UP&L $0, MNQU26, flat, MLL $145,500 (150K Combine allowance per https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit).",
+        "2026-07-31: gateway /packet — balance 150378.16, instrument_open 0, contract CON.F.US.MNQ.U26 (MNQU6); operator_provided_floor hard_loss_floor_usd 145500, current_buffer_usd 4878.16 after .env reconcile.",
+        "2026-07-31: prior mismatch (148000 floor) traced to express_funded_eod + INITIAL_MAXIMUM_LOSS=2000 (50K table); PRAC 150K requires $4,500 allowance / $145,500 floor or trading_combine_eod.",
+        "2026-07-31: fixtures tests/fixtures/projectx/live/accounts_search.json and open_positions.json match UI at capture time."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "tests/fixtures/projectx/live/manifest.json",
+        "https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit"
       ]
     },
     {
       "id": "TS-R2-04",
       "title": "Prove user-hub and market stream subscriptions",
-      "status": "blocked",
+      "status": "ready",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -207,8 +220,10 @@
       "depends_on": [
         "TS-R2-01"
       ],
-      "evidence": [],
-      "blocked_reason": "Requires successful TS-R2-01 authentication and active market data entitlement.",
+      "evidence": [
+        "2026-07-31: gateway_health fixture shows userStream/marketStream connected + reconciliation generation; stream_event_samples includes quote/trade/depth/order/position lifecycle types.",
+        "Remaining: explicit subscription list proof document per HANDOFF #2."
+      ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
         "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"

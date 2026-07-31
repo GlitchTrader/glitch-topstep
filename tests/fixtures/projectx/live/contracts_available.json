@@ -1,0 +1,461 @@
+[
+  {
+    "id": "CON.F.US.BP6.U26",
+    "name": "6BU6",
+    "description": "British Pound (Globex): September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 6.25,
+    "activeContract": true,
+    "symbolId": "F.US.BP6"
+  },
+  {
+    "id": "CON.F.US.CA6.U26",
+    "name": "6CU6",
+    "description": "Canadian Dollar (Globex): September 2026",
+    "tickSize": 0.00005,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.CA6"
+  },
+  {
+    "id": "CON.F.US.CLE.U26",
+    "name": "CLU6",
+    "description": "Crude Light (Globex): September 2026",
+    "tickSize": 0.01,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.CLE"
+  },
+  {
+    "id": "CON.F.US.CPE.U26",
+    "name": "HGU6",
+    "description": "Copper (Globex): September 2026",
+    "tickSize": 0.0005,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.CPE"
+  },
+  {
+    "id": "CON.F.US.DA6.U26",
+    "name": "6AU6",
+    "description": "Australian Dollar (Globex): September 2026",
+    "tickSize": 0.00005,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.DA6"
+  },
+  {
+    "id": "CON.F.US.EEU.U26",
+    "name": "E7U6",
+    "description": "E-mini Euro FX: September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 6.25,
+    "activeContract": true,
+    "symbolId": "F.US.EEU"
+  },
+  {
+    "id": "CON.F.US.ENQ.U26",
+    "name": "NQU6",
+    "description": "E-mini NASDAQ-100: September 2026",
+    "tickSize": 0.25,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.ENQ"
+  },
+  {
+    "id": "CON.F.US.EP.U26",
+    "name": "ESU6",
+    "description": "E-Mini S&P 500: September 2026",
+    "tickSize": 0.25,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.EP"
+  },
+  {
+    "id": "CON.F.US.EU6.U26",
+    "name": "6EU6",
+    "description": "Euro FX (Globex): September 2026",
+    "tickSize": 0.00005,
+    "tickValue": 6.25,
+    "activeContract": true,
+    "symbolId": "F.US.EU6"
+  },
+  {
+    "id": "CON.F.US.FVA.U26",
+    "name": "ZFU6",
+    "description": "5 Year US Treasury Notes (Globex): September 2026",
+    "tickSize": 0.0078125,
+    "tickValue": 7.8125,
+    "activeContract": true,
+    "symbolId": "F.US.FVA"
+  },
+  {
+    "id": "CON.F.US.GCE.Z26",
+    "name": "GCZ6",
+    "description": "Gold (Globex): December 2026",
+    "tickSize": 0.1,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.GCE"
+  },
+  {
+    "id": "CON.F.US.GLE.V26",
+    "name": "LEV6",
+    "description": "Live Cattle (Globex): October 2026",
+    "tickSize": 0.025,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.GLE"
+  },
+  {
+    "id": "CON.F.US.GMET.Q26",
+    "name": "METQ6",
+    "description": "Micro Ether: August 2026",
+    "tickSize": 0.5,
+    "tickValue": 0.05,
+    "activeContract": true,
+    "symbolId": "F.US.GMET"
+  },
+  {
+    "id": "CON.F.US.HE.V26",
+    "name": "HEV6",
+    "description": "Lean Hogs (Globex): October 2026",
+    "tickSize": 0.025,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.HE"
+  },
+  {
+    "id": "CON.F.US.HOE.U26",
+    "name": "HOU6",
+    "description": "NY Harbor ULSD: September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 4.2,
+    "activeContract": true,
+    "symbolId": "F.US.HOE"
+  },
+  {
+    "id": "CON.F.US.JY6.U26",
+    "name": "6JU6",
+    "description": "Japanese Yen (Globex): September 2026",
+    "tickSize": 5e-7,
+    "tickValue": 6.25,
+    "activeContract": true,
+    "symbolId": "F.US.JY6"
+  },
+  {
+    "id": "CON.F.US.M2K.U26",
+    "name": "M2KU6",
+    "description": "Micro E-mini Russell 2000: September 2026",
+    "tickSize": 0.1,
+    "tickValue": 0.5,
+    "activeContract": true,
+    "symbolId": "F.US.M2K"
+  },
+  {
+    "id": "CON.F.US.M6A.U26",
+    "name": "M6AU6",
+    "description": "E-Micro AUD/USD: September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 1,
+    "activeContract": true,
+    "symbolId": "F.US.M6A"
+  },
+  {
+    "id": "CON.F.US.M6B.U26",
+    "name": "M6BU6",
+    "description": "E-Micro GBP/USD: September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 0.625,
+    "activeContract": true,
+    "symbolId": "F.US.M6B"
+  },
+  {
+    "id": "CON.F.US.M6E.U26",
+    "name": "M6EU6",
+    "description": "E-Micro EUR/USD: September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 1.25,
+    "activeContract": true,
+    "symbolId": "F.US.M6E"
+  },
+  {
+    "id": "CON.F.US.MBT.Q26",
+    "name": "MBTQ6",
+    "description": "Micro Bitcoin: August 2026",
+    "tickSize": 5,
+    "tickValue": 0.5,
+    "activeContract": true,
+    "symbolId": "F.US.MBT"
+  },
+  {
+    "id": "CON.F.US.MCLE.U26",
+    "name": "MCLU6",
+    "description": "Micro WTI Crude Oil: September 2026",
+    "tickSize": 0.01,
+    "tickValue": 1,
+    "activeContract": true,
+    "symbolId": "F.US.MCLE"
+  },
+  {
+    "id": "CON.F.US.MES.U26",
+    "name": "MESU6",
+    "description": "Micro E-mini S&P 500: September 2026",
+    "tickSize": 0.25,
+    "tickValue": 1.25,
+    "activeContract": true,
+    "symbolId": "F.US.MES"
+  },
+  {
+    "id": "CON.F.US.MGC.Z26",
+    "name": "MGCZ6",
+    "description": "Micro Gold: December 2026",
+    "tickSize": 0.1,
+    "tickValue": 1,
+    "activeContract": true,
+    "symbolId": "F.US.MGC"
+  },
+  {
+    "id": "CON.F.US.MHG.U26",
+    "name": "MHGU6",
+    "description": "Micro Copper: September 2026",
+    "tickSize": 0.0005,
+    "tickValue": 1.25,
+    "activeContract": true,
+    "symbolId": "F.US.MHG"
+  },
+  {
+    "id": "CON.F.US.MNG.U26",
+    "name": "MNGU6",
+    "description": "Micro Henry Hub Natural Gas: September 2026",
+    "tickSize": 0.001,
+    "tickValue": 1,
+    "activeContract": true,
+    "symbolId": "F.US.MNG"
+  },
+  {
+    "id": "CON.F.US.MNQ.U26",
+    "name": "MNQU6",
+    "description": "Micro E-mini Nasdaq-100: September 2026",
+    "tickSize": 0.25,
+    "tickValue": 0.5,
+    "activeContract": true,
+    "symbolId": "F.US.MNQ"
+  },
+  {
+    "id": "CON.F.US.MX6.U26",
+    "name": "6MU6",
+    "description": "Mexican Peso (Globex): September 2026",
+    "tickSize": 0.00001,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.MX6"
+  },
+  {
+    "id": "CON.F.US.MYM.U26",
+    "name": "MYMU6",
+    "description": "Micro E-mini Dow $0.50: September 2026",
+    "tickSize": 1,
+    "tickValue": 0.5,
+    "activeContract": true,
+    "symbolId": "F.US.MYM"
+  },
+  {
+    "id": "CON.F.US.NE6.U26",
+    "name": "6NU6",
+    "description": "New Zealand Dollar (Globex): September 2026",
+    "tickSize": 0.00005,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.NE6"
+  },
+  {
+    "id": "CON.F.US.NGE.U26",
+    "name": "NGU6",
+    "description": "Natural Gas (Globex): September 2026",
+    "tickSize": 0.001,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.NGE"
+  },
+  {
+    "id": "CON.F.US.NKD.U26",
+    "name": "NKDU6",
+    "description": "Nikkei 225 (Globex): September 2026",
+    "tickSize": 5,
+    "tickValue": 25,
+    "activeContract": true,
+    "symbolId": "F.US.NKD"
+  },
+  {
+    "id": "CON.F.US.NQG.U26",
+    "name": "QGU6",
+    "description": "E-Mini Natural Gas: September 2026",
+    "tickSize": 0.005,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.NQG"
+  },
+  {
+    "id": "CON.F.US.NQM.U26",
+    "name": "QMU6",
+    "description": "E-Mini Crude Oil: September 2026",
+    "tickSize": 0.025,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.NQM"
+  },
+  {
+    "id": "CON.F.US.PLE.V26",
+    "name": "PLV6",
+    "description": "Platinum (Globex): October 2026",
+    "tickSize": 0.1,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.PLE"
+  },
+  {
+    "id": "CON.F.US.RBE.U26",
+    "name": "RBU6",
+    "description": "RBOB Gasoline (Globex): September 2026",
+    "tickSize": 0.0001,
+    "tickValue": 4.2,
+    "activeContract": true,
+    "symbolId": "F.US.RBE"
+  },
+  {
+    "id": "CON.F.US.RTY.U26",
+    "name": "RTYU6",
+    "description": "E-mini Russell 2000: September 2026",
+    "tickSize": 0.1,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.RTY"
+  },
+  {
+    "id": "CON.F.US.SF6.U26",
+    "name": "6SU6",
+    "description": "Swiss Franc (Globex): September 2026",
+    "tickSize": 0.00005,
+    "tickValue": 6.25,
+    "activeContract": true,
+    "symbolId": "F.US.SF6"
+  },
+  {
+    "id": "CON.F.US.SIE.U26",
+    "name": "SIU6",
+    "description": "Silver (Globex): September 2026",
+    "tickSize": 0.005,
+    "tickValue": 25,
+    "activeContract": true,
+    "symbolId": "F.US.SIE"
+  },
+  {
+    "id": "CON.F.US.SIL.U26",
+    "name": "SILU6",
+    "description": "Micro Silver: September 2026",
+    "tickSize": 0.005,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.SIL"
+  },
+  {
+    "id": "CON.F.US.TNA.U26",
+    "name": "TNU6",
+    "description": "Ultra 10yr Treasury Note (Globex): September 2026",
+    "tickSize": 0.015625,
+    "tickValue": 15.625,
+    "activeContract": true,
+    "symbolId": "F.US.TNA"
+  },
+  {
+    "id": "CON.F.US.TUA.U26",
+    "name": "ZTU6",
+    "description": "2 Year US Treasury Note (Globex): September 2026",
+    "tickSize": 0.00390625,
+    "tickValue": 7.8125,
+    "activeContract": true,
+    "symbolId": "F.US.TUA"
+  },
+  {
+    "id": "CON.F.US.TYA.U26",
+    "name": "ZNU6",
+    "description": "10yr US Treasury Notes (Globex): September 2026",
+    "tickSize": 0.015625,
+    "tickValue": 15.625,
+    "activeContract": true,
+    "symbolId": "F.US.TYA"
+  },
+  {
+    "id": "CON.F.US.ULA.U26",
+    "name": "UBU6",
+    "description": "Ultra T-Bond (Globex): September 2026",
+    "tickSize": 0.03125,
+    "tickValue": 31.25,
+    "activeContract": true,
+    "symbolId": "F.US.ULA"
+  },
+  {
+    "id": "CON.F.US.USA.U26",
+    "name": "ZBU6",
+    "description": "30yr US Treasury Bonds (Globex): September 2026",
+    "tickSize": 0.03125,
+    "tickValue": 31.25,
+    "activeContract": true,
+    "symbolId": "F.US.USA"
+  },
+  {
+    "id": "CON.F.US.YM.U26",
+    "name": "YMU6",
+    "description": "E-mini Dow ($5): September 2026",
+    "tickSize": 1,
+    "tickValue": 5,
+    "activeContract": true,
+    "symbolId": "F.US.YM"
+  },
+  {
+    "id": "CON.F.US.ZCE.Z26",
+    "name": "ZCZ6",
+    "description": "Corn (Globex): December 2026",
+    "tickSize": 0.25,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.ZCE"
+  },
+  {
+    "id": "CON.F.US.ZLE.Z26",
+    "name": "ZLZ6",
+    "description": "Soybean Oil (Globex): December 2026",
+    "tickSize": 0.01,
+    "tickValue": 6,
+    "activeContract": true,
+    "symbolId": "F.US.ZLE"
+  },
+  {
+    "id": "CON.F.US.ZME.Z26",
+    "name": "ZMZ6",
+    "description": "Soybean Meal (Globex): December 2026",
+    "tickSize": 0.1,
+    "tickValue": 10,
+    "activeContract": true,
+    "symbolId": "F.US.ZME"
+  },
+  {
+    "id": "CON.F.US.ZSE.X26",
+    "name": "ZSX6",
+    "description": "Soybeans (Globex): November 2026",
+    "tickSize": 0.25,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.ZSE"
+  },
+  {
+    "id": "CON.F.US.ZWA.U26",
+    "name": "ZWU6",
+    "description": "Wheat (Globex): September 2026",
+    "tickSize": 0.25,
+    "tickValue": 12.5,
+    "activeContract": true,
+    "symbolId": "F.US.ZWA"
+  }
+]
