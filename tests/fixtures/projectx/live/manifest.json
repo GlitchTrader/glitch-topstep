@@ -1,6 +1,6 @@
 {
   "schema_version": "glitch.projectx.fixture_capture.v1",
-  "captured_utc": "2026-07-31T18:46:59.951Z",
+  "captured_utc": "2026-07-31T19:32:11.617Z",
   "environment": "projectx_shadow_read_only",
   "api_url": "https://api.topstepx.com",
   "scope": {
@@ -54,8 +54,12 @@
     {
       "name": "stream_event_samples",
       "path": "tests\\fixtures\\projectx\\live\\stream_event_samples.json"
+    },
+    {
+      "name": "stream_subscriptions_proof",
+      "path": "tests\\fixtures\\projectx\\live\\stream_subscriptions_proof.json"
     }
   ],
   "secret_scan": "passed",
-  "note": "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB."
+  "note": "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB; stream_subscriptions_proof validates TS-R2-04."
 }

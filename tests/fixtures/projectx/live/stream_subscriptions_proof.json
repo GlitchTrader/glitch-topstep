@@ -1,0 +1,101 @@
+{
+  "schema_version": "glitch.projectx.stream_subscriptions_proof.v1",
+  "captured_utc": "2026-07-31T19:32:11.617Z",
+  "scope": {
+    "account_id": 26080387,
+    "account_name": "PRAC-V2-645601-15979101",
+    "contract_id": "CON.F.US.MNQ.U26",
+    "instrument": "MNQ"
+  },
+  "code_subscriptions": {
+    "user_hub": [
+      {
+        "hub": "user",
+        "invoke": "SubscribeAccounts",
+        "scope": "global"
+      },
+      {
+        "hub": "user",
+        "invoke": "SubscribeOrders",
+        "scope": "account"
+      },
+      {
+        "hub": "user",
+        "invoke": "SubscribePositions",
+        "scope": "account"
+      },
+      {
+        "hub": "user",
+        "invoke": "SubscribeTrades",
+        "scope": "account"
+      }
+    ],
+    "market_hub": [
+      {
+        "hub": "market",
+        "invoke": "SubscribeContractQuotes",
+        "scope": "contract"
+      },
+      {
+        "hub": "market",
+        "invoke": "SubscribeContractTrades",
+        "scope": "contract"
+      },
+      {
+        "hub": "market",
+        "invoke": "SubscribeContractMarketDepth",
+        "scope": "contract"
+      }
+    ]
+  },
+  "connection_health": {
+    "user_stream_state": "connected",
+    "market_stream_state": "connected",
+    "last_user_event_utc": null,
+    "last_market_event_utc": "2026-07-31T19:32:13.701Z",
+    "reconciliation_state": "succeeded",
+    "reconciliation_generation": 1,
+    "operational_generation": 1
+  },
+  "observed_event_types": {
+    "projectx_lifecycle": [
+      "market_closed",
+      "market_connected_and_subscribed",
+      "market_connecting",
+      "market_reconnect_failed",
+      "market_reconnected_and_subscribed",
+      "market_reconnecting",
+      "user_closed",
+      "user_connected_and_subscribed",
+      "user_connecting",
+      "user_reconnect_failed",
+      "user_reconnected_and_subscribed",
+      "user_reconnecting"
+    ],
+    "projectx_market_stream": [
+      "depth",
+      "market_trade",
+      "quote"
+    ],
+    "projectx_rest": [
+      "accounts_snapshot",
+      "contracts_snapshot",
+      "historical_order",
+      "historical_trade",
+      "open_orders_snapshot",
+      "positions_snapshot"
+    ],
+    "projectx_user_stream": [
+      "account",
+      "order",
+      "position",
+      "trade"
+    ]
+  },
+  "order_flow": {
+    "trade_count_60s": 615,
+    "quote_age_ms": 46
+  },
+  "proof_passed": true,
+  "proof_failures": []
+}

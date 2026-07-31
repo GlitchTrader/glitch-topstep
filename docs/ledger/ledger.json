@@ -215,7 +215,7 @@
     {
       "id": "TS-R2-04",
       "title": "Prove user-hub and market stream subscriptions",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -227,12 +227,16 @@
         "TS-R2-01"
       ],
       "evidence": [
-        "2026-07-31: gateway_health fixture shows userStream/marketStream connected + reconciliation generation; stream_event_samples includes quote/trade/depth/order/position lifecycle types.",
-        "Remaining: explicit subscription list proof document per HANDOFF #2."
+        "2026-07-31: src/projectx/stream-subscriptions.ts documents SubscribeAccounts/Orders/Positions/Trades and SubscribeContractQuotes/Trades/MarketDepth invoked by ProjectXRealtimeService.",
+        "2026-07-31: scripts/capture-projectx-fixtures.mjs emits stream_subscriptions_proof.json (live market quote/trade/depth + lifecycle connected + merged user-stream corpus); fails closed when proof incomplete.",
+        "2026-07-31: tests/stream-subscriptions-proof.test.ts validates live fixture against canonical subscription list and maps HANDOFF #2 fields to health.data_quality.operational (userStream/marketStream/reconciliation.generation).",
+        "2026-07-31: live capture on Windows PRAC gateway during open session — gateway_mode armed, trade_count_60s>0, market events 33k+ in evidence DB."
       ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"
+        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids",
+        "src/projectx/stream-subscriptions.ts",
+        "tests/fixtures/projectx/live/stream_subscriptions_proof.json"
       ]
     },
     {
@@ -250,7 +254,7 @@
         "TS-R2-04"
       ],
       "evidence": [],
-      "blocked_reason": "Requires proven live stream subscriptions from TS-R2-04.",
+      "blocked_reason": "Requires disconnect/reconnect fixture corpus from TS-R2-05; TS-R2-04 subscription proof is done.",
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
         "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"
