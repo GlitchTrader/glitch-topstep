@@ -37,6 +37,7 @@ export class LocalGatewayServer {
     private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
     private readonly coordinator: ExecutionCoordinator,
     ownershipService: ProjectXOrderOwnershipService | null = null,
+    private readonly acceptanceStreamGap?: () => Promise<{ phases: unknown[] }>,
   ) {
     const ownership = options.ownership;
     this.ownsOwnershipService = ownershipService === null && ownership !== undefined;
@@ -128,6 +129,19 @@ export class LocalGatewayServer {
             ? 503
             : 202;
         this.json(response, status, receipt);
+        return;
+      }
+      if (
+        process.env.GLITCH_ACCEPTANCE_STREAM_GAP === "1"
+        && request.method === "POST"
+        && url.pathname === "/acceptance/force-stream-gap"
+      ) {
+        if (!this.acceptanceStreamGap) {
+          this.json(response, 503, { error: "acceptance_stream_gap_unavailable" });
+          return;
+        }
+        const result = await this.acceptanceStreamGap();
+        this.json(response, 200, result);
         return;
       }
       this.json(response, 404, { error: "not_found" });

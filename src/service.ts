@@ -13,6 +13,11 @@ import { ProjectXApiClient, ProjectXApiError } from "./projectx/client.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
+import {
+  buildReconnectProof,
+  snapshotReconnectPhase,
+  type ReconnectProofPhase,
+} from "./projectx/reconnect-proof.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
@@ -352,6 +357,9 @@ export class GlitchTopstepService {
       (limit) => this.providerEvidenceStore.recent(limit),
       coordinator,
       this.ownershipService,
+      process.env.GLITCH_ACCEPTANCE_STREAM_GAP === "1"
+        ? () => this.forceAcceptanceStreamGap()
+        : undefined,
     );
     await this.gateway.start();
 
@@ -654,6 +662,55 @@ export class GlitchTopstepService {
         console.error("SQLite recovery receipt committed but JSONL evidence mirror failed", error);
       }
     }
+  }
+
+  public async forceAcceptanceStreamGap(): Promise<{ phases: ReconnectProofPhase[] }> {
+    if (process.env.GLITCH_ACCEPTANCE_STREAM_GAP !== "1") {
+      throw new Error("acceptance_stream_gap_forbidden");
+    }
+    if (!this.packets) {
+      throw new Error("packet_service_unavailable");
+    }
+
+    const accountId = this.config.scope.accountId;
+    const contractId = this.config.scope.contractId;
+    const stamp = () => new Date().toISOString();
+
+    const packetBefore = this.packets.current();
+    const hashBefore = packetBefore.market.snapshot_hash;
+    const baseline = snapshotReconnectPhase(
+      "baseline",
+      this.state.buildSnapshot(accountId, contractId),
+      hashBefore,
+      this.packets.resolve(hashBefore) !== null,
+      stamp(),
+    );
+
+    this.state.markStreamReconnecting("market", new Error("acceptance_forced_gap"));
+    this.packets.invalidateAll();
+    const gap = snapshotReconnectPhase(
+      "after_stream_gap",
+      this.state.buildSnapshot(accountId, contractId),
+      hashBefore,
+      this.packets.resolve(hashBefore) !== null,
+      stamp(),
+    );
+
+    await this.reconcile();
+    this.state.markStreamConnected("market");
+    this.state.markStreamEvent("market");
+
+    const packetAfter = this.packets.current();
+    const hashAfter = packetAfter.market.snapshot_hash;
+    const settled = snapshotReconnectPhase(
+      "after_reconciliation",
+      this.state.buildSnapshot(accountId, contractId),
+      hashAfter,
+      this.packets.resolve(hashAfter) !== null,
+      stamp(),
+    );
+
+    return { phases: [baseline, gap, settled] };
   }
 }
 

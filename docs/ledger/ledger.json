@@ -242,7 +242,7 @@
     {
       "id": "TS-R2-05",
       "title": "Prove disconnect, reconnect, generation invalidation, and REST reconciliation",
-      "status": "blocked",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -253,11 +253,16 @@
       "depends_on": [
         "TS-R2-04"
       ],
-      "evidence": [],
-      "blocked_reason": "Requires disconnect/reconnect fixture corpus from TS-R2-05; TS-R2-04 subscription proof is done.",
+      "evidence": [
+        "2026-07-31: src/projectx/reconnect-proof.ts + tests/reconnect-proof.test.ts prove generation bump, packet invalidation, and reconciliation_current gate.",
+        "2026-07-31: GLITCH_ACCEPTANCE_STREAM_GAP=1 exposes POST /acceptance/force-stream-gap (loopback + bearer only) mirroring onStateInvalidated + markStreamReconnecting paths.",
+        "2026-07-31: npm run capture:reconnect on Windows PRAC gateway — live fixture reconnect_proof.json shows gen 1→2, packet unresolvable during gap, REST reconcile, new resolvable packet at gen 2."
+      ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids"
+        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids",
+        "src/projectx/reconnect-proof.ts",
+        "tests/fixtures/projectx/live/reconnect_proof.json"
       ]
     },
     {
