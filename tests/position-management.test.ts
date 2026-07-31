@@ -839,6 +839,294 @@ describe("position management coordinator", () => {
     }
   });
 
+  it("rearms naked tranche protection on the execution queue with generation tags", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-rearm-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const entry: TradeIntent = {
+        schemaVersion: "glitch.intent.v2",
+        intentId: ENTRY_INTENT_ID,
+        createdUtc: "2026-07-21T12:00:04Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "ENTER_LONG",
+        confidence: 0.6,
+        snapshotHash: "snapshot-hash",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v2",
+        reason: "Entry for rearm.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "ENTER_LONG",
+        },
+        quantity: 1,
+        orderType: "MARKET",
+        stopLoss: 19_990,
+        takeProfit1: 20_020,
+      };
+      store.registerIntent(entry, "2026-07-21T12:00:05Z");
+      store.prepareMutation(
+        entry.intentId,
+        "place_order",
+        { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 0, size: 1 },
+        `glt-${ENTRY_INTENT_ID}`,
+        "2026-07-21T12:00:06Z",
+      );
+      store.markMutationSubmitting(entry.intentId, "2026-07-21T12:00:07Z");
+      store.markMutationSubmitted(entry.intentId, 9001, "2026-07-21T12:00:08Z");
+
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.openOrders = [];
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = {
+        ...current.quote!,
+        timestamp: now.toISOString(),
+        bestBid: 20_000,
+        bestAsk: 20_000.25,
+        lastPrice: 20_000,
+      };
+
+      const placed: Array<{ type: number; customTag?: string | null }> = [];
+      const api = {
+        placeOrder: async (request: { type: number; customTag?: string | null }) => {
+          placed.push({ type: request.type, customTag: request.customTag });
+          return 9400 + placed.length;
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+        searchOrders: async () => [],
+        cancelOrder: async () => undefined,
+      } as unknown as ProjectXApiClient;
+
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        () => null,
+        () => undefined,
+        () => [tranche(ENTRY_INTENT_ID, 1, 9001)],
+      );
+
+      const first = await coordinator.rearmTrancheProtection(current);
+      const second = await coordinator.rearmTrancheProtection(current);
+      assert.equal(first, true);
+      assert.equal(second, false);
+      assert.equal(placed.length, 2);
+      assert.ok(placed.every((order) => String(order.customTag ?? "").includes("-r1-")));
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("defers rearm while an open EXIT mutation is present", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-rearm-defer-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const exitId = "00000000-0000-4000-8000-00000000b007";
+      store.registerIntent({
+        schemaVersion: "glitch.intent.v2",
+        intentId: exitId,
+        createdUtc: "2026-07-21T12:10:00Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshotHash: "snapshot-hash",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v2",
+        reason: "Exit pending.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "EXIT",
+        },
+        quantity: 1,
+        targetIntentId: ENTRY_INTENT_ID,
+      }, "2026-07-21T12:10:00Z");
+      store.prepareMutation(
+        exitId,
+        "place_order",
+        { accountId: 101, contractId: "CON.F.US.MNQ.U26", type: 2, side: 1, size: 1 },
+        `glt-${exitId}`,
+        "2026-07-21T12:10:01Z",
+      );
+      store.markMutationSubmitting(exitId, "2026-07-21T12:10:02Z");
+      store.markMutationSubmitted(exitId, 9501, "2026-07-21T12:10:03Z");
+
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.openOrders = [];
+      let placeCalls = 0;
+      const api = {
+        placeOrder: async () => {
+          placeCalls += 1;
+          return 9601;
+        },
+        searchOrders: async () => [],
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        () => null,
+        () => undefined,
+        () => [tranche(ENTRY_INTENT_ID, 1, 9001)],
+      );
+      const rearmed = await coordinator.rearmTrancheProtection(current);
+      assert.equal(rearmed, false);
+      assert.equal(placeCalls, 0);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("submits EXIT under degraded_armed when quiet tape would block new exposure", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-degraded-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(0),
+      );
+      assert.equal(packet.execution.gateway_mode, "degraded_armed");
+      store.recordIssuedPacket(packet);
+      let closed = false;
+      const api = {
+        placeOrder: async () => {
+          throw new Error("partial placeOrder unexpected");
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => {
+          closed = true;
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b005",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Flatten under quiet tape.",
+        decision_audit: audit("EXIT"),
+      });
+      assert.equal(receipt.status, "closed");
+      assert.equal(receipt.code, "close_contract_submitted");
+      assert.equal(closed, true);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects EXIT when trading is disabled", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-disabled-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = { ...config(directory), tradingMode: "disabled" as const };
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        "armed",
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => 1,
+          modifyOrder: async () => undefined,
+          closePosition: async () => undefined,
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b006",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v2",
+        reason: "Should reject.",
+        decision_audit: audit("EXIT"),
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "trading_disabled_by_operator");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("returns closed when reconciliation already marked EXIT submitted during closePosition", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-race-"));
     const store = new SqliteExecutionStore(":memory:");

@@ -353,24 +353,28 @@ function reconcileEntryMutation(
 ): { orderId: number | null; error: string } {
   if (mutation.providerOrderId !== null) {
     const observed = orders.find((order) => order.id === mutation.providerOrderId);
-    if (observed) {
-      const request = mutation.request;
-      const expectedSide = requiredInteger(request.side, "side");
-      const expectedSize = requiredInteger(request.size, "size");
-      const expectedType = requiredInteger(request.type, "type");
-      if (
-        observed.accountId === accountId
-        && observed.contractId === contractId
-        && observed.side === expectedSide
-        && observed.size === expectedSize
-        && observed.type === expectedType
-      ) {
-        return { orderId: observed.id, error: "" };
-      }
+    if (!observed) {
+      return {
+        orderId: null,
+        error: "place_order_outcome_ambiguous:provider_order_id_not_found",
+      };
+    }
+    const request = mutation.request;
+    const expectedSide = requiredInteger(request.side, "side");
+    const expectedSize = requiredInteger(request.size, "size");
+    const expectedType = requiredInteger(request.type, "type");
+    if (
+      observed.accountId === accountId
+      && observed.contractId === contractId
+      && observed.side === expectedSide
+      && observed.size === expectedSize
+      && observed.type === expectedType
+    ) {
+      return { orderId: observed.id, error: "" };
     }
     return {
-      orderId: mutation.providerOrderId,
-      error: "",
+      orderId: null,
+      error: "place_order_outcome_ambiguous:provider_order_id_identity_mismatch",
     };
   }
 

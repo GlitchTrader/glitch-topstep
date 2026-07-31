@@ -51,6 +51,11 @@ export function gatewayModePermitsLiveOrders(mode: EffectiveGatewayMode): boolea
   return mode === "armed";
 }
 
+/** EXIT / flatten: entry-only armed downgrades must not strand open exposure. */
+export function gatewayModePermitsRiskReduction(mode: EffectiveGatewayMode): boolean {
+  return mode === "armed" || mode === "degraded_armed";
+}
+
 export function buildExecutionGates(
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
@@ -61,10 +66,37 @@ export function buildExecutionGates(
   now: Date = new Date(),
 ): ExecutionGate[] {
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
+  const gatewayMode = resolveGatewayMode(tradingMode, snapshot, risk, orderFlow, now);
   return [
     ...armedSafetyGates(snapshot, risk, orderFlow, quality),
+    riskReductionGate(tradingMode, gatewayMode.effective, snapshot),
     newExposureGate(snapshot, recovery, tradingMode, quality, maxContracts),
   ];
+}
+
+function riskReductionGate(
+  tradingMode: "disabled" | "shadow" | "armed",
+  effective: EffectiveGatewayMode,
+  snapshot: AccountVenueSnapshot,
+): ExecutionGate {
+  if (tradingMode === "disabled") {
+    return {
+      id: "risk_reduction_technically_supported",
+      passed: false,
+      detail: "trading_disabled",
+    };
+  }
+  if (snapshot.instrumentOpenContracts <= 0) {
+    return { id: "risk_reduction_technically_supported", passed: true };
+  }
+  if (!gatewayModePermitsRiskReduction(effective)) {
+    return {
+      id: "risk_reduction_technically_supported",
+      passed: false,
+      detail: "gateway_mode",
+    };
+  }
+  return { id: "risk_reduction_technically_supported", passed: true };
 }
 
 function armedSafetyGates(

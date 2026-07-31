@@ -11,6 +11,7 @@ import type {
 import { computeIntentBodyHash } from "../domain/intent-body-hash.js";
 import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+import { queryExitTargetedIntentIds } from "../ownership/tranches.js";
 
 export type IntentRegistrationResult =
   | { status: "claimed" }
@@ -384,6 +385,27 @@ export class SqliteExecutionStore {
   public recordRecoveryResult(atUtc: string, error: string | null): void {
     this.setMeta("last_recovery_utc", atUtc);
     this.setMeta("last_recovery_error", error);
+  }
+
+  public submittedExitTargetIntentIds(): Set<string> {
+    return queryExitTargetedIntentIds(this.database);
+  }
+
+  public hasOpenExitMutation(): boolean {
+    const row = this.database.prepare(`
+      SELECT 1 AS ok
+      FROM intents AS intent
+      JOIN execution_outbox AS outbox ON outbox.intent_id = intent.intent_id
+      LEFT JOIN execution_receipts AS receipt ON receipt.intent_id = intent.intent_id
+      WHERE intent.action = 'EXIT'
+        AND outbox.state IN ('prepared', 'submitting', 'submitted')
+        AND (
+          receipt.status IS NULL
+          OR receipt.status NOT IN ('rejected', 'ignored', 'ambiguous', 'closed')
+        )
+      LIMIT 1
+    `).get() as { ok: number } | undefined;
+    return row !== undefined;
   }
 
   private migrate(): void {
