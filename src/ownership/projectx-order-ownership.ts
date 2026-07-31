@@ -17,6 +17,7 @@ import {
 import { isWorkingOrder } from "./working-orders.js";
 import {
   buildTranches,
+  queryExitTargetedIntentIds,
   queryIntentRegistrationTimes,
 } from "./tranches.js";
 
@@ -86,6 +87,7 @@ export class ProjectXOrderOwnershipService {
       JOIN intents AS intent ON intent.intent_id = outbox.intent_id
       WHERE outbox.operation = 'place_order'
         AND outbox.state = 'submitted'
+        AND intent.action IN ('ENTER_LONG', 'ENTER_SHORT')
       ORDER BY outbox.created_utc ASC, outbox.intent_id ASC
     `).all() as unknown as SubmittedEntryRow[];
 
@@ -119,7 +121,12 @@ export class ProjectXOrderOwnershipService {
 
     const positionOpen = venueOpenContracts > 0;
     const intentCreatedUtc = queryIntentRegistrationTimes(this.executionDatabase);
-    const tranches = buildTranches(entries, intentCreatedUtc, venueOpenContracts);
+    const tranches = buildTranches(
+      entries,
+      intentCreatedUtc,
+      venueOpenContracts,
+      queryExitTargetedIntentIds(this.executionDatabase),
+    );
     return {
       schema_version: "glitch.projectx.order_ownership.v1",
       generated_utc: this.now().toISOString(),

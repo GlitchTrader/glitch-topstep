@@ -114,6 +114,20 @@ describe("tranche projection", () => {
     assert.equal(byIntent.get(ENTRY_A), 0);
   });
 
+  it("leaves the contract with the tranche no exit named when every bracket is gone", () => {
+    // Auto OCO cancelled both bracket groups on the partial exit of B, so live protection
+    // proves nothing; only the exit target says which tranche was meant to close.
+    const tranches = buildTranches(
+      [entry(ENTRY_A, 1, 9001, false), entry(ENTRY_B, 1, 9002, false)],
+      CREATED,
+      1,
+      new Set([ENTRY_B]),
+    );
+    const byIntent = new Map(tranches.map((tranche) => [tranche.intent_id, tranche.remaining_qty]));
+    assert.equal(byIntent.get(ENTRY_A), 1);
+    assert.equal(byIntent.get(ENTRY_B), 0);
+  });
+
   it("ignores entries that never filled", () => {
     const tranches = buildTranches(
       [entry(ENTRY_A, 0, 9001), entry(ENTRY_B, 1, 9002)],

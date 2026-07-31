@@ -55,13 +55,20 @@ function hasLiveProtectiveOrder(entry: EntryOrderOwnership): boolean {
  * caps the total and every surplus entry is closed by construction. Live protective orders
  * identify which entries still own those contracts: a targeted partial exit cancels the
  * brackets of the tranche it closes and leaves the survivor's brackets working, so a live
- * stop or target is direct venue evidence of ownership. Entries without live protection
- * absorb whatever is left over, newest first, because exits close oldest first.
+ * stop or target is direct venue evidence of ownership.
+ *
+ * When the venue drops every bracket — Auto OCO cancels the whole group on a partial exit —
+ * that evidence is gone and the entries are ranked instead: an entry an EXIT never named is
+ * still held, an entry an EXIT did name was meant to be closed, and newest wins inside each
+ * rank because a targeted exit closes the tranche it names rather than the oldest one. Exit
+ * targets only order the claim, never the quantities, so the venue count still caps the
+ * total and the projection cannot drift.
  */
 export function buildTranches(
   entries: readonly EntryOrderOwnership[],
   intentCreatedUtc: ReadonlyMap<string, string>,
   venueOpenContracts: number,
+  exitTargetedIntentIds: ReadonlySet<string> = new Set(),
 ): TrancheView[] {
   const filledEntries = [...entries]
     .filter((entry) => entry.effectiveFilledQuantity > 0)
@@ -72,9 +79,11 @@ export function buildTranches(
         || left.intentId.localeCompare(right.intentId);
     });
 
+  const unprotected = filledEntries.filter((entry) => !hasLiveProtectiveOrder(entry)).reverse();
   const claimOrder = [
     ...filledEntries.filter((entry) => hasLiveProtectiveOrder(entry)),
-    ...filledEntries.filter((entry) => !hasLiveProtectiveOrder(entry)).reverse(),
+    ...unprotected.filter((entry) => !exitTargetedIntentIds.has(entry.intentId)),
+    ...unprotected.filter((entry) => exitTargetedIntentIds.has(entry.intentId)),
   ];
 
   let unassigned = Math.max(0, venueOpenContracts);
@@ -93,6 +102,37 @@ export function buildTranches(
     protection: protectionView(entry.protection),
     created_utc: intentCreatedUtc.get(entry.intentId) ?? "",
   }));
+}
+
+/** Entries that a submitted EXIT named as its target, i.e. the ones we meant to close. */
+export function queryExitTargetedIntentIds(database: DatabaseSync): Set<string> {
+  const rows = database.prepare(`
+    SELECT intent.payload_json
+    FROM intents AS intent
+    JOIN execution_outbox AS outbox ON outbox.intent_id = intent.intent_id
+    LEFT JOIN execution_receipts AS receipt ON receipt.intent_id = intent.intent_id
+    WHERE intent.action = 'EXIT'
+      AND outbox.state = 'submitted'
+      AND (receipt.status IS NULL OR receipt.status NOT IN ('rejected', 'ignored', 'ambiguous'))
+  `).all() as Array<{ payload_json: string }>;
+  const targets = new Set<string>();
+  for (const row of rows) {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(row.payload_json);
+    } catch {
+      continue;
+    }
+    if (typeof payload !== "object" || payload === null) {
+      continue;
+    }
+    const record = payload as Record<string, unknown>;
+    const target = record.target_intent_id ?? record.targetIntentId;
+    if (typeof target === "string" && target.length > 0) {
+      targets.add(target);
+    }
+  }
+  return targets;
 }
 
 export function queryIntentRegistrationTimes(database: DatabaseSync): Map<string, string> {
