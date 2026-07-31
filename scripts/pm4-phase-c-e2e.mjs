@@ -145,9 +145,9 @@ function alignTick(price) {
   return Math.round(price / TICK) * TICK;
 }
 
-// 250 ticks = 62.5 MNQ points. Live open/RTH swings routinely travel 25+ points in under a
-// minute, so the old 100-tick geometry was getting stopped or targeted before EXIT_B could run.
-const WIDE_BRACKET_TICKS = 250;
+// 400 ticks = 100 MNQ points. Live open/RTH swings routinely travel 30-60 points in under a
+// minute after partial exits, so tighter geometry gets the survivor stopped before MOVE_STOP.
+const WIDE_BRACKET_TICKS = 400;
 
 function wideShortBrackets(pkt) {
   const ask = alignTick(pkt.market?.ask ?? pkt.market?.last ?? pkt.market?.bid);
@@ -855,7 +855,14 @@ async function runTrancheScenario(scenario, {
     trancheAMid !== undefined
     && trancheAMid.remaining_qty === 1;
 
-  await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
+  if (trancheAMid?.protection?.status === "proven") {
+    steps.push({
+      step: `${prefix}_POST_EXIT_B_ALREADY_PROVEN`,
+      tranche_a_protection: trancheAMid.protection.status,
+    });
+  } else {
+    await waitLiveProtection(steps, `${prefix}_POST_EXIT_B`, trancheAIntentIdResolved);
+  }
 
   pkt = await packet();
   const trancheA = trancheAMid;
