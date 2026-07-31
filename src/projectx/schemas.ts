@@ -165,6 +165,12 @@ export function parseOrder(input: unknown): OrderInfo {
     ...(input.customTag === null || typeof input.customTag === "string"
       ? { customTag: input.customTag as string | null }
       : {}),
+    ...(input.parentOrderId === null || input.parentOrderId === undefined
+      ? {}
+      : { parentOrderId: coercedInteger(input, "parentOrderId") }),
+    ...(input.linkedOrderId === null || input.linkedOrderId === undefined
+      ? {}
+      : { linkedOrderId: coercedInteger(input, "linkedOrderId") }),
   };
 }
 

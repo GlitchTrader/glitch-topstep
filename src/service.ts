@@ -262,17 +262,16 @@ export class GlitchTopstepService {
     }, this.historySyncIntervalMs);
     this.historySyncTimer.unref();
 
+    // Refreshing observation data does not retract a packet: it feeds the snapshot hash, so a
+    // stale packet already fails to resolve. Invalidating here only killed packets a client
+    // was still holding.
     this.marketObservationTimer = setInterval(() => {
-      void this.marketObservation.refresh().then(() => {
-        this.packets?.invalidateAll();
-      });
+      void this.marketObservation.refresh();
     }, MARKET_OBSERVATION_REFRESH_MS);
     this.marketObservationTimer.unref();
 
     this.orderFlowTimer = setInterval(() => {
-      void this.orderFlow?.refresh().then(() => {
-        this.packets?.invalidateAll();
-      });
+      void this.orderFlow?.refresh();
     }, ORDER_FLOW_REFRESH_MS);
     this.orderFlowTimer.unref();
 
@@ -537,20 +536,6 @@ export class GlitchTopstepService {
       }
       if (latchCleared || receiptReconciliation.changed) {
         this.packets?.invalidateAll();
-      }
-      const liveSnapshot = this.state.buildSnapshot(
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-      );
-      if (
-        this.coordinator
-        && liveSnapshot.instrumentOpenContracts > 0
-        && this.config.tradingMode === "armed"
-      ) {
-        const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
-        if (rearmed) {
-          this.packets?.invalidateAll();
-        }
       }
     } catch (error) {
       this.state.markReconciliationFailed(error);

@@ -17,9 +17,7 @@ import {
 import { isWorkingOrder } from "./working-orders.js";
 import {
   buildTranches,
-  filterProvenExitAllocations,
   queryIntentRegistrationTimes,
-  querySubmittedExitAllocations,
 } from "./tranches.js";
 
 export interface ProjectXOrderOwnershipOptions {
@@ -76,7 +74,7 @@ export class ProjectXOrderOwnershipService {
     this.executionDatabase.close();
   }
 
-  public current(venueOpenContracts?: number): ProjectXOrderOwnershipSnapshot {
+  public current(venueOpenContracts = 0): ProjectXOrderOwnershipSnapshot {
     const rows = this.executionDatabase.prepare(`
       SELECT
         outbox.intent_id,
@@ -91,7 +89,7 @@ export class ProjectXOrderOwnershipService {
       ORDER BY outbox.created_utc ASC, outbox.intent_id ASC
     `).all() as unknown as SubmittedEntryRow[];
 
-    const entries = rows.map((row) => this.buildEntry(row));
+    const entries = rows.map((row) => this.buildEntry(row, venueOpenContracts > 0));
     const issues: string[] = [];
     const providerOrderOwners = new Map<number, EntryOrderOwnership[]>();
     for (const entry of entries) {
@@ -119,14 +117,9 @@ export class ProjectXOrderOwnershipService {
       }
     }
 
-    const positionOpen = this.hasOpenPosition(entries);
+    const positionOpen = venueOpenContracts > 0;
     const intentCreatedUtc = queryIntentRegistrationTimes(this.executionDatabase);
-    const exitAllocations = filterProvenExitAllocations(
-      querySubmittedExitAllocations(this.executionDatabase),
-      venueOpenContracts,
-      [...intentCreatedUtc.values()],
-    );
-    const tranches = buildTranches(entries, intentCreatedUtc, exitAllocations);
+    const tranches = buildTranches(entries, intentCreatedUtc, venueOpenContracts);
     return {
       schema_version: "glitch.projectx.order_ownership.v1",
       generated_utc: this.now().toISOString(),
@@ -141,17 +134,18 @@ export class ProjectXOrderOwnershipService {
         (total, entry) => total + entry.fills.filter((fill) => !fill.trade.voided).length,
         0,
       ),
-      protection_status: aggregateProtectionStatus(entries, positionOpen),
+      // Only tranches that still hold contracts can be unprotected; closed entries keep
+      // their historical protection view without dragging the account status down.
+      protection_status: aggregateProtectionStatus(
+        tranches.filter((tranche) => tranche.remaining_qty > 0),
+        positionOpen,
+      ),
       issues,
       authority: "Only explicit durable provider identities are attributed; price and timing proximity are never ownership evidence.",
     };
   }
 
-  private hasOpenPosition(entries: EntryOrderOwnership[]): boolean {
-    return entries.some((entry) => entry.effectiveFilledQuantity > 0);
-  }
-
-  private buildEntry(row: SubmittedEntryRow): EntryOrderOwnership {
+  private buildEntry(row: SubmittedEntryRow, instrumentOpen: boolean): EntryOrderOwnership {
     const issues: string[] = [];
     let identityComplete = true;
     const request = parseRecord(row.request_json, "execution_request", issues);
@@ -290,13 +284,13 @@ export class ProjectXOrderOwnershipService {
         : "provider_acknowledged";
 
     const openOrders = this.openOrdersEvidence();
-    const positionOpen = effectiveFilledQuantity > 0;
     const protection = bindProtection(
       row.intent_id,
       openOrders,
       this.options.accountId,
       this.options.contractId,
-      positionOpen,
+      instrumentOpen,
+      providerOrderId,
     );
     if (protection.status === "incomplete") {
       identityComplete = false;

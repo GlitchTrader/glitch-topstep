@@ -60,6 +60,23 @@ describe("protection ownership", () => {
     assert.equal(protection.target.price, 20_020);
   });
 
+  it("binds venue brackets that carry no tag through parentOrderId", () => {
+    const untaggedStop: OrderInfo = { ...order(9201, "", 4, 19_990), customTag: null, parentOrderId: 9001 };
+    const untaggedTarget: OrderInfo = { ...order(9202, "", 1, 20_020), customTag: null, parentOrderId: 9001 };
+    const otherEntryChild: OrderInfo = { ...order(9203, "", 4, 19_900), customTag: null, parentOrderId: 9002 };
+    const protection = bindProtection(
+      INTENT_ID,
+      [untaggedStop, untaggedTarget, otherEntryChild],
+      ACCOUNT_ID,
+      CONTRACT_ID,
+      true,
+      9001,
+    );
+    assert.equal(protection.status, "proven");
+    assert.equal(protection.stop.providerOrderId, 9201);
+    assert.equal(protection.target.providerOrderId, 9202);
+  });
+
   it("reports pending when a position is open but a child leg is missing", () => {
     const tags = protectionCustomTags(INTENT_ID);
     const stop = resolveProtectiveLeg(

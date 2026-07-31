@@ -36,18 +36,32 @@ export function intentIdFromStopTag(customTag: string): string | null {
   return match ? match[1]! : null;
 }
 
+/**
+ * Find the protective order for one leg of an entry.
+ *
+ * The venue tags bracket children with the parent's `customTag` plus a `-SL`/`-TP` suffix,
+ * which is the primary match. It also sets `parentOrderId` on every child, so brackets the
+ * venue creates without our tag (account-level position brackets) are still attributable.
+ */
 export function resolveProtectiveLeg(
   customTag: string,
   expectedType: number,
   orders: readonly OrderInfo[],
   accountId: number,
   contractId: string,
+  entryOrderId: number | null = null,
 ): ProtectiveLeg {
-  const matches = orders.filter(
-    (order) => order.customTag === customTag
-      && order.accountId === accountId
-      && order.contractId === contractId,
+  const onInstrument = orders.filter(
+    (order) => order.accountId === accountId && order.contractId === contractId,
   );
+  const tagged = onInstrument.filter((order) => order.customTag === customTag);
+  const matches = tagged.length > 0
+    ? tagged
+    : entryOrderId === null
+      ? []
+      : onInstrument.filter(
+          (order) => order.parentOrderId === entryOrderId && order.type === expectedType,
+        );
   if (matches.length !== 1) {
     return { customTag, providerOrderId: null, price: null, observedOrder: null };
   }
@@ -67,10 +81,25 @@ export function bindProtection(
   accountId: number,
   contractId: string,
   positionOpen: boolean,
+  entryOrderId: number | null = null,
 ): ResolvedProtection {
   const tags = protectionCustomTags(intentId);
-  const stop = resolveProtectiveLeg(tags.stop, STOP_ORDER_TYPE, orders, accountId, contractId);
-  const target = resolveProtectiveLeg(tags.target, TARGET_ORDER_TYPE, orders, accountId, contractId);
+  const stop = resolveProtectiveLeg(
+    tags.stop,
+    STOP_ORDER_TYPE,
+    orders,
+    accountId,
+    contractId,
+    entryOrderId,
+  );
+  const target = resolveProtectiveLeg(
+    tags.target,
+    TARGET_ORDER_TYPE,
+    orders,
+    accountId,
+    contractId,
+    entryOrderId,
+  );
 
   if (!positionOpen) {
     return {

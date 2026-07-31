@@ -209,7 +209,7 @@ describe("ProjectX order ownership", () => {
         normalizedPayload: unrelated,
       });
 
-      const entry = ownership.current().entries[0]!;
+      const entry = ownership.current(1).entries[0]!;
       assert.equal(entry.status, "provider_observed");
       assert.equal(entry.latestObservedOrder?.id, 9002);
       assert.deepEqual(entry.fills.map((fill) => fill.trade.id), [7001]);
@@ -262,7 +262,7 @@ describe("ProjectX order ownership", () => {
         rawPayload: exactFill,
         normalizedPayload: exactFill,
       });
-      const entry = ownership.current().entries[0]!;
+      const entry = ownership.current(1).entries[0]!;
       assert.equal(entry.latestObservedOrder?.id, 9003);
       assert.equal(entry.protection.status, "proven");
       assert.equal(entry.protection.stop.providerOrderId, 9010);
@@ -407,6 +407,34 @@ describe("multi-tranche ownership reconstruction", () => {
       execution.markMutationSubmitting(exitIntent.intentId, "2026-07-21T12:10:02Z");
       execution.markMutationSubmitted(exitIntent.intentId, 9410, "2026-07-21T12:10:03Z");
 
+      // The targeted exit cancels the closed tranche's brackets; the survivor keeps working
+      // stop and target orders, which is how the venue tells us who still owns the contract.
+      evidence.append({
+        receivedUtc: "2026-07-21T12:10:05Z",
+        providerTimestampUtc: null,
+        source: "projectx_rest",
+        eventType: "open_orders_snapshot",
+        generation: 1,
+        accountId: ACCOUNT_ID,
+        contractId: CONTRACT_ID,
+        providerEntityId: null,
+        rawPayload: null,
+        normalizedPayload: [
+          {
+            ...order(9110, 1),
+            type: 4,
+            stopPrice: 19_990.25,
+            customTag: `glt-${first.intentId}-SL`,
+          },
+          {
+            ...order(9111, 1),
+            type: 1,
+            limitPrice: 20_020.25,
+            customTag: `glt-${first.intentId}-TP`,
+          },
+        ],
+      });
+
       execution.close();
       evidence.close();
 
@@ -416,7 +444,7 @@ describe("multi-tranche ownership reconstruction", () => {
         ownershipOptions,
         () => new Date("2026-07-21T12:11:00Z"),
       );
-      const snapshot = ownership.current();
+      const snapshot = ownership.current(1);
       ownership.close();
 
       assert.equal(snapshot.tranches.length, 2);

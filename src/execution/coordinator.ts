@@ -6,7 +6,6 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
   bindProtection,
   intentIdFromStopTag,
-  protectionCustomTags,
   type ResolvedProtection,
 } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
@@ -37,8 +36,6 @@ export interface ExecutionReceipt {
 
 export class ExecutionCoordinator {
   private executionQueue: Promise<void> = Promise.resolve();
-  /** ponytail: in-memory latch; restart clears and may re-place once per tranche */
-  private readonly rearmLatched = new Set<string>();
 
   public constructor(
     private readonly config: AppConfig,
@@ -325,9 +322,7 @@ export class ExecutionCoordinator {
           detail: intent.targetIntentId,
         });
       }
-      const attributableQty = tranche.remaining_qty > 0
-        ? tranche.remaining_qty
-        : Math.min(tranche.filled_qty, positionSize);
+      const attributableQty = tranche.remaining_qty;
       if (attributableQty <= 0) {
         return this.record({
           intentId: intent.intentId,
@@ -456,7 +451,7 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const attributableTranches = this.attributableTranches(snapshot);
+    const attributableTranches = this.attributableTranches();
     if (intent.targetIntentId === undefined && attributableTranches.length > 1) {
       return this.record({
         intentId: intent.intentId,
@@ -597,102 +592,8 @@ export class ExecutionCoordinator {
     return null;
   }
 
-  private attributableTranches(snapshot: AccountVenueSnapshot): TrancheView[] {
-    const all = this.tranches();
-    const open = all.filter((tranche) => tranche.remaining_qty > 0);
-    if (open.length > 0) {
-      return open;
-    }
-    if (snapshot.instrumentOpenContracts > 0) {
-      return all.filter((tranche) => tranche.filled_qty > 0);
-    }
-    return open;
-  }
-
-  /** Re-place SL/TP when venue brackets were lost (e.g. after targeted partial EXIT). */
-  public async rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
-    if (this.config.tradingMode !== "armed" || snapshot.instrumentOpenContracts === 0) {
-      return false;
-    }
-    const contractPositions = snapshot.positions.filter(
-      (position) => position.accountId === this.config.scope.accountId
-        && position.contractId === this.config.scope.contractId
-        && position.type !== 0
-        && Math.abs(position.size) > 0,
-    );
-    const netSigned = instrumentNetSignedLots(contractPositions, this.config.scope.contractId);
-    if (netSigned === 0) {
-      return false;
-    }
-    const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
-    let changed = false;
-
-    for (const tranche of this.attributableTranches(snapshot)) {
-      if (tranche.remaining_qty <= 0) {
-        continue;
-      }
-      const protection = bindProtection(
-        tranche.intent_id,
-        snapshot.openOrders,
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-        true,
-      );
-      if (protection.status === "proven") {
-        this.rearmLatched.delete(tranche.intent_id);
-        continue;
-      }
-      if (this.rearmLatched.has(tranche.intent_id)) {
-        continue;
-      }
-      const entry = this.store.registeredIntentPayload(tranche.intent_id);
-      if (entry?.stopLoss === undefined || entry.takeProfit1 === undefined) {
-        continue;
-      }
-      const tags = protectionCustomTags(tranche.intent_id);
-      const size = tranche.remaining_qty;
-      try {
-        if (!protection.stop.providerOrderId) {
-          await this.api.placeOrder({
-            accountId: this.config.scope.accountId,
-            contractId: this.config.scope.contractId,
-            type: 4,
-            side: coverSide,
-            size,
-            stopPrice: entry.stopLoss,
-            customTag: tags.stop,
-          });
-        }
-        if (!protection.target.providerOrderId) {
-          await this.api.placeOrder({
-            accountId: this.config.scope.accountId,
-            contractId: this.config.scope.contractId,
-            type: 1,
-            side: coverSide,
-            size,
-            limitPrice: entry.takeProfit1,
-            customTag: tags.target,
-          });
-        }
-        this.rearmLatched.add(tranche.intent_id);
-        changed = true;
-        await this.ledger.append({
-          schema_version: "glitch.direct.event.v1",
-          event_id: randomUUID(),
-          recorded_utc: new Date().toISOString(),
-          event: "tranche_protection_rearmed",
-          payload: {
-            tranche_intent_id: tranche.intent_id,
-            remaining_qty: size,
-            stop_price: entry.stopLoss,
-            target_price: entry.takeProfit1,
-          },
-        });
-      } catch {
-        // ponytail: retry on next reconciliation if venue rejects
-      }
-    }
-    return changed;
+  private attributableTranches(): TrancheView[] {
+    return this.tranches().filter((tranche) => tranche.remaining_qty > 0);
   }
 
   private async cancelTrancheProtectionOrders(
@@ -726,7 +627,7 @@ export class ExecutionCoordinator {
     intent?: TradeIntent,
   ): { intentId: string; protection: ResolvedProtection } | null {
     const allTranches = this.tranches();
-    const attributableTranches = this.attributableTranches(snapshot);
+    const attributableTranches = this.attributableTranches();
 
     const positionOpen = snapshot.instrumentOpenContracts > 0;
 
@@ -743,6 +644,7 @@ export class ExecutionCoordinator {
           this.config.scope.accountId,
           this.config.scope.contractId,
           positionOpen,
+          tranche.entry_order_id,
         ),
       };
     }
@@ -757,6 +659,7 @@ export class ExecutionCoordinator {
           this.config.scope.accountId,
           this.config.scope.contractId,
           positionOpen,
+          tranche.entry_order_id,
         ),
       };
     }

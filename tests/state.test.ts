@@ -79,6 +79,44 @@ describe("venue state truth", () => {
     assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
   });
 
+  it("stays current while a reconciliation cycle is in flight", () => {
+    const state = readyState();
+    state.markReconciliationStarted();
+    const snapshot = state.buildSnapshot(1, "MNQ");
+    assert.ok(!snapshot.stateIssues.includes("reconciliation_not_current"));
+    assert.equal(snapshot.operational.reconciliation.state, "running");
+  });
+
+  it("does not age account state when the market stops quoting", () => {
+    const state = readyState();
+    const staleQuoteAt = new Date(Date.now() - 60_000).toISOString();
+    state.applyQuote({
+      contractId: "MNQ",
+      symbol: "F.US.MNQ",
+      lastPrice: 20_010.25,
+      bestBid: 20_010,
+      bestAsk: 20_010.25,
+      open: 20_000,
+      high: 20_020,
+      low: 19_990,
+      volume: 1_000,
+      timestamp: staleQuoteAt,
+    }, staleQuoteAt);
+    const freshAt = new Date().toISOString();
+    state.replaceAccounts([{
+      id: 1,
+      name: "TEST",
+      balance: 100,
+      canTrade: true,
+      isVisible: true,
+    }], freshAt);
+    state.replacePositions([], freshAt);
+    state.replaceOrders([], freshAt);
+
+    const snapshot = state.buildSnapshot(1, "MNQ");
+    assert.equal(snapshot.capturedAt, freshAt);
+  });
+
   it("makes malformed payload state visible instead of silently ignoring it", () => {
     const state = readyState();
     state.markPayloadFault("user", new Error("contract mismatch"));
