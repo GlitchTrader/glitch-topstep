@@ -698,6 +698,20 @@ export class ExecutionCoordinator {
       if (historicalStop === null || historicalTarget === null) {
         continue;
       }
+      if (!snapshot.quote) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "tranche_protection_rearm_deferred",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            remaining_qty: tranche.remaining_qty,
+            detail: "quote_unavailable_for_marketable_stop_guard",
+          },
+        });
+        continue;
+      }
       const sanitized = sanitizeRearmProtectionPrices(
         coverSide,
         historicalStop,

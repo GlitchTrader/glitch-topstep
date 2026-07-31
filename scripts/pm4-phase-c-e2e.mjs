@@ -582,12 +582,17 @@ async function ensureFlat(steps) {
 
 function protectionTags(intentId) {
   const entry = `glt-${intentId}`.slice(0, 64);
-  const base = entry.length <= 60 ? entry : entry.slice(0, 60);
+  const base = entry.length <= 56 ? entry : entry.slice(0, 56);
   return { stop: `${base}-SL`, target: `${base}-TP` };
 }
 
+function isProtectiveTagForIntent(customTag, intentId, leg) {
+  if (typeof customTag !== "string") return false;
+  const escaped = intentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^glt-${escaped}(?:-r\\d+)?-${leg}$`).test(customTag);
+}
+
 async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
-  const { stop, target } = protectionTags(intentId);
   for (let i = 0; i < timeoutSec; i++) {
     await sleep(1000);
     try {
@@ -603,8 +608,8 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
       continue;
     }
     const orders = st.openOrders ?? [];
-    const hasStop = orders.some((order) => order.customTag === stop);
-    const hasTarget = orders.some((order) => order.customTag === target);
+    const hasStop = orders.some((order) => isProtectiveTagForIntent(order.customTag, intentId, "SL"));
+    const hasTarget = orders.some((order) => isProtectiveTagForIntent(order.customTag, intentId, "TP"));
     if (hasStop && hasTarget) return;
     if (i % 15 === 14) {
       steps.push({
@@ -613,6 +618,7 @@ async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
         has_target: hasTarget,
         open_orders: orders.length,
         open_contracts: st.instrumentOpenContracts,
+        protective_tags: orders.map((order) => order.customTag).filter(Boolean),
       });
     }
   }
