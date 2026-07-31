@@ -7,6 +7,7 @@ import type { OrderInfo, PositionInfo } from "../domain/models.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { maybeKill } from "./kill-hook.js";
+import { attemptBoundedRecoveryFlattens } from "./recovery-flatten.js";
 
 export interface ExecutionRecoveryApi {
   searchOrders(
@@ -14,6 +15,13 @@ export interface ExecutionRecoveryApi {
     startTimestamp: string,
     endTimestamp?: string,
   ): Promise<OrderInfo[]>;
+  closePosition?(accountId: number, contractId: string): Promise<void>;
+}
+
+export interface RecoveryOptions {
+  accountName?: string;
+  instrument?: string;
+  openOrders?: OrderInfo[];
 }
 
 export interface ExecutionRecoveryResult {
@@ -30,6 +38,7 @@ export async function recoverExecutionMutations(
   contractId: string,
   positions: PositionInfo[],
   now = new Date(),
+  options: RecoveryOptions = {},
 ): Promise<ExecutionRecoveryResult> {
   const orphanIntents = store.intentsWithoutReceiptsOrMutations();
   const unresolved = store.unresolvedMutations();
@@ -216,6 +225,44 @@ export async function recoverExecutionMutations(
         providerOrderId: null,
         detail,
       });
+    }
+
+    if (options.accountName && options.instrument) {
+      const flatten = await attemptBoundedRecoveryFlattens(
+        store,
+        api,
+        accountId,
+        contractId,
+        options.accountName,
+        options.instrument,
+        positions,
+        options.openOrders ?? [],
+        historicalOrders,
+        now,
+      );
+      if (flatten.changed) {
+        changed = true;
+        resolved += flatten.resolved;
+        for (const flattenResult of flatten.resolutions) {
+          resolutions.push({
+            intentId: flattenResult.entryIntentId,
+            operation: "place_order",
+            outcome: "submitted",
+            code: "entry_proven_during_bounded_recovery_flatten",
+            providerOrderId: flattenResult.providerOrderId,
+            detail: flattenResult.detail,
+          });
+          resolutions.push({
+            intentId: flattenResult.intentId,
+            operation: "close_position",
+            outcome: "submitted",
+            code: "bounded_recovery_flatten_submitted",
+            providerOrderId: null,
+            detail: flattenResult.detail,
+          });
+        }
+        ambiguous = Math.max(0, ambiguous - flatten.resolved);
+      }
     }
 
     store.recordRecoveryResult(now.toISOString(), null);

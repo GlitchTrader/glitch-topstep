@@ -172,6 +172,12 @@ export class GlitchTopstepService {
       this.config.scope.accountId,
       this.config.scope.contractId,
       positions,
+      undefined,
+      {
+        accountName: this.config.scope.accountName,
+        instrument: this.config.scope.instrument,
+        openOrders: orders,
+      },
     );
     await this.persistRecoveryResolutions(initialRecovery.resolutions);
     this.reconcileEntrySubmissionLatch(positions, orders);
@@ -528,6 +534,12 @@ export class GlitchTopstepService {
           this.config.scope.accountId,
           this.config.scope.contractId,
           positions,
+          undefined,
+          {
+            accountName: this.config.scope.accountName,
+            instrument: this.config.scope.instrument,
+            openOrders: orders,
+          },
         );
         await this.persistRecoveryResolutions(recovery.resolutions);
         if (JSON.stringify(this.executionStore.recoveryStatus()) !== before) {

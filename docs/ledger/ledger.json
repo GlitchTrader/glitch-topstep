@@ -51,7 +51,7 @@
     {
       "id": "TS-R1-03",
       "title": "Bounded recovery flatten for owned unresolved exposure",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -59,9 +59,15 @@
         "Flatten outcome is journaled with explicit ownership and ambiguity evidence."
       ],
       "depends_on": [],
-      "evidence": [],
+      "evidence": [
+        "2026-07-31: src/execution/recovery-flatten.ts proves ownership via unique customTag or providerOrderId with full account/contract/side/size/type identity; issues deterministic recovery EXIT intent and close_position when ambiguous place_order still has open contract exposure.",
+        "2026-07-31: recoverExecutionMutations wires accountName/instrument/openOrders from service.ts and journals bounded_recovery_flatten_submitted plus entry_proven_during_bounded_recovery_flatten.",
+        "2026-07-31: tests/recovery-flatten.test.ts covers ownership gates, positive close_position for owned ambiguous entry, and negative case without provable tag."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
+        "src/execution/recovery-flatten.ts",
+        "tests/recovery-flatten.test.ts"
       ]
     },
     {
