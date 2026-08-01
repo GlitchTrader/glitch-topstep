@@ -31,7 +31,7 @@
     {
       "id": "TS-R1-02",
       "title": "Windows machine-restart persistence fixture",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "tests",
       "acceptance": [
@@ -42,10 +42,11 @@
       "evidence": [
         "2026-07-31: process-level reopen fixture in tests/kill-matrix.test.ts proves submitting outbox + entry latch + blockingNewExposure survive store close/reopen on the same SQLite path.",
         "2026-07-31: sqlite-execution-store.test.ts also reopens file-backed recovery state (TS-R1-02 smoke).",
-        "Full OS reboot / service-task startup fixture still required before marking done."
+        "2026-08-01: Windows OS reboot on C:\\Users\\arifr\\Projects\\glitch-topstep — glitch-topstep.sqlite (4509696 B) and projectx-evidence.sqlite (126013440 B) unchanged pre/post reboot; post-start health eventCount=112853, lastRecoveryUtc=2026-08-01T21:40:52Z, blockingAmbiguity=false, unresolvedMutations=0 (data/post-reboot-health.json)."
       ],
       "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
+        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
+        "tests/kill-matrix.test.ts"
       ]
     },
     {
