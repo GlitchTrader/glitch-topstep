@@ -1,6 +1,6 @@
 {
   "schema_version": "glitch.projectx.fixture_capture.v1",
-  "captured_utc": "2026-07-31T19:46:20.143Z",
+  "captured_utc": "2026-08-01T16:20:00.000Z",
   "environment": "projectx_shadow_read_only",
   "api_url": "https://api.topstepx.com",
   "scope": {
@@ -16,8 +16,16 @@
       "path": "tests\\fixtures\\projectx\\live\\auth_login.json"
     },
     {
+      "name": "auth_login_key_envelope",
+      "path": "tests\\fixtures\\projectx\\live\\auth_login_key_envelope.json"
+    },
+    {
       "name": "auth_validate",
       "path": "tests\\fixtures\\projectx\\live\\auth_validate.json"
+    },
+    {
+      "name": "auth_validate_envelope",
+      "path": "tests\\fixtures\\projectx\\live\\auth_validate_envelope.json"
     },
     {
       "name": "accounts_search",
@@ -65,5 +73,5 @@
     }
   ],
   "secret_scan": "passed",
-  "note": "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB; stream_subscriptions_proof validates TS-R2-04."
+  "note": "Read-only capture for TS-R2-01..05; includes sanitized auth envelopes, stream corpus, subscription and reconnect proofs."
 }

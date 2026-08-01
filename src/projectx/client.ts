@@ -119,6 +119,27 @@ export class ProjectXApiClient {
     return this.sessionToken;
   }
 
+  /** ponytail: fixture capture only; returns sanitized envelope shapes for TS-R2-02 */
+  public async captureAuthEnvelopes(): Promise<{ login: ApiEnvelope; validate: ApiEnvelope }> {
+    const login = this.asEnvelope(
+      await this.post("/api/Auth/loginKey", {
+        userName: this.options.username,
+        apiKey: this.options.apiKey,
+      }, false),
+    );
+    this.assertSuccess(login);
+    if (typeof login.token !== "string" || login.token.length === 0) {
+      throw new ProjectXApiError("token_missing", "ProjectX login returned no session token");
+    }
+    this.token = login.token;
+    const validate = this.asEnvelope(await this.post("/api/Auth/validate", {}));
+    this.assertSuccess(validate);
+    if (typeof validate.newToken === "string" && validate.newToken.length > 0) {
+      this.token = validate.newToken;
+    }
+    return { login, validate };
+  }
+
   public async searchAccounts(onlyActiveAccounts = true): Promise<AccountInfo[]> {
     const response = this.asEnvelope(
       await this.post("/api/Account/search", { onlyActiveAccounts }),

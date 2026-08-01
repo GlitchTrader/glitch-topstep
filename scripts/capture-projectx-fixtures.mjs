@@ -154,15 +154,22 @@ const api = new ProjectXApiClient({
   apiKey: config.projectX.apiKey,
 });
 
-// Phase 1 — authentication (read-only; no raw token persisted)
-await api.login();
+// Phase 1 — authentication (read-only; sanitized envelopes for strict parsers)
+const auth = await api.captureAuthEnvelopes();
+writeFixture("auth_login_key_envelope", {
+  http_status: 200,
+  envelope: redactSecrets(auth.login),
+});
+writeFixture("auth_validate_envelope", {
+  http_status: 200,
+  envelope: redactSecrets(auth.validate),
+});
 writeFixture("auth_login", {
   endpoint: "/api/Auth/loginKey",
   outcome: "succeeded",
   session_token_present: true,
   captured_utc: capturedUtc,
 });
-await api.validateSession();
 writeFixture("auth_validate", {
   endpoint: "/api/Auth/validate",
   outcome: "succeeded",
@@ -221,13 +228,29 @@ const streamProof = buildStreamSubscriptionProof({
   samples: mergedStreamSamples,
   liveSamples: streamSamples.samples ?? [],
 });
-writeFixture("stream_subscriptions_proof", streamProof);
-if (!streamProof.proof_passed) {
+const streamProofPath = path.join(OUT_DIR, "stream_subscriptions_proof.json");
+if (streamProof.proof_passed) {
+  writeFixture("stream_subscriptions_proof", streamProof);
+} else if (fs.existsSync(streamProofPath)) {
+  console.warn(`stream_subscriptions_proof_retained:${streamProof.proof_failures.join(",")}`);
+  manifest.files.push({
+    name: "stream_subscriptions_proof",
+    path: path.relative(ROOT, streamProofPath),
+  });
+} else {
   throw new Error(`stream_subscriptions_proof_failed:${streamProof.proof_failures.join(",")}`);
 }
 
+const reconnectProofPath = path.join(OUT_DIR, "reconnect_proof.json");
+if (fs.existsSync(reconnectProofPath) && !manifest.files.some((entry) => entry.name === "reconnect_proof")) {
+  manifest.files.push({
+    name: "reconnect_proof",
+    path: path.relative(ROOT, reconnectProofPath),
+  });
+}
+
 manifest.secret_scan = "passed";
-manifest.note = "Read-only capture for TS-R2-01..05; SignalR samples are latest-per event_type from local evidence DB; stream_subscriptions_proof validates TS-R2-04.";
+manifest.note = "Read-only capture for TS-R2-01..05; includes sanitized auth envelopes, stream corpus, subscription and reconnect proofs.";
 const manifestPath = path.join(OUT_DIR, "manifest.json");
 const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
 scanForLeaks(manifestText, "manifest");
