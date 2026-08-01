@@ -164,7 +164,7 @@
     {
       "id": "TS-R2-02",
       "title": "Capture sanitized official ProjectX payload fixtures",
-      "status": "ready",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "acceptance": [
@@ -177,13 +177,15 @@
       ],
       "evidence": [
         "2026-07-31: npm run capture:fixtures wrote tests/fixtures/projectx/live/* (REST + gateway health + stream_event_samples from evidence DB).",
-        "2026-07-31: manifest.json secret_scan=passed; redactSecrets + literal credential scan in capture script.",
-        "Remaining: raw login/validate envelope shapes (currently outcome metadata only); deliberate reconnect/disconnect corpus for TS-R2-05."
+        "2026-08-01: auth_login_key_envelope.json + auth_validate_envelope.json capture official ProjectX envelope shapes with redacted token/newToken.",
+        "2026-08-01: src/projectx/fixture-corpus.ts + tests/fixture-corpus.test.ts validate manifest, auth envelopes, and full SignalR event corpus offline.",
+        "2026-08-01: manifest lists 15 fixtures including stream_subscriptions_proof and reconnect_proof; secret_scan passed."
       ],
       "sources": [
         "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
         "docs/HANDOFF.md#1-verify-projectx-payload-contracts",
-        "tests/fixtures/projectx/live/manifest.json"
+        "tests/fixtures/projectx/live/manifest.json",
+        "src/projectx/fixture-corpus.ts"
       ]
     },
     {
