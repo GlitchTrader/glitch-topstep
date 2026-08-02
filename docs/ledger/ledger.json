@@ -1,901 +1,141 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-07-31",
-  "roadmap_ref": "docs/ROADMAP.md",
+  "updated": "2026-08-02",
+  "release_target": "beta",
+  "authority": {
+    "human": "selects account, contract, operating mode, and may submit manual intent",
+    "hermes": "owns probabilistic market judgment and trade intent",
+    "glitch": "owns truthful ProjectX evidence, identity, execution, protection, reconciliation, and receipts",
+    "deterministic_rejection": "limited to factual execution invalidity, authoritative venue/account boundaries, unprovable ownership or protection, duplicate or ambiguous mutation, and explicit operator disablement",
+    "forbidden": "hidden strategy gates, arbitrary risk preferences, trade creation without human or Hermes intent, and intent mutation outside the requested range"
+  },
+  "history": {
+    "previous_schema": "1.0",
+    "previous_main_commit": "6b30e3068394f8cd61c34bf0e080183edf61faf3",
+    "previous_ledger_blob": "2ef88658ee52bd9f327b728b4625e73ba474e087",
+    "note": "The detailed historical rail remains immutable in Git history. This ledger is the smaller active release authority. Roadmap ideas are not active tickets until promoted here with evidence and acceptance."
+  },
+  "completed_baseline": [
+    "TS-R1-01",
+    "TS-R1-02",
+    "TS-R1-03",
+    "TS-R1-05",
+    "TS-R2-01",
+    "TS-R2-02",
+    "TS-R2-03",
+    "TS-R2-04",
+    "TS-R2-05",
+    "TS-R4-00",
+    "TS-R4-03",
+    "TS-R4-04",
+    "TS-R4-05",
+    "TS-AUDIT-01",
+    "TS-AUDIT-02",
+    "TS-PM4-01"
+  ],
   "items": [
     {
-      "id": "TS-R1-01",
-      "title": "Process-kill recovery fixtures across outbox and provider lifecycle",
+      "id": "TS-AUDIT-03",
+      "title": "Keep quiet-tape evidence in Hermes cognition, not the execution gate",
       "status": "done",
-      "priority": "P0",
-      "owner_role": "tests",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 47,
+      "pull_request": 48,
       "acceptance": [
-        "Actual process-kill fixture before outbox creation proves durable recovery without duplicate exposure.",
-        "Actual process-kill fixture before provider call proves outbox replay without duplicate submission.",
-        "Actual process-kill fixture during ambiguous transport proves reconciliation before retry.",
-        "Actual process-kill fixture after provider response but before receipt proves terminal state recovery."
+        "Configured armed mode remains armed when reconciled venue state is current and the 60-second tape contains zero prints.",
+        "Decision packets retain the full rolling order-flow observation and trade count.",
+        "No tape, spread, depth, volatility, session, or confidence observation independently authorizes or forbids entry.",
+        "Quote freshness, reconciliation, capacity, recovery, ownership, protection, and explicit operator mode remain factual gates.",
+        "EXIT remains available under entry-only degraded state."
       ],
-      "depends_on": [],
       "evidence": [
-        "2026-07-31: src/execution/kill-hook.ts env-gated process.exit(73) at ten lifecycle points.",
-        "2026-07-31: tests/kill-matrix-child.ts + tests/kill-matrix.test.ts spawn a real child with fake provider; every kill point keeps one durable intent identity and placeOrderCalls<=1; recovery outcomes asserted (orphan/prepared→confirmed_not_submitted; submitting without provider→ambiguous+blocking; accept/submitted→submitted; receipt before JSONL survives).",
-        "GitHub #16 acceptance mirror for the fake-provider kill matrix; ProjectX shadow kill portions remain under TS-R1-04 / #18."
+        "src/execution/gateway-mode.ts removes order_flow_trades_60s and order_flow_no_trades_60s from execution admission.",
+        "tests/gateway-mode.test.ts proves quiet tape is preserved as evidence and cannot select an action.",
+        "tests/position-management.test.ts proves EXIT under a factual stale-quote degraded state.",
+        "docs/AUTHORITY.md records the four-question doctrine decision.",
+        "GitHub Actions ci run 30773272688: build green; 179/179 tests pass."
       ],
       "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
-        "tests/kill-matrix.test.ts",
-        "src/execution/kill-hook.ts"
-      ]
-    },
-    {
-      "id": "TS-R1-02",
-      "title": "Windows machine-restart persistence fixture",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "tests",
-      "acceptance": [
-        "Windows machine-restart persistence fixture proves execution identity, outbox, and recovery state survive reboot.",
-        "Recovery health blocks new exposure until ambiguity and settlement are cleared after restart."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-31: process-level reopen fixture in tests/kill-matrix.test.ts proves submitting outbox + entry latch + blockingNewExposure survive store close/reopen on the same SQLite path.",
-        "2026-07-31: sqlite-execution-store.test.ts also reopens file-backed recovery state (TS-R1-02 smoke).",
-        "2026-08-01: Windows OS reboot on C:\\Users\\arifr\\Projects\\glitch-topstep — glitch-topstep.sqlite (4509696 B) and projectx-evidence.sqlite (126013440 B) unchanged pre/post reboot; post-start health eventCount=112853, lastRecoveryUtc=2026-08-01T21:40:52Z, blockingAmbiguity=false, unresolvedMutations=0 (data/post-reboot-health.json)."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
-        "tests/kill-matrix.test.ts"
-      ]
-    },
-    {
-      "id": "TS-R1-03",
-      "title": "Bounded recovery flatten for owned unresolved exposure",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Owned but unresolved exposure triggers bounded recovery flatten rather than silent retry or duplicate entry.",
-        "Flatten outcome is journaled with explicit ownership and ambiguity evidence."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-31: src/execution/recovery-flatten.ts proves ownership via unique customTag or providerOrderId with full account/contract/side/size/type identity; issues deterministic recovery EXIT intent and close_position when ambiguous place_order still has open contract exposure.",
-        "2026-07-31: recoverExecutionMutations wires accountName/instrument/openOrders from service.ts and journals bounded_recovery_flatten_submitted plus entry_proven_during_bounded_recovery_flatten.",
-        "2026-07-31: tests/recovery-flatten.test.ts covers ownership gates, positive close_position for owned ambiguous entry, and negative case without provable tag."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery",
-        "src/execution/recovery-flatten.ts",
-        "tests/recovery-flatten.test.ts"
+        "docs/specs/TS-AUDIT-03.md",
+        "docs/AUTHORITY.md",
+        "src/execution/gateway-mode.ts",
+        "tests/gateway-mode.test.ts",
+        "tests/position-management.test.ts"
       ]
     },
     {
       "id": "TS-R1-04",
-      "title": "Zero duplicate entries in real ProjectX acceptance session",
-      "status": "blocked",
+      "title": "Zero duplicate entries in a real ProjectX kill and reconnect acceptance session",
+      "status": "external_acceptance_required",
       "priority": "P0",
-      "owner_role": "tests",
-      "acceptance": [
-        "A real ProjectX acceptance session with kill, reconnect, and retry scenarios produces zero duplicate entries.",
-        "Duplicate detection is evidenced from durable intent, custom tag, and provider order identity."
-      ],
-      "depends_on": [
-        "TS-R2-01",
-        "TS-R1-01"
-      ],
-      "evidence": [],
-      "blocked_reason": "Requires real TopstepX ProjectX credentials and TS-R1-01 process-kill fixtures.",
-      "sources": [
-        "docs/ROADMAP.md#r1--durable-execution-identity-and-recovery"
-      ]
-    },
-    {
-      "id": "TS-R1-05",
-      "title": "Atomic UUID plus body-hash intent ownership (NT GL-AI-06 parity)",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "One hundred simultaneous identical intent POSTs cause exactly one provider mutation.",
-        "The same intent_id with a different body hash returns conflict and causes zero additional mutation.",
-        "Duplicate same-body retries replay in-progress or immutable receipt state."
-      ],
+      "owner_role": "operator_tests",
       "depends_on": [],
-      "evidence": [
-        "2026-07-27: src/domain/intent-body-hash.ts canonical body hash.",
-        "2026-07-27: SqliteExecutionStore.registerIntent returns claimed, duplicate, or conflict under BEGIN IMMEDIATE.",
-        "2026-07-27: ExecutionCoordinator intent_body_conflict and barrier-synchronized 100-request fixture in tests/execution-coordinator.test.ts.",
-        "docs/PARITY.md rows: Atomic UUID plus body-hash claim; Same UUID with different body conflict."
-      ],
-      "sources": [
-        "src/storage/sqlite-execution-store.ts",
-        "src/execution/coordinator.ts",
-        "docs/AUTHORITY.md"
-      ]
-    },
-    {
-      "id": "TS-R4-00",
-      "title": "Nonterminal intents until native bracket and position proof (NT GL-AI-07 parity)",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
       "acceptance": [
-        "Entry receipts remain nonterminal until provider order identity and protective children are reconciled.",
-        "MOVE_STOP and MOVE_TP remain pending until exact native leg update confirms requested geometry.",
-        "Ambiguous transport and restart reconcile without time-authorized resubmission."
+        "An explicitly approved disposable ProjectX acceptance session exercises kill, reconnect, and same-intent retry without duplicate exposure.",
+        "Durable intent id, canonical body hash, custom tag, provider order identity, and final account state agree."
       ],
-      "depends_on": [
-        "TS-R1-05",
-        "TS-R4-01"
-      ],
-      "evidence": [
-        "2026-07-27: reconcile-only ambiguous recovery already implemented; entry still returns submitted on API return (gap documented in docs/PARITY.md).",
-        "2026-07-29: GitHub #17 closed — nonterminal until provider-native protection proof.",
-        "2026-07-30/31: live PRAC PM4 E2E — entry pending until protection proven; MOVE_STOP/MOVE_TP pending until reconcile; restart scenario B keeps two protected tranches (PR #38, commit 619af4c)."
-      ],
-      "sources": [
-        "docs/PARITY.md",
-        "src/execution/coordinator.ts",
-        "docs/AUTHORITY.md"
-      ]
-    },
-    {
-      "id": "TS-R2-01",
-      "title": "Authenticate with real TopstepX ProjectX key in shadow mode",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Gateway authenticates using a real TopstepX ProjectX key in shadow mode without submitting live risk.",
-        "Login and validate responses match observed or official contracts; parsers are not loosened to suppress errors."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-31: live gateway armed on PRAC account; scripts/capture-projectx-fixtures.mjs login+validate succeeded (read-only).",
-        "2026-07-31: tests/fixtures/projectx/live/auth_login.json and auth_validate.json (no raw token persisted; secret_scan passed)."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#1-verify-projectx-payload-contracts",
-        "scripts/capture-projectx-fixtures.mjs"
-      ]
-    },
-    {
-      "id": "TS-R2-02",
-      "title": "Capture sanitized official ProjectX payload fixtures",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Sanitized fixtures captured for login, validate, account search, available contracts, open positions, and open orders.",
-        "Each SignalR user-hub and market-hub event type has at least one sanitized fixture.",
-        "Secret-like fields are recursively redacted in stored fixtures."
-      ],
-      "depends_on": [
-        "TS-R2-01"
-      ],
-      "evidence": [
-        "2026-07-31: npm run capture:fixtures wrote tests/fixtures/projectx/live/* (REST + gateway health + stream_event_samples from evidence DB).",
-        "2026-08-01: auth_login_key_envelope.json + auth_validate_envelope.json capture official ProjectX envelope shapes with redacted token/newToken.",
-        "2026-08-01: src/projectx/fixture-corpus.ts + tests/fixture-corpus.test.ts validate manifest, auth envelopes, and full SignalR event corpus offline.",
-        "2026-08-01: manifest lists 15 fixtures including stream_subscriptions_proof and reconnect_proof; secret_scan passed."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#1-verify-projectx-payload-contracts",
-        "tests/fixtures/projectx/live/manifest.json",
-        "src/projectx/fixture-corpus.ts"
-      ]
-    },
-    {
-      "id": "TS-R2-03",
-      "title": "Reconcile account, contract, positions, and conservative PnL with TopstepX UI",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Selected account and active contract reconcile between local state and TopstepX UI.",
-        "All account positions and conservative PnL match TopstepX UI within documented tolerance.",
-        "Local hard loss-floor evidence matches authoritative dashboard or account state."
-      ],
-      "depends_on": [
-        "TS-R2-01"
-      ],
-      "evidence": [
-        "2026-07-31: TopstepX UI PRAC-V2-645601-15979101 — BAL $150,378.16, RP&L $378.16, UP&L $0, MNQU26, flat, MLL $145,500 (150K Combine allowance per https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit).",
-        "2026-07-31: gateway /packet — balance 150378.16, instrument_open 0, contract CON.F.US.MNQ.U26 (MNQU6); operator_provided_floor hard_loss_floor_usd 145500, current_buffer_usd 4878.16 after .env reconcile.",
-        "2026-07-31: prior mismatch (148000 floor) traced to express_funded_eod + INITIAL_MAXIMUM_LOSS=2000 (50K table); PRAC 150K requires $4,500 allowance / $145,500 floor or trading_combine_eod.",
-        "2026-07-31: fixtures tests/fixtures/projectx/live/accounts_search.json and open_positions.json match UI at capture time."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "tests/fixtures/projectx/live/manifest.json",
-        "https://help.topstep.com/en/articles/8284204-what-is-the-maximum-loss-limit"
-      ]
-    },
-    {
-      "id": "TS-R2-04",
-      "title": "Prove user-hub and market stream subscriptions",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Every required user-hub subscription is proven with live or recorded evidence.",
-        "Quote, print, and DOM subscriptions are proven on the target machine.",
-        "Connection health fields include userHubConnected, marketHubConnected, lastUserEventAt, lastMarketEventAt, and reconciliationGeneration."
-      ],
-      "depends_on": [
-        "TS-R2-01"
-      ],
-      "evidence": [
-        "2026-07-31: src/projectx/stream-subscriptions.ts documents SubscribeAccounts/Orders/Positions/Trades and SubscribeContractQuotes/Trades/MarketDepth invoked by ProjectXRealtimeService.",
-        "2026-07-31: scripts/capture-projectx-fixtures.mjs emits stream_subscriptions_proof.json (live market quote/trade/depth + lifecycle connected + merged user-stream corpus); fails closed when proof incomplete.",
-        "2026-07-31: tests/stream-subscriptions-proof.test.ts validates live fixture against canonical subscription list and maps HANDOFF #2 fields to health.data_quality.operational (userStream/marketStream/reconciliation.generation).",
-        "2026-07-31: live capture on Windows PRAC gateway during open session — gateway_mode armed, trade_count_60s>0, market events 33k+ in evidence DB."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids",
-        "src/projectx/stream-subscriptions.ts",
-        "tests/fixtures/projectx/live/stream_subscriptions_proof.json"
-      ]
-    },
-    {
-      "id": "TS-R2-05",
-      "title": "Prove disconnect, reconnect, generation invalidation, and REST reconciliation",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Disconnect invalidates current entry packets and increments reconciliation generation.",
-        "Reconnect performs REST reconciliation before publishing a new executable packet.",
-        "Generation invalidation and post-reconnect state are evidenced in health and packet APIs."
-      ],
-      "depends_on": [
-        "TS-R2-04"
-      ],
-      "evidence": [
-        "2026-07-31: src/projectx/reconnect-proof.ts + tests/reconnect-proof.test.ts prove generation bump, packet invalidation, and reconciliation_current gate.",
-        "2026-07-31: GLITCH_ACCEPTANCE_STREAM_GAP=1 exposes POST /acceptance/force-stream-gap (loopback + bearer only) mirroring onStateInvalidated + markStreamReconnecting paths.",
-        "2026-07-31: npm run capture:reconnect on Windows PRAC gateway — live fixture reconnect_proof.json shows gen 1→2, packet unresolvable during gap, REST reconcile, new resolvable packet at gen 2."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
-        "docs/HANDOFF.md#2-add-connection-health-and-generation-ids",
-        "src/projectx/reconnect-proof.ts",
-        "tests/fixtures/projectx/live/reconnect_proof.json"
-      ]
+      "code_state": "ready",
+      "blocked_reason": "Requires an operator-approved real ProjectX mutation and credentials on the target Windows machine; source and fake-provider kill matrices are already green.",
+      "stop_line": "Do not characterize fake-provider or read-only evidence as a real order-mutation acceptance."
     },
     {
       "id": "TS-R2-06",
-      "title": "Prove historical order and trade search with identity retention",
-      "status": "blocked",
+      "title": "Real ProjectX historical order and trade identity retention",
+      "status": "external_acceptance_required",
       "priority": "P1",
-      "owner_role": "coder",
+      "owner_role": "operator_tests",
+      "depends_on": [],
       "acceptance": [
         "Historical order search retains custom tags and full order identity.",
         "Historical trade search retains trade.orderId linkage to submitted entries."
       ],
-      "depends_on": [
-        "TS-R2-01"
-      ],
-      "evidence": [],
-      "blocked_reason": "Requires successful TS-R2-01 authentication and account history.",
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
-      ]
+      "code_state": "implemented",
+      "blocked_reason": "Requires account history and an authenticated target-machine capture."
     },
     {
       "id": "TS-R2-07",
-      "title": "Measure stream event rates and evidence disk growth",
-      "status": "blocked",
+      "title": "Sustained stream-rate and evidence-disk-growth measurement",
+      "status": "external_acceptance_required",
       "priority": "P1",
-      "owner_role": "tests",
-      "acceptance": [
-        "Quote, print, and DOM event rates are measured on the target Windows machine.",
-        "Evidence retention policy is validated against actual disk growth under sustained streaming."
-      ],
-      "depends_on": [
-        "TS-R2-04"
-      ],
-      "evidence": [],
-      "blocked_reason": "Requires sustained live market streams from TS-R2-04.",
-      "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
-      ]
-    },
-    {
-      "id": "TS-R3-01",
-      "title": "REST envelope persistence and deterministic event-corpus replay",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Raw REST response envelopes persist where contract-drift forensics require them.",
-        "Deterministic state rebuild from the integrated provider-event journal reproduces canonical state.",
-        "Correction and contradiction semantics are defined and tested during replay."
-      ],
-      "depends_on": [
-        "TS-R2-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r3--provider-evidence-and-replay-foundation"
-      ]
-    },
-    {
-      "id": "TS-R3-02",
-      "title": "Evidence archive, export, and disk-full acceptance",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "tests",
-      "acceptance": [
-        "Evidence archive and export workflow is bounded, authenticated, and redacts secrets.",
-        "Real disk-full and write-failure acceptance proves execution durability degrades safely without silent loss."
-      ],
-      "depends_on": [
-        "TS-R2-07"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r3--provider-evidence-and-replay-foundation"
-      ]
-    },
-    {
-      "id": "TS-R4-01",
-      "title": "Historical sync and explicit provider bracket identification",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Historical orders and trades synchronize after offline intervals without ownership drift.",
-        "Provider-created stop and target orders are identified from an explicit relationship, not proximity inference.",
-        "Order groups and protective-leg identity persist durably.",
-        "Aggregate open-position ownership is proven without price, timing, or geometry inference."
-      ],
-      "depends_on": [
-        "TS-R2-06",
-        "TS-R3-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
-        "docs/HANDOFF.md#4-implement-provider-bracket-ownership-proof"
-      ]
-    },
-    {
-      "id": "TS-R4-02",
-      "title": "Bracket correction, fail-closed protection, and restart reconstruction",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Tick-distance brackets correct to exact intended absolute prices.",
-        "Protection failure is visible and triggers risk reduction; armed acceptance remains disabled until proof passes.",
-        "Protection reconstructs correctly after gateway restart from durable evidence."
-      ],
-      "depends_on": [
-        "TS-R4-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
-        "docs/HANDOFF.md#4-implement-provider-bracket-ownership-proof"
-      ]
-    },
-    {
-      "id": "TS-R4-03",
-      "title": "MOVE_STOP, MOVE_TP, and exact-leg mutation",
-      "status": "done",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "MOVE_STOP mutates only the intended protective leg without sibling interference.",
-        "MOVE_TP mutates only the intended protective leg without sibling interference.",
-        "Exact-leg mutation preserves unrelated working orders and sibling protection geometry."
-      ],
-      "depends_on": [
-        "TS-R4-02"
-      ],
-      "evidence": [
-        "2026-07-30: GitHub #24/#25 implemented — exact-leg modify via bindProtection; tests/position-management.test.ts.",
-        "2026-07-31: live PRAC PM4 scenario A/C — MOVE_STOP and MOVE_TP on survivor tranche after targeted EXIT (data/pm4-phase-c-e2e.json, PR #38)."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
-        "https://github.com/GlitchTrader/glitch-topstep/issues/24",
-        "https://github.com/GlitchTrader/glitch-topstep/issues/25"
-      ]
-    },
-    {
-      "id": "TS-R4-04",
-      "title": "Multi-tranche protected additions and full exit cleanup",
-      "status": "done",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Independently protected additions and multiple tranches maintain per-tranche ownership.",
-        "Full exit ownership is proven and residual protective orders are cleaned up."
-      ],
-      "depends_on": [
-        "TS-R4-02"
-      ],
-      "evidence": [
-        "2026-07-31: GitHub #26/#27 — scale-in, targeted partial EXIT, per-tranche ownership; live A/B/C all_pass on PRAC-V2-645601-15979101 (PR #38, 619af4c).",
-        "2026-07-31: ownership derives remaining_qty from venue open contracts; newest open_orders_snapshot only (no ghost brackets after restart)."
-      ],
-      "sources": [
-        "docs/ROADMAP.md#r4--provider-order-and-protection-ownership",
-        "https://github.com/GlitchTrader/glitch-topstep/issues/26",
-        "https://github.com/GlitchTrader/glitch-topstep/issues/27"
-      ]
-    },
-    {
-      "id": "TS-R4-05",
-      "title": "Rearm naked-tranche protection on the execution queue with a real gate",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "rearmTrancheProtection runs on the same executionQueue as wire intents.",
-        "Rearm defers when non-protective working orders exist or an open EXIT targets the tranche.",
-        "openOrdersEvidence is read once per ownership.current() call.",
-        "Unit fixture covers latch, generation tags, and EXIT-pending deferral."
-      ],
-      "depends_on": [
-        "TS-R4-04"
-      ],
-      "evidence": [
-        "2026-07-31: rearmTrancheProtection queued on executionQueue; defers on non-protective working orders or hasOpenExitMutation; skips exit-targeted tranches; openOrdersEvidence once per current(); tests rearms naked tranche + defers while EXIT open."
-      ],
-      "sources": [
-        "src/execution/coordinator.ts",
-        "src/ownership/projectx-order-ownership.ts"
-      ],
-      "stop_line": "Do not invent OCO/linkedOrderId for rearm without PRAC proof; document orphan-leg risk separately."
-    },
-    {
-      "id": "TS-R5-01",
-      "title": "Canonical completed trade outcomes and learning evidence",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Canonical completed Topstep outcomes derive from provider fills with stable intent and outcome identity.",
-        "After-fee realized result, MFE, MAE, duration, exit cause, and planned versus realized risk and reward are recorded.",
-        "Account-policy effects and attribution confidence are explicit.",
-        "Incomplete or contradictory outcomes are labeled explicitly rather than inferred from balance drift.",
-        "Rejection and transport episodes are reviewable without becoming false trade outcomes."
-      ],
-      "depends_on": [
-        "TS-R4-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r5--canonical-outcomes-and-learning-evidence",
-        "docs/HANDOFF.md#6-publish-canonical-completed-outcomes"
-      ]
-    },
-    {
-      "id": "TS-R5-02",
-      "title": "Gateway outcome publication to glitch-topstep Hermes profile",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Gateway publishes glitch.topstep.trade_outcome.v1 to the companion Hermes profile.",
-        "Profile learning worker accepts only canonical outcomes; no balance or position-disappearance inference."
-      ],
-      "depends_on": [
-        "TS-R5-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r5--canonical-outcomes-and-learning-evidence",
-        "docs/HANDOFF.md#6-publish-canonical-completed-outcomes"
-      ]
-    },
-    {
-      "id": "TS-R6-01",
-      "title": "Versioned Topstep policy state machine",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "Canonical product and account-stage record replaces manual environment inputs.",
-        "Provider and dashboard source provenance and hashes are recorded.",
-        "EOD balance, hard loss-floor history, and floor correction workflow are versioned locally.",
-        "Trading Combine and Express Funded lifecycle states are modeled explicitly.",
-        "Payout eligibility, pending, processed, and post-payout reconciliation are tracked.",
-        "Scaling tier and authoritative contract ceiling are sourced and reconciled.",
-        "Contradiction and stale-source handling fail visibly."
-      ],
-      "depends_on": [
-        "TS-R2-03"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r6--topstep-policy-and-session-authority",
-        "docs/HANDOFF.md#5-implement-automatic-policy-state"
-      ]
-    },
-    {
-      "id": "TS-R6-02",
-      "title": "Session calendar, flat deadlines, and timezone truth",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Session flat deadlines are enforced from canonical policy state.",
-        "Holiday, early-close, timezone, and DST rules are explicit and tested.",
-        "Manual entry-window environment overrides are removed in favor of reconciled policy state."
-      ],
-      "depends_on": [
-        "TS-R6-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r6--topstep-policy-and-session-authority",
-        "docs/HANDOFF.md#5-implement-automatic-policy-state"
-      ]
-    },
-    {
-      "id": "TS-R7-01",
-      "title": "Contract discovery, rollover, and instrument metadata",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Active Topstep contract discovery and rollover evidence are recorded.",
-        "Native tick, point value, session, and fee metadata are integrated without hard-coded assumptions."
-      ],
-      "depends_on": [
-        "TS-R2-03"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
-      ]
-    },
-    {
-      "id": "TS-R7-02",
-      "title": "Multi-timeframe OHLCV normalization with provenance",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Integrated 1m, 5m, 15m, and 60m OHLCV normalization is deterministic.",
-        "Gap, partial-bar, and timestamp provenance are explicit.",
-        "Session and prior-session structure features are available without a coded entry strategy."
-      ],
-      "depends_on": [
-        "TS-R7-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
-      ]
-    },
-    {
-      "id": "TS-R7-03",
-      "title": "Tape, delta, depth, and descriptive feature engine",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Trade-tape, aggressor volume, cumulative delta, depth, and liquidity evidence are normalized.",
-        "Volatility, trend, range, and location evidence are descriptive features only.",
-        "Acceptance is demonstrated on at least two Topstep-supported products."
-      ],
-      "depends_on": [
-        "TS-R2-04",
-        "TS-R7-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
-      ]
-    },
-    {
-      "id": "TS-R7-04",
-      "title": "Entry-oriented decision packet enrichment for Hermes cognition",
-      "status": "ready",
-      "priority": "P1",
-      "owner_role": "coder",
-      "acceptance": [
-        "Decision packets expose session_context from ProjectX quotes (change, change_percent, session high/low/open, quote_age_ms) without hidden strategy gates.",
-        "Decision packets expose liquidity evidence (spread_ticks, top-of-book bid/ask size or imbalance when depth is partial) with explicit completeness flags.",
-        "Decision packets expose execution_context summary (working order count, entry-pending signal, last_fill_utc or flat-confirmed) derived from reconciled venue state only.",
-        "No numeric provider account IDs, contract IDs, credentials, or deterministic enter/hold/forbid signals are added to the packet.",
-        "Packet schema changes are versioned, tested, and documented in docs/PARITY.md without turning observation degradation into an execution veto."
-      ],
+      "owner_role": "operator_tests",
       "depends_on": [],
-      "evidence": [
-        "2026-07-28: live ProjectX quotes carry lastUpdated, change, and nullable lastPrice; gateway previously projected stale session timestamp into packet market.quote_timestamp.",
-        "2026-07-28: PR #11 fixes quote freshness parsing; entry decisions still lack session_context, liquidity, and open-order summaries in glitch.direct.decision_packet.v2."
-      ],
-      "sources": [
-        "src/hermes/packet-builder.ts",
-        "src/market/projectx-order-flow-service.ts",
-        "docs/AUTHORITY.md",
-        "docs/PARITY.md",
-        "docs/ROADMAP.md#r7--instrument-general-observation-engine"
-      ]
-    },
-    {
-      "id": "TS-R8-01",
-      "title": "Provider event replay and deterministic decision replay",
-      "status": "backlog",
-      "priority": "P1",
-      "owner_role": "coder",
       "acceptance": [
-        "Raw provider events replay into canonical state and packets deterministically.",
-        "Decision and receipt replay is deterministic on identical evidence.",
-        "Simulated fills, fees, and slippage are configurable and bounded."
+        "Quote, print, and depth event rates are measured over a named market interval.",
+        "Evidence retention and actual disk growth are recorded with start/end timestamps and bytes per event."
       ],
-      "depends_on": [
-        "TS-R3-01",
-        "TS-R7-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r8--replay-and-comparative-evaluation"
-      ]
+      "code_state": "instrumented",
+      "existing_evidence": "Windows reboot evidence preserved 112853 events and a 126013440-byte ProjectX evidence database without corruption.",
+      "blocked_reason": "The existing sample proves persistence but does not yet provide a bounded start/end rate calculation."
     },
     {
-      "id": "TS-R8-02",
-      "title": "Comparative cognition evaluation framework",
-      "status": "backlog",
-      "priority": "P2",
-      "owner_role": "pm-glitch",
-      "acceptance": [
-        "Cognition versions are compared on identical evidence with frozen inclusion, exclusion, regime, and missing-data rules.",
-        "Reports include expectancy, drawdown, MFE/MAE capture, churn, rejection, rule survival, and uncertainty.",
-        "One sample cannot silently become hard-coded strategy policy."
-      ],
-      "depends_on": [
-        "TS-R8-01"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r8--replay-and-comparative-evaluation"
-      ]
-    },
-    {
-      "id": "TS-R9-01",
-      "title": "Installed Hermes profile integration acceptance",
-      "status": "backlog",
+      "id": "TS-BETA-01",
+      "title": "One-account beta promotion",
+      "status": "external_acceptance_required",
       "priority": "P0",
-      "owner_role": "tests",
-      "acceptance": [
-        "glitch-topstep-hermes-profile installs with the gateway in shadow mode using a shared local bearer token.",
-        "Profile setup confirms both jobs start paused.",
-        "/topstep_status and /trade respond with expected shadow behavior.",
-        "A five-frame flat cycle produces one strict intent and a shadow receipt.",
-        "A positioned packet permits only HOLD or EXIT each minute.",
-        "/pause_trading stops model calls and /flatten_all produces a strict risk-reducing EXIT receipt."
-      ],
+      "owner_role": "operator",
       "depends_on": [
-        "TS-R2-05",
-        "TS-R5-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/HANDOFF.md#7-perform-installed-profile-integration"
-      ]
-    },
-    {
-      "id": "TS-R9-02",
-      "title": "One-account market-readiness evidence bundle",
-      "status": "backlog",
-      "priority": "P0",
-      "owner_role": "pm-glitch",
-      "acceptance": [
-        "Actual Windows and Hermes installation acceptance is recorded.",
-        "One configured Topstep account runs with zero duplicate entries and zero unexplained unprotected exposure.",
-        "Complete reconnect, restart recovery, and attribution are evidenced.",
-        "Reconciled after-fee shadow sample and explicit operator promotion review are recorded.",
-        "First complete account and payout lifecycle evidence is captured."
-      ],
-      "depends_on": [
-        "TS-R9-01",
         "TS-R1-04",
-        "TS-R4-02",
-        "TS-R6-01"
+        "TS-R2-06",
+        "TS-R2-07",
+        "glitch-topstep-hermes-profile:RAIL-006"
       ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r9--one-account-market-readiness-evidence"
-      ]
-    },
-    {
-      "id": "TS-R10-01",
-      "title": "Scale instruments, account stages, and correlated exposure",
-      "status": "backlog",
-      "priority": "P2",
-      "owner_role": "pm-glitch",
       "acceptance": [
-        "Additional Topstep-supported instruments are onboarded with evidence.",
-        "Additional account products and stages are supported with reconciled policy.",
-        "Portfolio-level correlated exposure evidence is recorded.",
-        "Topstep-native account or copy capabilities are used only when officially supported and reconciled."
+        "Installed gateway and Hermes profile pass shadow and approved Sim/PRAC acceptance on the target machine.",
+        "No duplicate entries, unexplained exposure, or unprotected attributable position occurs.",
+        "Restart, reconnect, pause, flatten, and receipt paths are evidenced.",
+        "The operator explicitly promotes the named immutable artifact to beta."
       ],
-      "depends_on": [
-        "TS-R9-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r10--scale-only-after-evidence"
-      ]
-    },
-    {
-      "id": "TS-R10-02",
-      "title": "Extract venue-neutral contracts after Topstep proof",
-      "status": "backlog",
-      "priority": "P2",
-      "owner_role": "coder",
-      "acceptance": [
-        "Reusable venue-neutral contracts are extracted only after the Topstep implementation is proven.",
-        "No Apex or NinjaTrader assumptions leak into the Topstep core during extraction."
-      ],
-      "depends_on": [
-        "TS-R9-02"
-      ],
-      "evidence": [],
-      "sources": [
-        "docs/ROADMAP.md#r10--scale-only-after-evidence",
-        "docs/ROADMAP.md#permanent-boundaries"
-      ]
-    },
-    {
-      "id": "TS-AUDIT-01",
-      "title": "Correct the hard loss-floor frame, bracket-derived risk, and dead decision expiry",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "calculateLiquidationFloor returns a floor in the same absolute frame as conservativeEquity for every loss model.",
-        "Protected risk is priced from the tick distance actually submitted on the ProjectX bracket.",
-        "GLITCH_MAX_INTENT_AGE_MS rejects a stale entry decision at intake instead of being parsed and ignored.",
-        "Regression tests pin the absolute floor frame and the submitted-bracket risk basis."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-28 audit: express_funded_eod returned a floor relative to the starting balance (-D) while calculateRiskBudget consumed an absolute conservativeEquity (ProjectX balance + unrealized PnL). On a $50k Express Funded account this reported current_buffer_usd of about $52,000 instead of $2,000, so hard_loss_floor_breach could not fire and Hermes received a false headroom in policy.current_buffer_usd. The shared lossFloorLockedAtZero/payoutProcessed early return had the same defect.",
-        "2026-07-28 fix src/risk/mll.ts: trailingFloorRelativeToStart() models both trailing models relative to the starting balance; calculateLiquidationFloor() returns startingBalance + relativeFloor. operator_provided_floor stays absolute. Existing trading_combine (49,000) and operator_provided (48,250) expectations are unchanged.",
-        "2026-07-28 audit: risk-engine priced rawRisk from the requested stop level while the order submits stopTicks rounded away from the reference price, so a non-tick-aligned reference price understated the risk actually borne. Reference price tick alignment is never validated.",
-        "2026-07-28 fix src/risk/risk-engine.ts: rawRisk = brackets.stopTicks * tickValue * quantity. Identical for tick-aligned references, strictly more conservative otherwise.",
-        "2026-07-28 audit: RiskSettings.maxIntentAgeMs was parsed, validated, and typed but never read in src/, so GLITCH_MAX_INTENT_AGE_MS was silent no-op safety config.",
-        "2026-07-28 fix src/risk/risk-engine.ts: entry intents older than maxIntentAgeMs are rejected as intent_stale; unparseable created_utc is rejected as intent_timestamp_invalid. Entry-only, so it cannot strand an exit.",
-        "2026-07-28 hardening src/execution/coordinator.ts: PlaceOrderRequest.size uses ValidatedEntry.quantity instead of intent.quantity ?? 0, removing a path that could submit a zero-size order.",
-        "2026-07-28 docs/TOPSTEP-POLICY.md records the mandatory absolute-frame conversion and the submitted-bracket risk basis.",
-        "2026-07-28 verification: npm run check green, 104 tests pass (100 before this change, 4 added)."
-      ],
-      "sources": [
-        "src/risk/mll.ts",
-        "src/risk/risk-engine.ts",
-        "src/execution/coordinator.ts",
-        "tests/mll.test.ts",
-        "tests/risk-engine.test.ts",
-        "docs/TOPSTEP-POLICY.md"
-      ],
-      "stop_line": "Software contract only. The corrected buffer is still operator_configured policy; it is not provider-reconciled truth and proves no live readiness."
-    },
-    {
-      "id": "TS-AUDIT-02",
-      "title": "Stop the entry armed gate from stranding an exit",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "coder",
-      "acceptance": [
-        "An identity-valid EXIT on proven attributable exposure is not blocked by an entry-only armed downgrade.",
-        "Operator trading disabled remains a hard block for every mutation including EXIT.",
-        "Account, contract, instrument identity and native ownership validation remain mandatory for EXIT.",
-        "Exit permission is a distinct, named decision from entry permission in both code and the decision packet.",
-        "supported_actions and any exit-permission field agree with what the coordinator will actually submit.",
-        "Fixtures cover exit during quote staleness, quiet tape, reconciliation lag, and recovery-blocked state."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-28 audit src/execution/coordinator.ts handleExit: EXIT returns shadowed/exit_verified_not_submitted whenever gatewayModePermitsLiveOrders(packet.execution.gateway_mode) is false.",
-        "2026-07-28 audit src/execution/gateway-mode.ts armedGateReasons: armed degrades on quote_stale, reconciliation_not_current, and order_flow_no_trades_60s.",
-        "Net effect: an open position cannot be closed by Hermes exactly when quotes thin out, the tape goes quiet, or reconciliation lags. On an account with a hard trailing loss floor that is the wrong failure direction.",
-        "docs/AUTHORITY.md permits deterministic rejection for factual execution invalidity; a quiet tape or a stale quote does not make closing an existing position factually invalid.",
-        "The sibling NinjaTrader rail already carries this contract: GL-AI-08 requires that an identity-valid attributable EXIT bypass entry-only license, compliance, session, and new-risk gates while AI-disabled stays a hard block.",
-        "packet.execution.supported_actions always advertises EXIT, so the packet currently overstates what the gateway will submit.",
-        "2026-07-31: gatewayModePermitsRiskReduction(armed|degraded_armed); EXIT uses it; gate risk_reduction_technically_supported on packet; fixtures for quiet-tape EXIT and trading_disabled_by_operator (tests/gateway-mode.test.ts, tests/position-management.test.ts)."
-      ],
-      "sources": [
-        "src/execution/coordinator.ts",
-        "src/execution/gateway-mode.ts",
-        "src/hermes/packet-builder.ts",
-        "docs/AUTHORITY.md"
-      ]
-    },
-    {
-      "id": "TS-AUDIT-03",
-      "title": "Move the quiet-tape armed gate out of Glitch or justify it as a venue boundary",
-      "status": "ready",
-      "priority": "P1",
-      "owner_role": "architect",
-      "acceptance": [
-        "order_flow_no_trades_60s is either removed from the armed gate and published as pure evidence, or documented as an authoritative venue/account boundary with a named source.",
-        "The decision is recorded against the docs/AUTHORITY.md change test with an explicit answer to each of its four questions.",
-        "Whatever remains in the gate is proven not to block an exit, per TS-AUDIT-02.",
-        "Hermes still receives the full rolling tape so it can decline a thin market by judgment."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-28 audit src/execution/gateway-mode.ts: a 60s window with trade_count <= 0 downgrades armed to degraded_armed and suppresses live orders.",
-        "docs/AUTHORITY.md forbids Glitch from encoding a fixed strategy, indicator trigger, setup checklist, or entry score, and its change test says a rule whose removal would merely let Hermes exercise judgment belongs in cognition.",
-        "A quiet tape is a market condition, not a factual execution error: quantity, identity, protection geometry, and account capacity are all still provable with zero prints in the window.",
-        "docs/TOPSTEP-NATIVE.md already states new_exposure_technically_supported reflects venue completeness rather than model conviction, which this gate contradicts.",
-        "Absent market-hub prints are separately visible through market_stream_state and the order_flow observation, so removing the gate loses no evidence."
-      ],
-      "sources": [
-        "src/execution/gateway-mode.ts",
-        "docs/AUTHORITY.md",
-        "docs/TOPSTEP-NATIVE.md"
-      ],
-      "stop_line": "Doctrine decision for the operator. Do not silently relax the gate as part of unrelated work."
-    },
-    {
-      "id": "TS-AUDIT-04",
-      "title": "Reconcile instrument scoping across the entry admission guards",
-      "status": "backlog",
-      "priority": "P2",
-      "owner_role": "coder",
-      "acceptance": [
-        "Position and working-order admission guards use one documented scope, or each states why its scope differs.",
-        "Any narrowing is justified against provable ownership rather than convenience.",
-        "The account-wide Topstep contract ceiling stays account-wide.",
-        "Fixtures cover a working order on a second contract in the same account."
-      ],
-      "depends_on": [
-        "TS-R4-01"
-      ],
-      "evidence": [
-        "2026-07-28 audit src/risk/risk-engine.ts: position_addition_not_implemented tests snapshot.instrumentOpenContracts (instrument-scoped) while working_order_ownership_unresolved tests snapshot.openOrders.length, which venue-state builds filtered by accountId only and not by contractId.",
-        "A working order on any other contract in the account therefore blocks entry on the configured contract, while an open position on that other contract does not.",
-        "Latent under the current single-contract acceptance scope; it becomes live behaviour as soon as a second Topstep contract is configured, which docs/TOPSTEP-NATIVE.md treats as a configuration change rather than an architecture change.",
-        "Narrowing the order guard would loosen a safety admission check, so it needs proven per-contract ownership first."
-      ],
-      "sources": [
-        "src/risk/risk-engine.ts",
-        "src/state/venue-state.ts",
-        "docs/TOPSTEP-NATIVE.md"
-      ],
-      "stop_line": "Do not loosen the working-order guard before per-contract ownership is provable."
-    },
-    {
-      "id": "TS-PM4-01",
-      "title": "PM4 Phase C live E2E harness (scenarios A/B/C)",
-      "status": "done",
-      "priority": "P0",
-      "owner_role": "tests",
-      "acceptance": [
-        "scripts/pm4-phase-c-e2e.mjs completes scenario A SHORT tranche flow with OCO enabled on PRAC.",
-        "Scenario B kills and restarts the gateway without health_not_ready; two tranches survive with ownership proof.",
-        "Scenario C LONG mirror passes after flat cleanup with working_orders=0.",
-        "data/pm4-phase-c-e2e.json records all_pass true on a live run."
-      ],
-      "depends_on": [],
-      "evidence": [
-        "2026-07-30: scenario A partial live pass (enter, proven, scale_in, two_tranches) with Auto OCO; B failed on start.ps1 detached restart.",
-        "2026-07-30 fix scripts/pm4-phase-c-e2e.mjs: kill port until free, start node with .env (no npm build), health diagnostics, recovery without second kill, ensureFlat waits working_orders=0.",
-        "2026-07-30: scenarios A and B pass live; C failed because ensureFlat read ownership.working_orders (absent) instead of state.openOrders — fixed to cancel orphan brackets via ProjectX before scenario C.",
-        "2026-07-30: scenario A MOVE failed after partial EXIT_B + restart — ownership proven != live openOrders; harness waits for SL/TP custom tags on state.openOrders before MOVE.",
-        "2026-07-30 root cause: handleExit used first position row size (1) instead of instrumentOpenContracts (2) when ProjectX reports split lots; partial EXIT called closePosition and flattened. Fixed in coordinator.ts + regression test.",
-        "2026-07-31T14:21:17Z–14:31:35Z: PM4_E2E_RESTART=1 all_pass true on PRAC-V2-645601-15979101 — A SHORT, B restart ownership_two_tranches, C LONG mirror; gateway 619af4c / PR #38."
-      ],
-      "sources": [
-        "scripts/pm4-phase-c-e2e.mjs",
-        "docs/PARITY.md",
-        "start.ps1",
-        "https://github.com/GlitchTrader/glitch-topstep/pull/38"
-      ]
+      "stop_line": "No claim of beta readiness before the cross-repository profile acceptance and operator-approved real mutation evidence are attached."
     }
+  ],
+  "roadmap_only": [
+    "provider-event replay and archive",
+    "canonical completed outcomes and learning publication",
+    "versioned Topstep policy and session calendar",
+    "multi-timeframe and multi-product observation enrichment",
+    "comparative cognition evaluation",
+    "additional instruments, account stages, and venue-neutral extraction"
   ]
 }
