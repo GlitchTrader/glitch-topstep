@@ -26,7 +26,7 @@ export function resolveGatewayMode(
   configured: TradingMode,
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
-  orderFlow: ProjectXOrderFlowState,
+  _orderFlow: ProjectXOrderFlowState,
   now: Date = new Date(),
 ): ResolvedGatewayMode {
   if (configured === "disabled") {
@@ -36,7 +36,7 @@ export function resolveGatewayMode(
     return { configured, effective: "shadow", downgradeReason: null };
   }
 
-  const reasons = armedGateReasons(snapshot, risk, orderFlow, now);
+  const reasons = armedGateReasons(snapshot, risk, now);
   if (reasons.length === 0) {
     return { configured, effective: "armed", downgradeReason: null };
   }
@@ -68,7 +68,7 @@ export function buildExecutionGates(
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
   const gatewayMode = resolveGatewayMode(tradingMode, snapshot, risk, orderFlow, now);
   return [
-    ...armedSafetyGates(snapshot, risk, orderFlow, quality),
+    ...armedSafetyGates(snapshot, risk, quality),
     riskReductionGate(tradingMode, gatewayMode.effective, snapshot),
     newExposureGate(snapshot, recovery, tradingMode, quality, maxContracts),
   ];
@@ -102,12 +102,10 @@ function riskReductionGate(
 function armedSafetyGates(
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
-  orderFlow: ProjectXOrderFlowState,
   quality: SnapshotDataQuality,
 ): ExecutionGate[] {
   const reconciliation = snapshot.operational.reconciliation;
   const reconciliationCurrent = isReconciliationCurrent(snapshot.operational);
-  const tape60 = orderFlow.observation?.windows.find((window) => window.window_seconds === 60);
   const quoteStale = quality.quoteAgeMs !== null && quality.quoteAgeMs > risk.maxQuoteAgeMs;
 
   return [
@@ -129,11 +127,6 @@ function armedSafetyGates(
       detail: reconciliationCurrent
         ? undefined
         : `state=${reconciliation.state} generation=${reconciliation.generation} operational_generation=${snapshot.operational.generation}`,
-    },
-    {
-      id: "order_flow_trades_60s",
-      passed: Boolean(tape60 && tape60.trade_count > 0),
-      detail: tape60 ? `trade_count=${tape60.trade_count}` : "no_60s_window",
     },
   ];
 }
@@ -193,11 +186,10 @@ function newExposureGate(
 function armedGateReasons(
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
-  orderFlow: ProjectXOrderFlowState,
   now: Date,
 ): string[] {
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
-  const gates = armedSafetyGates(snapshot, risk, orderFlow, quality);
+  const gates = armedSafetyGates(snapshot, risk, quality);
   const reasons: string[] = [];
   const stateGate = gates.find((gate) => gate.id === "state_complete");
   if (stateGate && !stateGate.passed) {
@@ -215,8 +207,6 @@ function armedGateReasons(
     }
     if (gate.id === "reconciliation_current") {
       reasons.push("reconciliation_not_current");
-    } else if (gate.id === "order_flow_trades_60s") {
-      reasons.push("order_flow_no_trades_60s");
     }
   }
 
