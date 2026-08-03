@@ -1,22 +1,34 @@
-name: locate-ts-rel-01
+name: apply-ts-rel-01
 
 on:
   pull_request:
-  push:
-    branches:
-      - architect/ts-rel-01-compat-meta
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  locate:
+  apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Locate compatibility surfaces
+        with:
+          ref: architect/ts-rel-01-compat-meta
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: node tools/apply_ts_rel_01.mjs
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Commit verified product change and remove one-shot machinery
         run: |
-          echo '--- TypeScript files ---'
-          find src tests -type f | sort
-          echo '--- health and server matches ---'
-          grep -R -n -E 'trading_mode|/health|createServer|healthPayload|health' src tests | head -400 || true
+          rm -f tools/apply_ts_rel_01.mjs .github/workflows/locate-ts-rel-01.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 1
+          git commit -m "feat(release): expose gateway compatibility metadata"
+          git push origin HEAD:architect/ts-rel-01-compat-meta
