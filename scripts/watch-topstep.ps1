@@ -90,11 +90,8 @@ while ($true) {
     if ($fingerprint -eq $lastFingerprint) { $suffix = ' (sem mudanca)' }
     $lastFingerprint = $fingerprint
 
-    Write-Host (
-        "$now | mode=$mode | pos=$contracts | action=$action | prompt=$prompt | "
-        + "receipt=$receiptHttp/$receiptStatus/$receiptCode | decision_utc=$decisionUtc | "
-        + "receipt_utc=$receiptUtc | worker=$workerStatus$suffix"
-    )
+    $line = "$now | mode=$mode | pos=$contracts | action=$action | prompt=$prompt | receipt=$receiptHttp/$receiptStatus/$receiptCode | decision_utc=$decisionUtc | receipt_utc=$receiptUtc | worker=$workerStatus$suffix"
+    Write-Host $line
 
     Start-Sleep -Seconds $IntervalSeconds
 }
