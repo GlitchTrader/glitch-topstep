@@ -66,6 +66,22 @@
       ]
     },
     {
+      "id": "TS-REL-01",
+      "title": "Expose one authenticated gateway compatibility contract for Hermes profiles",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "release_architecture",
+      "issue": 54,
+      "pull_request": 55,
+      "evidence": [
+        "src/release/compatibility.ts",
+        "src/service.ts health payload",
+        "tests/compatibility.test.ts",
+        "docs/specs/TS-REL-01.md",
+        "package and lockfile version 0.1.2"
+      ]
+    },
+    {
       "id": "TS-R1-04",
       "title": "Zero duplicate entries in a real ProjectX kill and reconnect acceptance session",
       "status": "external_acceptance_required",
@@ -120,6 +136,7 @@
       "owner_role": "operator",
       "issue": 52,
       "depends_on": [
+        "TS-REL-01",
         "TS-R1-04",
         "TS-R2-06",
         "TS-R2-07",
