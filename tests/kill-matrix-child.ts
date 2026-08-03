@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Child process for TS-R1-01 kill-matrix fixtures.
  * Driven by env: GLITCH_KILL_POINT, GLITCH_KILL_DB, GLITCH_KILL_DATA_DIR,
  * GLITCH_KILL_COUNTER, GLITCH_KILL_READY_FILE (optional).
@@ -114,7 +114,7 @@ function entryIntent(snapshotHash: string, createdUtc: string): Record<string, u
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v2",
+    prompt_version: "glitch-topstep-v4",
     reason: "Kill-matrix entry fixture.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -146,7 +146,7 @@ function exitIntent(snapshotHash: string, createdUtc: string): Record<string, un
     confidence: 0.9,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v2",
+    prompt_version: "glitch-topstep-v4",
     reason: "Kill-matrix exit fixture.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -188,7 +188,7 @@ async function runRecoveryScenario(dbPath: string): Promise<void> {
       confidence: 0.6,
       snapshotHash: "kill-matrix-recovery",
       modelVersion: "test",
-      promptVersion: "glitch-topstep-v2",
+      promptVersion: "glitch-topstep-v4",
       reason: "Recovery kill seed.",
       decisionAudit: {
         bullCase: "Bull.",

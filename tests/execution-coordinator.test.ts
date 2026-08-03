@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,7 +80,7 @@ function intent(
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v2",
+    prompt_version: "glitch-topstep-v4",
     reason: "Test concurrent entry.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -347,7 +347,7 @@ describe("execution coordinator serialization", () => {
         confidence: 0.4,
         snapshot_hash: "expired-or-unknown-hash",
         model_version: "test",
-        prompt_version: "glitch-topstep-v2",
+        prompt_version: "glitch-topstep-v4",
         reason: "No trade this cycle.",
         decision_audit: {
           bull_case: "Bull case.",
