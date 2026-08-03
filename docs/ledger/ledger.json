@@ -249,6 +249,38 @@
         "docs/specs/TS-R3-02.md"
       ],
       "stop_line": "No SOUL claim of must_flat compliance until authoritative packet fields exist."
+    },
+    {
+      "id": "TS-R3-03",
+      "title": "Rich trade outcomes for Hermes learning (MAE/MFE, exit cause, R-multiple)",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "coder",
+      "depends_on": [
+        "TS-R3-01"
+      ],
+      "acceptance": [
+        "trade_outcome v1.1 publishes MAE/MFE and canonical exit_reason when learning_eligible=true.",
+        "initial_risk_usd and r_multiple computed from structural entry geometry.",
+        "learning_eligible=false when protection, attribution, or excursion metrics are incomplete.",
+        "GET /outcomes and export path carry v1.1 fields; v1 consumers remain compatible.",
+        "docs/PARITY.md canonical outcomes row updated when implemented."
+      ],
+      "stop_line": "No counterfactual abstention PnL in outcomes; no master/follower replication fields.",
+      "evidence": [
+        "2026-08-03: parity gap documented vs Glitch NT reconcile-hermes-outcomes.",
+        "docs/specs/TS-R3-03.md"
+      ],
+      "sources": [
+        "src/learning/trade-outcome.ts",
+        "src/learning/trade-outcome-publisher.ts",
+        "src/storage/trade-outcome-store.ts",
+        "src/server/local-gateway.ts",
+        "tests/trade-outcome-publisher.test.ts",
+        "docs/PARITY.md",
+        "docs/specs/TS-R3-03.md",
+        "glitch-topstep-hermes-profile:GTHP-012"
+      ]
     }
   ],
   "roadmap_only": [
