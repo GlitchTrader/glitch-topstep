@@ -66,7 +66,13 @@ while ($true) {
     if ($token) {
         try {
             $state = Invoke-RestMethod -Uri "$GatewayUrl/state" -Headers @{ Authorization = "Bearer $token" } -TimeoutSec 5
-            $contracts = [string]$state.account.total_open_contracts
+            if ($null -ne $state.totalOpenContracts) {
+                $contracts = [string]$state.totalOpenContracts
+            } elseif ($null -ne $state.total_open_contracts) {
+                $contracts = [string]$state.total_open_contracts
+            } elseif ($state.instrumentOpenContracts -ne $null) {
+                $contracts = [string]$state.instrumentOpenContracts
+            }
         } catch { }
     }
 
