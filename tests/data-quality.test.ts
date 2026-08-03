@@ -36,6 +36,42 @@ describe("snapshot data quality", () => {
     assert.ok(result.issues.includes("account_state_stale"));
   });
 
+  it("does not mark account state stale while reconciliation is in flight", () => {
+    const current = snapshot();
+    current.operational.reconciliation = {
+      state: "running",
+      generation: 1,
+      lastStartedAt: "2026-07-21T12:00:08Z",
+      lastSucceededAt: "2026-07-21T12:00:04Z",
+      lastError: null,
+    };
+    const result = evaluateSnapshotDataQuality(
+      current,
+      settings,
+      new Date("2026-07-21T12:00:10Z"),
+    );
+    assert.equal(result.stateAgeMs, 6_000);
+    assert.ok(!result.issues.includes("account_state_stale"));
+    assert.ok(result.issues.includes("quote_stale"));
+  });
+
+  it("still marks account state stale when reconciliation runs too long", () => {
+    const current = snapshot();
+    current.operational.reconciliation = {
+      state: "running",
+      generation: 1,
+      lastStartedAt: "2026-07-21T11:59:00Z",
+      lastSucceededAt: "2026-07-21T11:59:04Z",
+      lastError: null,
+    };
+    const result = evaluateSnapshotDataQuality(
+      current,
+      settings,
+      new Date("2026-07-21T12:00:10Z"),
+    );
+    assert.ok(result.issues.includes("account_state_stale"));
+  });
+
   it("rejects invalid and materially future timestamps explicitly", () => {
     const invalid = snapshot();
     invalid.capturedAt = "not-a-date";

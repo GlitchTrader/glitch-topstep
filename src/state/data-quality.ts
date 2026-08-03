@@ -8,6 +8,8 @@ export interface SnapshotDataQuality {
 }
 
 const FUTURE_TOLERANCE_MS = 2_000;
+/** Reconciliation cycles can block on ProjectX REST for several seconds. */
+const RECONCILIATION_STALE_GRACE_MS = 30_000;
 
 export function evaluateSnapshotDataQuality(
   snapshot: AccountVenueSnapshot,
@@ -38,7 +40,7 @@ export function evaluateSnapshotDataQuality(
     issues.add("account_state_timestamp_invalid");
   } else if (stateAgeMs < -FUTURE_TOLERANCE_MS) {
     issues.add("account_state_timestamp_future");
-  } else if (stateAgeMs > settings.maxStateAgeMs) {
+  } else if (stateAgeMs > settings.maxStateAgeMs && !reconciliationInFlightGrace(snapshot, now)) {
     issues.add("account_state_stale");
   }
 
@@ -53,4 +55,15 @@ export function evaluateSnapshotDataQuality(
 function ageMilliseconds(timestamp: string, now: Date): number | null {
   const epochMs = Date.parse(timestamp);
   return Number.isFinite(epochMs) ? now.getTime() - epochMs : null;
+}
+
+function reconciliationInFlightGrace(snapshot: AccountVenueSnapshot, now: Date): boolean {
+  const reconciliation = snapshot.operational?.reconciliation;
+  if (reconciliation?.state !== "running" || !reconciliation.lastStartedAt) {
+    return false;
+  }
+  const startedAgeMs = ageMilliseconds(reconciliation.lastStartedAt, now);
+  return startedAgeMs !== null
+    && startedAgeMs >= 0
+    && startedAgeMs <= RECONCILIATION_STALE_GRACE_MS;
 }
