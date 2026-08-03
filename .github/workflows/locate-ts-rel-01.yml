@@ -1,0 +1,21 @@
+name: locate-ts-rel-01
+
+on:
+  push:
+    branches:
+      - architect/ts-rel-01-compat-meta
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate compatibility surfaces
+        run: |
+          echo '--- TypeScript files ---'
+          find src tests -type f | sort
+          echo '--- health and server matches ---'
+          grep -R -n -E 'trading_mode|/health|createServer|healthPayload|health' src tests | head -400 || true
