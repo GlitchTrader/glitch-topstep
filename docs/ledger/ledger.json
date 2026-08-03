@@ -28,6 +28,7 @@
     "TS-R2-05",
     "TS-R2-06",
     "TS-R2-07",
+    "TS-R1-04",
     "TS-R4-00",
     "TS-R4-03",
     "TS-R4-04",
@@ -86,7 +87,7 @@
     {
       "id": "TS-R1-04",
       "title": "Zero duplicate entries in a real ProjectX kill and reconnect acceptance session",
-      "status": "external_acceptance_required",
+      "status": "done",
       "priority": "P0",
       "owner_role": "operator_tests",
       "issue": 49,
@@ -95,8 +96,19 @@
         "An explicitly approved disposable ProjectX acceptance session exercises kill, reconnect, and same-intent retry without duplicate exposure.",
         "Durable intent id, canonical body hash, custom tag, provider order identity, and final account state agree."
       ],
-      "code_state": "ready",
-      "blocked_reason": "Requires an operator-approved real ProjectX mutation and credentials on the target Windows machine; source and fake-provider kill matrices are already green.",
+      "code_state": "implemented",
+      "evidence": [
+        "2026-08-03: operator approval on #49 (PRAC flat, v0.1.2 @ 0e86c7a, bracket-protected 1 MNQ).",
+        "2026-08-03: scripts/acceptance-r1-04-kill-matrix.mjs live PRAC session — six GLITCH_KILL_POINT hooks + intent_body_conflict; proof_passed=true.",
+        "2026-08-03: tests/fixtures/projectx/live/r1_04_kill_matrix_proof.json + validateR1_04KillProof offline validator green."
+      ],
+      "sources": [
+        "scripts/acceptance-r1-04-kill-matrix.mjs",
+        "scripts/_clear-r1-04-test-intents.mjs",
+        "src/projectx/r1-04-kill-proof.ts",
+        "tests/r1-04-kill-proof.test.ts",
+        "tests/fixtures/projectx/live/r1_04_kill_matrix_proof.json"
+      ],
       "stop_line": "Do not characterize fake-provider or read-only evidence as a real order-mutation acceptance."
     },
     {

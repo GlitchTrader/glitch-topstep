@@ -1,0 +1,513 @@
+{
+  "schema_version": "glitch.projectx.r1_04_kill_proof.v1",
+  "captured_utc": "2026-08-03T02:38:54.578Z",
+  "mode": "live_prac_acceptance",
+  "scope": {
+    "account_id": 26080387,
+    "account_name": "PRAC-V2-645601-15979101",
+    "contract_id": "CON.F.US.MNQ.U26",
+    "instrument": "MNQ"
+  },
+  "database_fingerprints": {
+    "execution_sqlite_bytes": 17092608,
+    "execution_sqlite_sha256": "827d1fa0581c384110d9a9d1f5e8b4f17bfa37063c99e85c347dca6f173e8a0d",
+    "evidence_sqlite_bytes": 531365888,
+    "evidence_sqlite_sha256": "9ab905562b19652815c789c3ea52e68786d43c4c844a09c60dc0cdbb3a2e76b6"
+  },
+  "cases": [
+    {
+      "kill_point": "after_intent_before_outbox",
+      "intent_id": "00000000-0000-4000-8000-00000000a041",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a041",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 422,
+        "status": "rejected",
+        "code": "intent_confirmed_not_submitted_without_outbox"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 0
+    },
+    {
+      "kill_point": "after_prepared_before_provider",
+      "intent_id": "00000000-0000-4000-8000-00000000a042",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a042",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 422,
+        "status": "rejected",
+        "code": "mutation_confirmed_not_submitted_after_restart"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 0
+    },
+    {
+      "kill_point": "after_submitting_before_transport",
+      "intent_id": "00000000-0000-4000-8000-00000000a043",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a043",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 503,
+        "status": "ambiguous",
+        "code": "intent_already_processing_or_recovery_required"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 0
+    },
+    {
+      "kill_point": "after_accept_before_submitted",
+      "intent_id": "00000000-0000-4000-8000-00000000a044",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a044",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 202,
+        "status": "submitted",
+        "code": "entry_recovered_from_projectx_custom_tag"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 1
+    },
+    {
+      "kill_point": "after_submitted_before_receipt",
+      "intent_id": "00000000-0000-4000-8000-00000000a045",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a045",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 202,
+        "status": "submitted",
+        "code": "entry_receipt_reconstructed_from_durable_state"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 1
+    },
+    {
+      "kill_point": "after_receipt_before_jsonl",
+      "intent_id": "00000000-0000-4000-8000-00000000a046",
+      "custom_tag": "glt-00000000-0000-4000-8000-00000000a046",
+      "proof_passed": true,
+      "proof_failures": [],
+      "kill_submit": {
+        "http": null,
+        "error": "fetch failed",
+        "body": null
+      },
+      "gateway_killed": true,
+      "provider_entry_orders_before_replay": 0,
+      "replay_submit": {
+        "http": 202,
+        "status": "open_protected",
+        "code": "entry_open_with_proven_protection"
+      },
+      "provider_entry_orders_after_replay": 0,
+      "open_contracts_after_replay": 1
+    },
+    {
+      "test": "body_conflict",
+      "intent_id": "00000000-0000-4000-8000-00000000a099",
+      "first": {
+        "http": 422,
+        "code": "intent_body_conflict",
+        "status": "rejected"
+      },
+      "second": {
+        "http": 422,
+        "code": "intent_body_conflict",
+        "status": "rejected"
+      },
+      "proof_passed": true,
+      "proof_failures": []
+    }
+  ],
+  "steps": [
+    {
+      "step": "SESSION_START",
+      "captured_utc": "2026-08-03T02:38:54.578Z",
+      "gateway_version": "0.1.2",
+      "account_id": "26080387",
+      "account_name": "PRAC-V2-645601-15979101",
+      "contract_id": "CON.F.US.MNQ.U26"
+    },
+    {
+      "step": "SESSION_BASELINE_GATEWAY_START",
+      "pid": 19100,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:38:54.596Z"
+    },
+    {
+      "step": "after_intent_before_outbox_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:39:01.186Z"
+    },
+    {
+      "step": "after_intent_before_outbox_PRE_CLEAR_GATEWAY_START",
+      "pid": 25056,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:39:03.780Z"
+    },
+    {
+      "step": "after_intent_before_outbox_GATEWAY_START",
+      "pid": 3220,
+      "kill_point": "after_intent_before_outbox",
+      "recorded_utc": "2026-08-03T02:39:12.987Z"
+    },
+    {
+      "step": "after_intent_before_outbox_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_intent_before_outbox_RECOVERY_GATEWAY_START",
+      "pid": 24588,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:39:17.546Z"
+    },
+    {
+      "step": "after_intent_before_outbox_REPLAY",
+      "http": 422,
+      "status": "rejected",
+      "code": "intent_confirmed_not_submitted_without_outbox"
+    },
+    {
+      "step": "after_intent_before_outbox_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:39:27.194Z"
+    },
+    {
+      "step": "after_intent_before_outbox_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 26056,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:39:29.625Z"
+    },
+    {
+      "step": "after_prepared_before_provider_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:39:36.459Z"
+    },
+    {
+      "step": "after_prepared_before_provider_PRE_CLEAR_GATEWAY_START",
+      "pid": 20072,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:39:38.855Z"
+    },
+    {
+      "step": "after_prepared_before_provider_GATEWAY_START",
+      "pid": 23660,
+      "kill_point": "after_prepared_before_provider",
+      "recorded_utc": "2026-08-03T02:39:46.666Z"
+    },
+    {
+      "step": "after_prepared_before_provider_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_prepared_before_provider_RECOVERY_GATEWAY_START",
+      "pid": 20964,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:39:51.398Z"
+    },
+    {
+      "step": "after_prepared_before_provider_REPLAY",
+      "http": 422,
+      "status": "rejected",
+      "code": "mutation_confirmed_not_submitted_after_restart"
+    },
+    {
+      "step": "after_prepared_before_provider_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:40:02.849Z"
+    },
+    {
+      "step": "after_prepared_before_provider_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 25076,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:40:05.300Z"
+    },
+    {
+      "step": "after_submitting_before_transport_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:40:16.034Z"
+    },
+    {
+      "step": "after_submitting_before_transport_PRE_CLEAR_GATEWAY_START",
+      "pid": 20080,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:40:18.542Z"
+    },
+    {
+      "step": "after_submitting_before_transport_GATEWAY_START",
+      "pid": 25908,
+      "kill_point": "after_submitting_before_transport",
+      "recorded_utc": "2026-08-03T02:40:26.003Z"
+    },
+    {
+      "step": "after_submitting_before_transport_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_submitting_before_transport_RECOVERY_GATEWAY_START",
+      "pid": 17164,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:40:30.395Z"
+    },
+    {
+      "step": "after_submitting_before_transport_REPLAY",
+      "http": 503,
+      "status": "ambiguous",
+      "code": "intent_already_processing_or_recovery_required"
+    },
+    {
+      "step": "after_submitting_before_transport_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:40:39.969Z"
+    },
+    {
+      "step": "after_submitting_before_transport_POST_RESOLVE_AMBIGUITY",
+      "intent_id": "00000000-0000-4000-8000-00000000a043",
+      "recorded_utc": "2026-08-03T02:40:39.988Z"
+    },
+    {
+      "step": "after_submitting_before_transport_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 14076,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:40:42.449Z"
+    },
+    {
+      "step": "after_accept_before_submitted_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:40:47.221Z"
+    },
+    {
+      "step": "after_accept_before_submitted_PRE_CLEAR_GATEWAY_START",
+      "pid": 7092,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:40:49.732Z"
+    },
+    {
+      "step": "after_accept_before_submitted_GATEWAY_START",
+      "pid": 4976,
+      "kill_point": "after_accept_before_submitted",
+      "recorded_utc": "2026-08-03T02:40:56.949Z"
+    },
+    {
+      "step": "after_accept_before_submitted_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_accept_before_submitted_RECOVERY_GATEWAY_START",
+      "pid": 21976,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:41:03.621Z"
+    },
+    {
+      "step": "after_accept_before_submitted_REPLAY",
+      "http": 202,
+      "status": "submitted",
+      "code": "entry_recovered_from_projectx_custom_tag"
+    },
+    {
+      "step": "after_accept_before_submitted_POST_EXIT",
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    },
+    {
+      "step": "after_accept_before_submitted_POST_CANCEL_ORDERS",
+      "recorded_utc": "2026-08-03T02:41:37.961Z"
+    },
+    {
+      "step": "after_accept_before_submitted_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:41:40.970Z"
+    },
+    {
+      "step": "after_accept_before_submitted_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 13176,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:41:43.412Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:41:48.287Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_PRE_CLEAR_GATEWAY_START",
+      "pid": 16904,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:41:50.795Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_GATEWAY_START",
+      "pid": 24800,
+      "kill_point": "after_submitted_before_receipt",
+      "recorded_utc": "2026-08-03T02:41:57.967Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_submitted_before_receipt_RECOVERY_GATEWAY_START",
+      "pid": 464,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:42:02.535Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_REPLAY",
+      "http": 202,
+      "status": "submitted",
+      "code": "entry_receipt_reconstructed_from_durable_state"
+    },
+    {
+      "step": "after_submitted_before_receipt_POST_EXIT",
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    },
+    {
+      "step": "after_submitted_before_receipt_POST_CANCEL_ORDERS",
+      "recorded_utc": "2026-08-03T02:42:14.656Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:42:17.669Z"
+    },
+    {
+      "step": "after_submitted_before_receipt_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 7160,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:42:20.184Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:42:24.867Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_PRE_CLEAR_GATEWAY_START",
+      "pid": 25088,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:42:27.378Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_GATEWAY_START",
+      "pid": 2280,
+      "kill_point": "after_receipt_before_jsonl",
+      "recorded_utc": "2026-08-03T02:42:34.519Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_KILL_SUBMIT",
+      "http": null,
+      "error": "fetch failed",
+      "body": null
+    },
+    {
+      "step": "after_receipt_before_jsonl_RECOVERY_GATEWAY_START",
+      "pid": 26252,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:42:39.158Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_REPLAY",
+      "http": 202,
+      "status": "open_protected",
+      "code": "entry_open_with_proven_protection"
+    },
+    {
+      "step": "after_receipt_before_jsonl_POST_EXIT",
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    },
+    {
+      "step": "after_receipt_before_jsonl_POST_CANCEL_ORDERS",
+      "recorded_utc": "2026-08-03T02:42:51.263Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:42:54.276Z"
+    },
+    {
+      "step": "after_receipt_before_jsonl_RECOVERY_CLEAR_GATEWAY_START",
+      "pid": 24088,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:42:56.797Z"
+    },
+    {
+      "step": "CONFLICT_PRE_CLEAR_GATEWAY_START",
+      "pid": 9692,
+      "kill_point": null,
+      "recorded_utc": "2026-08-03T02:43:04.064Z"
+    },
+    {
+      "step": "CONFLICT_PRE_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:43:30.825Z"
+    },
+    {
+      "step": "BODY_CONFLICT",
+      "test": "body_conflict",
+      "intent_id": "00000000-0000-4000-8000-00000000a099",
+      "first": {
+        "http": 422,
+        "code": "intent_body_conflict",
+        "status": "rejected"
+      },
+      "second": {
+        "http": 422,
+        "code": "intent_body_conflict",
+        "status": "rejected"
+      },
+      "proof_passed": true,
+      "proof_failures": []
+    },
+    {
+      "step": "CONFLICT_POST_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:43:30.902Z"
+    },
+    {
+      "step": "SESSION_END_FLAT_OK",
+      "recorded_utc": "2026-08-03T02:43:30.932Z"
+    }
+  ],
+  "proof_passed": true,
+  "proof_failures": []
+}
