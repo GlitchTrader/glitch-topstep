@@ -184,9 +184,15 @@ writeFixture("open_positions", await api.searchOpenPositions(config.scope.accoun
 writeFixture("open_orders", await api.searchOpenOrders(config.scope.accountId));
 
 const endUtc = capturedUtc;
-const startUtc = new Date(Date.parse(capturedUtc) - 24 * 60 * 60 * 1000).toISOString();
-writeFixture("historical_orders_24h", await api.searchOrders(config.scope.accountId, startUtc, endUtc));
-writeFixture("historical_trades_24h", await api.searchTrades(config.scope.accountId, startUtc, endUtc));
+// ponytail: PRAC may idle >24h between sessions; default 72h keeps identity proof fixtures populated.
+const historyHours = Number.parseInt(process.env.GLITCH_FIXTURE_HISTORY_HOURS ?? "72", 10);
+const historyWindowHours = Number.isFinite(historyHours) && historyHours > 0 ? historyHours : 72;
+const startUtc = new Date(Date.parse(capturedUtc) - historyWindowHours * 60 * 60 * 1000).toISOString();
+const historicalOrders = await api.searchOrders(config.scope.accountId, startUtc, endUtc);
+const historicalTrades = await api.searchTrades(config.scope.accountId, startUtc, endUtc);
+writeFixture("historical_orders_24h", historicalOrders);
+writeFixture("historical_trades_24h", historicalTrades);
+manifest.history_search_window_hours = historyWindowHours;
 writeFixture("history_bars_1m_2h", await api.retrieveBars({
   contractId: config.scope.contractId,
   live: config.scope.liveMarketData,
@@ -250,7 +256,7 @@ if (fs.existsSync(reconnectProofPath) && !manifest.files.some((entry) => entry.n
 }
 
 manifest.secret_scan = "passed";
-manifest.note = "Read-only capture for TS-R2-01..05; includes sanitized auth envelopes, stream corpus, subscription and reconnect proofs.";
+manifest.note = "Read-only capture for TS-R2-01..07; includes sanitized auth envelopes, stream corpus, subscription/reconnect proofs, and historical identity fixtures.";
 const manifestPath = path.join(OUT_DIR, "manifest.json");
 const manifestText = `${JSON.stringify(manifest, null, 2)}\n`;
 scanForLeaks(manifestText, "manifest");

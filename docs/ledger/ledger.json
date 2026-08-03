@@ -271,7 +271,7 @@
     {
       "id": "TS-R2-06",
       "title": "Prove historical order and trade search with identity retention",
-      "status": "blocked",
+      "status": "done",
       "priority": "P1",
       "owner_role": "coder",
       "acceptance": [
@@ -281,10 +281,16 @@
       "depends_on": [
         "TS-R2-01"
       ],
-      "evidence": [],
-      "blocked_reason": "Requires successful TS-R2-01 authentication and account history.",
+      "evidence": [
+        "2026-08-03: src/projectx/fixture-corpus.ts validateHistoricalSearchFixtures + tests/fixture-corpus.test.ts (TS-R2-06).",
+        "2026-08-03: npm run capture:fixtures on armed PRAC gateway — historical_orders_24h.json (90 glt-* tags) and historical_trades_24h.json (orderId linkage); 72h window (PRAC idle >24h between sessions)."
+      ],
       "sources": [
-        "docs/ROADMAP.md#r2--real-projectx-read-only-proof"
+        "docs/ROADMAP.md#r2--real-projectx-read-only-proof",
+        "src/projectx/fixture-corpus.ts",
+        "scripts/capture-projectx-fixtures.mjs",
+        "tests/fixtures/projectx/live/historical_orders_24h.json",
+        "tests/fixtures/projectx/live/historical_trades_24h.json"
       ]
     },
     {
