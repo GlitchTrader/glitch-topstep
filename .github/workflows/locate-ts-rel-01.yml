@@ -19,6 +19,27 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Sanitize one-shot Markdown template
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tools/apply_ts_rel_01.mjs')
+          text = path.read_text(encoding='utf-8')
+          for old, new in {
+              'Authenticated `/health` includes a nonsecret `compatibility` object': 'Authenticated /health includes a nonsecret compatibility object',
+              'Per-packet `execution.supported_actions` remains': 'Per-packet execution.supported_actions remains',
+              '- `gateway_name`': '- gateway_name',
+              '- `gateway_version`': '- gateway_version',
+              '- `health_schema`': '- health_schema',
+              '- `intent_schemas`': '- intent_schemas',
+              '- `decision_packet_schemas`': '- decision_packet_schemas',
+              '- `capabilities`': '- capabilities',
+          }.items():
+              if old not in text:
+                  raise SystemExit(f'missing generator template fragment: {old}')
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8')
+          PY
       - run: node tools/apply_ts_rel_01.mjs
       - run: npm ci
       - run: npm run build
