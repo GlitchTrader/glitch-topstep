@@ -9,6 +9,7 @@ import {
   lastProtectivePriceForIntent,
   latestOrderById,
   nextUnusedProtectionGeneration,
+  parseProtectiveTag,
   protectionCustomTags,
   sanitizeRearmProtectionPrices,
   type ResolvedProtection,
@@ -613,6 +614,74 @@ export class ExecutionCoordinator {
 
   private attributableTranches(): TrancheView[] {
     return this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+  }
+
+  /**
+   * Cancel working `glt-*-SL` / `glt-*-TP` orders when the venue position is flat.
+   *
+   * Stop fills and `position_already_flat` EXIT paths do not always clear protective legs,
+   * and a stale tranche can later trigger re-arm. Flat venue is the authoritative invariant:
+   * no attributable protective order may remain working.
+   */
+  public sweepOrphanProtectiveOrders(snapshot: AccountVenueSnapshot): Promise<boolean> {
+    const result = this.executionQueue.then(() => this.sweepOrphanProtectiveOrdersSerial(snapshot));
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async sweepOrphanProtectiveOrdersSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
+    if (snapshot.instrumentOpenContracts !== 0) {
+      return false;
+    }
+    const orphans = snapshot.openOrders.filter(
+      (order) => order.accountId === this.config.scope.accountId
+        && order.contractId === this.config.scope.contractId
+        && isProtectiveCustomTag(order.customTag),
+    );
+    if (orphans.length === 0) {
+      return false;
+    }
+
+    let changed = false;
+    for (const order of orphans) {
+      try {
+        await this.api.cancelOrder(this.config.scope.accountId, order.id);
+        changed = true;
+        const parsed = order.customTag ? parseProtectiveTag(order.customTag) : null;
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "protective_orders_swept_flat",
+          payload: {
+            provider_order_id: order.id,
+            custom_tag: order.customTag,
+            intent_id: parsed?.intentId ?? null,
+            leg: parsed?.leg ?? null,
+            generation: parsed?.generation ?? null,
+          },
+        });
+      } catch (error) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "protective_order_sweep_failed",
+          payload: {
+            provider_order_id: order.id,
+            custom_tag: order.customTag,
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+    if (changed) {
+      this.invalidateIssuedPackets();
+    }
+    return changed;
   }
 
   /**

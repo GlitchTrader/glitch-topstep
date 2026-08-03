@@ -35,9 +35,32 @@
     "TS-R4-05",
     "TS-AUDIT-01",
     "TS-AUDIT-02",
-    "TS-PM4-01"
+    "TS-PM4-01",
+    "TS-BRACKET-01"
   ],
   "items": [
+    {
+      "id": "TS-BRACKET-01",
+      "title": "Sweep orphan protective orders when venue position is flat",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "execution",
+      "acceptance": [
+        "Reconciliation with instrumentOpenContracts=0 cancels every working glt-*-SL/TP order on the scoped contract.",
+        "rearmTrancheProtection never runs while the venue position is flat.",
+        "Regression fixture covers stop-fill flat state with stale r1-SL/r1-TP tags from a prior tranche."
+      ],
+      "evidence": [
+        "src/execution/coordinator.ts adds sweepOrphanProtectiveOrders on the execution queue.",
+        "src/service.ts runs the flat sweep before re-arm during reconciliation.",
+        "tests/position-management.test.ts proves fdc9d873-style orphan r1 legs are cancelled when flat."
+      ],
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/service.ts",
+        "tests/position-management.test.ts"
+      ]
+    },
     {
       "id": "TS-AUDIT-03",
       "title": "Keep quiet-tape evidence in Hermes cognition, not the execution gate",

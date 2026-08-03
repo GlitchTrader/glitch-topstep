@@ -1003,6 +1003,113 @@ describe("position management coordinator", () => {
     }
   });
 
+  it("sweeps orphan protective orders when the venue position is flat", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-sweep-flat-"));
+    const store = new SqliteExecutionStore(":memory:");
+    const intentId = "fdc9d873-e5e3-5ea9-ac36-d7ce42a9f7cb";
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      current.openOrders = [
+        {
+          id: 3351427663,
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-03T06:50:57Z",
+          updateTimestamp: "2026-08-03T06:50:57Z",
+          status: 1,
+          type: 4,
+          side: 0,
+          size: 1,
+          limitPrice: null,
+          stopPrice: 28_651.25,
+          customTag: `glt-${intentId}-r1-SL`,
+        },
+        {
+          id: 3351427664,
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-03T07:43:54Z",
+          updateTimestamp: "2026-08-03T07:43:54Z",
+          status: 1,
+          type: 1,
+          side: 1,
+          size: 1,
+          limitPrice: 28_652.5,
+          stopPrice: null,
+          customTag: `glt-${intentId}-r1-TP`,
+        },
+      ];
+      const cancelled: number[] = [];
+      const ledger = new JsonlEventStore(directory);
+      const api = {
+        placeOrder: async () => {
+          throw new Error("placeOrder should not be called");
+        },
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+        cancelOrder: async (_accountId: number, orderId: number) => {
+          cancelled.push(orderId);
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        ledger,
+        store,
+        () => current,
+        () => null,
+        () => undefined,
+        () => [tranche(intentId, 1, 3351427662)],
+      );
+
+      const swept = await coordinator.sweepOrphanProtectiveOrders(current);
+      assert.equal(swept, true);
+      assert.deepEqual(cancelled, [3351427663, 3351427664]);
+
+      const rearmed = await coordinator.rearmTrancheProtection(current);
+      assert.equal(rearmed, false);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("does not sweep protective orders while a venue position remains open", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-sweep-open-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      let cancelCalls = 0;
+      const api = {
+        placeOrder: async () => 1,
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+        cancelOrder: async () => {
+          cancelCalls += 1;
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        () => null,
+        () => undefined,
+        () => [tranche(ENTRY_INTENT_ID, 1, 9001)],
+      );
+
+      const swept = await coordinator.sweepOrphanProtectiveOrders(current);
+      assert.equal(swept, false);
+      assert.equal(cancelCalls, 0);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("submits EXIT under degraded_armed when quote freshness blocks new exposure", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-degraded-"));
     const store = new SqliteExecutionStore(":memory:");

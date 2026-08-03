@@ -563,10 +563,17 @@ export class GlitchTopstepService {
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
-      if (this.coordinator && liveSnapshot.instrumentOpenContracts > 0) {
-        const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
-        if (rearmed) {
-          this.packets?.invalidateAll();
+      if (this.coordinator) {
+        if (liveSnapshot.instrumentOpenContracts === 0) {
+          const swept = await this.coordinator.sweepOrphanProtectiveOrders(liveSnapshot);
+          if (swept) {
+            this.packets?.invalidateAll();
+          }
+        } else {
+          const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
+          if (rearmed) {
+            this.packets?.invalidateAll();
+          }
         }
       }
     } catch (error) {
