@@ -4,6 +4,7 @@ import type { AccountVenueSnapshot } from "../domain/models.js";
 import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
 
 const MAX_BODY_BYTES = 65_536;
@@ -37,6 +38,7 @@ export class LocalGatewayServer {
     private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
     private readonly coordinator: ExecutionCoordinator,
     ownershipService: ProjectXOrderOwnershipService | null = null,
+    private readonly outcomes: (limit: number) => Promise<TradeOutcomeV1[]> = async () => [],
     private readonly acceptanceStreamGap?: () => Promise<{ phases: unknown[] }>,
   ) {
     const ownership = options.ownership;
@@ -120,6 +122,16 @@ export class LocalGatewayServer {
         this.json(response, 200, this.ownershipService.current(this.snapshot().instrumentOpenContracts));
         return;
       }
+      if (request.method === "GET" && url.pathname === "/outcomes") {
+        const outcomes = await this.outcomes(this.outcomeLimit(url.searchParams.get("limit")));
+        this.json(response, 200, {
+          schema_version: "glitch.topstep.trade_outcomes_page.v1",
+          recorded_utc: new Date().toISOString(),
+          count: outcomes.length,
+          outcomes,
+        });
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/intent") {
         const body = await this.readJsonBody(request);
         const receipt: ExecutionReceipt = await this.coordinator.handleWireIntent(body);
@@ -196,6 +208,10 @@ export class LocalGatewayServer {
       throw new InvalidQueryError(`limit must be an integer between 1 and ${MAX_EVIDENCE_LIMIT}`);
     }
     return value;
+  }
+
+  private outcomeLimit(raw: string | null): number {
+    return this.evidenceLimit(raw);
   }
 
   private json(response: ServerResponse, status: number, value: unknown): void {

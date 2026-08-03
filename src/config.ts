@@ -49,6 +49,7 @@ export interface AppConfig {
     syncIntervalMs: number;
   };
   dataDir: string;
+  outcomesExportPath?: string;
   reconcileIntervalMs: number;
   packetLeaseMs: number;
 }
@@ -304,6 +305,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       syncIntervalMs,
     },
     dataDir,
+    outcomesExportPath: optional(environment, "GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH", "").trim() || undefined,
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
     packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 300_000, (value) => Number.isInteger(value) && value >= 1_000),
   };

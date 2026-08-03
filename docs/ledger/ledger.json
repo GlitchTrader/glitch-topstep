@@ -196,7 +196,8 @@
         "TS-R1-04",
         "TS-R2-06",
         "TS-R2-07",
-        "glitch-topstep-hermes-profile:PROFILE-BETA-01"
+        "glitch-topstep-hermes-profile:PROFILE-BETA-01",
+        "TS-R3-01"
       ],
       "acceptance": [
         "Installed gateway and Hermes profile pass shadow and approved Sim/PRAC acceptance on the target machine.",
@@ -205,11 +206,53 @@
         "The operator explicitly promotes the named immutable artifact to beta."
       ],
       "stop_line": "No claim of beta readiness before the cross-repository profile acceptance and operator-approved real mutation evidence are attached."
+    },
+    {
+      "id": "TS-R3-01",
+      "title": "Publish canonical glitch.topstep.trade_outcome.v1 on instrument flat",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "coder",
+      "depends_on": [
+        "TS-REL-01"
+      ],
+      "acceptance": [
+        "Flat transition publishes deduplicated trade_outcome.v1 records.",
+        "GET /outcomes exposes recent canonical outcomes.",
+        "Optional export path mirrors outcomes to Hermes state/outcomes.jsonl."
+      ],
+      "evidence": [
+        "2026-08-03: trade-outcome publisher + /outcomes endpoint.",
+        "tests/trade-outcome-publisher.test.ts"
+      ],
+      "sources": [
+        "src/learning/trade-outcome-publisher.ts",
+        "src/storage/trade-outcome-store.ts",
+        "src/server/local-gateway.ts",
+        "docs/specs/TS-R3-01.md"
+      ]
+    },
+    {
+      "id": "TS-R3-02",
+      "title": "Expose Topstep session calendar and must_flat_utc in decision packets",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "coder",
+      "depends_on": [
+        "TS-R3-01"
+      ],
+      "acceptance": [
+        "Packet carries explicit session authority and must_flat_utc or null.",
+        "Hermes can plan positioned EXIT before mandatory flat without inventing session truth."
+      ],
+      "sources": [
+        "docs/specs/TS-R3-02.md"
+      ],
+      "stop_line": "No SOUL claim of must_flat compliance until authoritative packet fields exist."
     }
   ],
   "roadmap_only": [
     "provider-event replay and archive",
-    "canonical completed outcomes and learning publication",
     "versioned Topstep policy and session calendar",
     "multi-timeframe and multi-product observation enrichment",
     "comparative cognition evaluation",

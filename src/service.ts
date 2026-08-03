@@ -24,8 +24,10 @@ import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-owners
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
-import { JsonlEventStore } from "./storage/jsonl-event-store.js";
+import { TradeOutcomePublisher } from "./learning/trade-outcome-publisher.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
+import { JsonlEventStore } from "./storage/jsonl-event-store.js";
+import { TradeOutcomeStore } from "./storage/trade-outcome-store.js";
 import { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
 
 const DEFAULT_PROVIDER_HISTORY = {
@@ -46,6 +48,8 @@ export class GlitchTopstepService {
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
   private readonly executionStore: SqliteExecutionStore;
+  private readonly tradeOutcomeStore: TradeOutcomeStore;
+  private readonly tradeOutcomePublisher: TradeOutcomePublisher;
   private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private readonly historySync: ProjectXHistorySyncService;
@@ -75,6 +79,12 @@ export class GlitchTopstepService {
     this.executionStore = new SqliteExecutionStore(
       join(config.dataDir, "glitch-topstep.sqlite"),
     );
+    this.tradeOutcomeStore = new TradeOutcomeStore(
+      config.dataDir,
+      "trade-outcomes.jsonl",
+      config.outcomesExportPath,
+    );
+    this.tradeOutcomePublisher = new TradeOutcomePublisher(this.api, this.tradeOutcomeStore);
     this.providerEvidenceStore = new SqliteProviderEvidenceStore(
       join(config.dataDir, "projectx-evidence.sqlite"),
       {
@@ -359,6 +369,7 @@ export class GlitchTopstepService {
       (limit) => this.providerEvidenceStore.recent(limit),
       coordinator,
       this.ownershipService,
+      (limit) => this.tradeOutcomeStore.recent(limit),
       process.env.GLITCH_ACCEPTANCE_STREAM_GAP === "1"
         ? () => this.forceAcceptanceStreamGap()
         : undefined,
@@ -480,6 +491,13 @@ export class GlitchTopstepService {
     this.reconciliationInFlight = true;
     this.state.markReconciliationStarted();
     try {
+      const beforeOpen = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ).instrumentOpenContracts;
+      const openTranches = beforeOpen > 0 && this.ownershipService
+        ? [...this.ownershipService.current(beforeOpen).tranches]
+        : [];
       const [accounts, positions, orders] = await Promise.all([
         this.api.searchAccounts(true),
         this.api.searchOpenPositions(this.config.scope.accountId),
@@ -517,6 +535,33 @@ export class GlitchTopstepService {
       this.state.replacePositions(positions, receivedAt);
       this.state.replaceOrders(orders, receivedAt);
       this.state.markReconciliationSucceeded(receivedAt);
+
+      const afterOpen = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      ).instrumentOpenContracts;
+      if (beforeOpen > 0 && afterOpen === 0 && openTranches.length > 0) {
+        const published = await this.tradeOutcomePublisher.publishClosedTranches({
+          accountId: this.config.scope.accountId,
+          accountName: this.config.scope.accountName,
+          contractId: this.config.scope.contractId,
+          instrument: this.config.scope.instrument,
+          tranches: openTranches,
+          exitUtc: receivedAt,
+        });
+        if (published.length > 0) {
+          await this.ledger.append({
+            schema_version: "glitch.direct.event.v1",
+            event_id: randomUUID(),
+            recorded_utc: receivedAt,
+            event: "trade_outcomes_published",
+            payload: {
+              count: published.length,
+              intent_ids: published.map((outcome) => outcome.intent_id),
+            },
+          });
+        }
+      }
 
       const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders);
       const positionOpen = positions.some(
