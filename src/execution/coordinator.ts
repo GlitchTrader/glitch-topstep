@@ -552,11 +552,12 @@ export class ExecutionCoordinator {
       orderId: protectiveLeg.providerOrderId,
       ...(leg === "stop" ? { stopPrice: newPrice } : { limitPrice: newPrice }),
     };
+    // ponytail: outbox rows are keyed by intent_id; venue protective tags are stable across amends
     this.store.prepareMutation(
       intent.intentId,
       "modify_order",
       request as unknown as Record<string, unknown>,
-      protectiveLeg.customTag,
+      null,
       new Date().toISOString(),
     );
     this.invalidateIssuedPackets();

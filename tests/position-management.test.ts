@@ -536,6 +536,116 @@ describe("position management coordinator", () => {
     }
   });
 
+  it("submits a second MOVE_STOP after a prior amend outbox row exists", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-repeat-move-stop-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const priorMoveStopId = "00000000-0000-4000-8000-00000000b002";
+      const stopTag = `glt-${ENTRY_INTENT_ID}-r1-SL`;
+      const priorIntent: TradeIntent = {
+        schemaVersion: "glitch.intent.v2",
+        intentId: priorMoveStopId,
+        createdUtc: "2026-07-21T12:00:10Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshotHash: "prior-snapshot",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v4",
+        reason: "First tighten.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "MOVE_STOP",
+        },
+        newStopPrice: 19_995,
+      };
+      store.registerIntent(priorIntent, "2026-07-21T12:00:10Z");
+      store.prepareMutation(
+        priorMoveStopId,
+        "modify_order",
+        { accountId: 101, orderId: 9201, stopPrice: 19_995 },
+        stopTag,
+        "2026-07-21T12:00:11Z",
+      );
+      store.markMutationSubmitting(priorMoveStopId, "2026-07-21T12:00:12Z");
+      store.markMutationSubmitted(priorMoveStopId, 9201, "2026-07-21T12:00:13Z");
+
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.openOrders = protectiveOrders(ENTRY_INTENT_ID).map((order) => (
+        order.customTag === `glt-${ENTRY_INTENT_ID}-SL`
+          ? { ...order, stopPrice: 19_995, customTag: stopTag }
+          : order
+      ));
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let modified: ModifyOrderRequest | undefined;
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async (request: ModifyOrderRequest) => {
+          modified = request;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: INTENT_ID,
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v4",
+        reason: "Second tighten.",
+        decision_audit: audit("MOVE_STOP"),
+        new_stop_price: 20_000,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "move_stop_submitted_pending_reconciliation");
+      assert.equal(modified?.orderId, 9201);
+      assert.equal(modified?.stopPrice, 20_000);
+      assert.equal(store.mutationForIntent(INTENT_ID)?.customTag, null);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("submits partial EXIT as an opposite-side market order", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-partial-exit-"));
     const store = new SqliteExecutionStore(":memory:");
