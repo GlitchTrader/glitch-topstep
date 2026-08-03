@@ -87,12 +87,26 @@ Every packet field is evidence unless it names an objective execution capability
 - `current_buffer_usd` is hard loss-floor headroom, not a recommended trade budget.
 - `maximum_additional_contracts` is a venue/account ceiling, not a sizing recommendation.
 - gateway rejection is an outcome episode, not a reason to hide the attempted decision.
+- rolling tape, trade count, spread, depth, imbalance, volatility, and session structure remain evidence for Hermes; none independently authorizes or forbids an entry.
 
 ## Topstep-first boundary
 
 This edition is tailored to Topstep. It must follow current Topstep and ProjectX contracts from primary sources and observed runtime payloads. It must not import NinjaTrader implementation constraints or Apex-specific logic.
 
 The selected account and contract are the current acceptance scope, not a permanent MNQ strategy. Additional Topstep-supported products should reuse the same venue-neutral observation, intent, execution, and outcome contracts.
+
+## TS-AUDIT-03 decision: quiet tape
+
+A 60-second window with zero prints is not an execution boundary. It does not invalidate the selected account, contract, quantity, bracket, venue state, ownership, or protection. The observation remains in `order_flow` so Hermes can judge whether the market is too thin, inactive, or simply between prints.
+
+Applied to the change test:
+
+1. It does not prevent Glitch from causing a factual execution error.
+2. It is not an authoritative Topstep or ProjectX prohibition.
+3. The measurement can be recorded precisely without becoming a gate.
+4. Removing the gate merely allows Hermes to exercise judgment.
+
+Therefore `order_flow_no_trades_60s` belongs in cognition and is not part of `armed` execution admission.
 
 ## Change test
 

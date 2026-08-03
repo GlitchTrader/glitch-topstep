@@ -75,7 +75,7 @@ function healthyRecovery(): ExecutionRecoveryStatus {
 }
 
 describe("armed runtime gate", () => {
-  it("downgrades configured armed mode when order flow has no 60s trades", () => {
+  it("keeps configured armed mode when the 60s tape is quiet", () => {
     const current = snapshot();
     const now = new Date("2026-07-21T12:00:05Z");
     current.capturedAt = now.toISOString();
@@ -87,8 +87,8 @@ describe("armed runtime gate", () => {
       orderFlowWithTrades(0),
       now,
     );
-    assert.equal(resolved.effective, "degraded_armed");
-    assert.match(resolved.downgradeReason ?? "", /order_flow_no_trades_60s/);
+    assert.equal(resolved.effective, "armed");
+    assert.equal(resolved.downgradeReason, null);
   });
 
   it("exposes effective gateway mode on decision packets", () => {
@@ -137,7 +137,6 @@ describe("armed runtime gate", () => {
       "state_complete",
       "quote_stale",
       "reconciliation_current",
-      "order_flow_trades_60s",
       "risk_reduction_technically_supported",
       "new_exposure_technically_supported",
     ]);
@@ -145,11 +144,40 @@ describe("armed runtime gate", () => {
     assert.equal(packet.execution.new_exposure_technically_supported, true);
   });
 
-  it("keeps EXIT permitted under degraded_armed while new exposure is blocked", () => {
+  it("keeps quiet-tape measurements in the packet without converting them into a gate", () => {
     const current = snapshot();
     const now = new Date("2026-07-21T12:00:05Z");
     current.capturedAt = now.toISOString();
     current.quote = { ...current.quote!, timestamp: now.toISOString() };
+    const appConfig = config("armed");
+    const packet = buildDecisionPacket(
+      current,
+      appConfig.policy,
+      appConfig.risk,
+      healthyRecovery(),
+      appConfig.scope.instrument,
+      appConfig.tradingMode,
+      appConfig.packetLeaseMs,
+      now,
+      undefined,
+      orderFlowWithTrades(0),
+    );
+    const tape60 = packet.order_flow.observation?.windows.find(
+      (window) => window.window_seconds === 60,
+    );
+    assert.equal(tape60?.trade_count, 0);
+    assert.equal(packet.execution.gateway_mode, "armed");
+    assert.equal(
+      packet.execution.gates.some((gate) => gate.id === "order_flow_trades_60s"),
+      false,
+    );
+  });
+
+  it("keeps EXIT permitted under degraded_armed while new exposure is suppressed", () => {
+    const current = snapshot();
+    const now = new Date("2026-07-21T12:00:10Z");
+    current.capturedAt = now.toISOString();
+    current.quote = { ...current.quote!, timestamp: "2026-07-21T12:00:00Z" };
     current.instrumentOpenContracts = 1;
     current.totalOpenContracts = 1;
     current.positions = [{
@@ -189,6 +217,7 @@ describe("armed runtime gate", () => {
       orderFlowWithTrades(0),
     );
     assert.equal(packet.execution.gateway_mode, "degraded_armed");
+    assert.match(packet.execution.gateway_mode_downgrade_reason ?? "", /quote_stale/);
     const riskGate = packet.execution.gates.find(
       (gate) => gate.id === "risk_reduction_technically_supported",
     );

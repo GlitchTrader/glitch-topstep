@@ -19,6 +19,7 @@ import {
   type ReconnectProofPhase,
 } from "./projectx/reconnect-proof.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
+import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
@@ -321,6 +322,7 @@ export class GlitchTopstepService {
         );
         return {
           schema_version: "glitch.direct.health.v2",
+          compatibility: GATEWAY_COMPATIBILITY,
           status:
             quality.stateComplete
             && !executionRecovery.blockingAmbiguity

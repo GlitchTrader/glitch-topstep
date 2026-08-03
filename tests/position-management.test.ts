@@ -1003,7 +1003,7 @@ describe("position management coordinator", () => {
     }
   });
 
-  it("submits EXIT under degraded_armed when quiet tape would block new exposure", async () => {
+  it("submits EXIT under degraded_armed when quote freshness blocks new exposure", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-exit-degraded-"));
     const store = new SqliteExecutionStore(":memory:");
     try {
@@ -1011,7 +1011,10 @@ describe("position management coordinator", () => {
       const current = openPositionSnapshot(ENTRY_INTENT_ID);
       const now = new Date();
       current.capturedAt = now.toISOString();
-      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      current.quote = {
+        ...current.quote!,
+        timestamp: new Date(now.getTime() - appConfig.risk.maxQuoteAgeMs - 1).toISOString(),
+      };
       const packet = buildDecisionPacket(
         current,
         appConfig.policy,
@@ -1025,6 +1028,7 @@ describe("position management coordinator", () => {
         orderFlowWithTrades(0),
       );
       assert.equal(packet.execution.gateway_mode, "degraded_armed");
+      assert.match(packet.execution.gateway_mode_downgrade_reason ?? "", /quote_stale/);
       store.recordIssuedPacket(packet);
       let closed = false;
       const api = {
@@ -1057,7 +1061,7 @@ describe("position management coordinator", () => {
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
         prompt_version: "glitch-topstep-v2",
-        reason: "Flatten under quiet tape.",
+        reason: "Flatten while entry is degraded by stale quote evidence.",
         decision_audit: audit("EXIT"),
       });
       assert.equal(receipt.status, "closed");
