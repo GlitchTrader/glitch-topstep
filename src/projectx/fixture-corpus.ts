@@ -1,3 +1,4 @@
+import type { OrderInfo, TradeInfo } from "../domain/models.js";
 import {
   PROJECTX_MARKET_STREAM_EVENT_TYPES,
   PROJECTX_STREAM_CONNECTED_LIFECYCLE_EVENTS,
@@ -28,6 +29,7 @@ export interface FixtureManifest {
   schema_version: string;
   captured_utc: string;
   secret_scan: string;
+  history_search_window_hours?: number;
   files: Array<{ name: string; path: string }>;
 }
 
@@ -99,5 +101,71 @@ export function validateStreamEventCorpus(samples: StreamEventSample[]): string[
       failures.push(`lifecycle_event_missing:${eventType}`);
     }
   }
+  return failures;
+}
+
+const GLT_CUSTOM_TAG_PREFIX = "glt-";
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+export function validateHistoricalSearchFixtures(
+  orders: OrderInfo[],
+  trades: TradeInfo[],
+): string[] {
+  const failures: string[] = [];
+  if (orders.length === 0) {
+    failures.push("historical_orders_empty");
+    return failures;
+  }
+  if (trades.length === 0) {
+    failures.push("historical_trades_empty");
+    return failures;
+  }
+
+  const orderIds = new Set<number>();
+  let taggedOrderCount = 0;
+  for (const order of orders) {
+    if (!isPositiveInteger(order.id)) {
+      failures.push("historical_order_id_invalid");
+    } else {
+      orderIds.add(order.id);
+    }
+    if (!isPositiveInteger(order.accountId)) {
+      failures.push("historical_order_account_id_invalid");
+    }
+    if (typeof order.contractId !== "string" || order.contractId.length === 0) {
+      failures.push("historical_order_contract_id_invalid");
+    }
+    if (typeof order.creationTimestamp !== "string" || order.creationTimestamp.length === 0) {
+      failures.push("historical_order_creation_timestamp_invalid");
+    }
+    if (typeof order.customTag === "string" && order.customTag.startsWith(GLT_CUSTOM_TAG_PREFIX)) {
+      taggedOrderCount += 1;
+    }
+  }
+  if (taggedOrderCount === 0) {
+    failures.push("historical_orders_missing_glt_custom_tag");
+  }
+
+  let linkedTradeCount = 0;
+  for (const trade of trades) {
+    if (!isPositiveInteger(trade.id)) {
+      failures.push("historical_trade_id_invalid");
+    }
+    if (!isPositiveInteger(trade.orderId)) {
+      failures.push("historical_trade_order_id_invalid");
+    } else if (orderIds.has(trade.orderId)) {
+      linkedTradeCount += 1;
+    }
+    if (typeof trade.contractId !== "string" || trade.contractId.length === 0) {
+      failures.push("historical_trade_contract_id_invalid");
+    }
+  }
+  if (linkedTradeCount === 0) {
+    failures.push("historical_trades_missing_order_id_linkage");
+  }
+
   return failures;
 }

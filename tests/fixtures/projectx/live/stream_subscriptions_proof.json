@@ -1,6 +1,6 @@
 {
   "schema_version": "glitch.projectx.stream_subscriptions_proof.v1",
-  "captured_utc": "2026-07-31T19:32:11.617Z",
+  "captured_utc": "2026-08-03T01:20:09.256Z",
   "scope": {
     "account_id": 26080387,
     "account_name": "PRAC-V2-645601-15979101",
@@ -52,10 +52,10 @@
     "user_stream_state": "connected",
     "market_stream_state": "connected",
     "last_user_event_utc": null,
-    "last_market_event_utc": "2026-07-31T19:32:13.701Z",
+    "last_market_event_utc": "2026-08-03T01:20:11.429Z",
     "reconciliation_state": "succeeded",
-    "reconciliation_generation": 1,
-    "operational_generation": 1
+    "reconciliation_generation": 13,
+    "operational_generation": 13
   },
   "observed_event_types": {
     "projectx_lifecycle": [
@@ -65,12 +65,14 @@
       "market_reconnect_failed",
       "market_reconnected_and_subscribed",
       "market_reconnecting",
+      "market_stopping",
       "user_closed",
       "user_connected_and_subscribed",
       "user_connecting",
       "user_reconnect_failed",
       "user_reconnected_and_subscribed",
-      "user_reconnecting"
+      "user_reconnecting",
+      "user_stopping"
     ],
     "projectx_market_stream": [
       "depth",
@@ -93,8 +95,8 @@
     ]
   },
   "order_flow": {
-    "trade_count_60s": 615,
-    "quote_age_ms": 46
+    "trade_count_60s": 267,
+    "quote_age_ms": -120
   },
   "proof_passed": true,
   "proof_failures": []

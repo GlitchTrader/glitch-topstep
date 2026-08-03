@@ -6,9 +6,11 @@ import { describe, it } from "node:test";
 import {
   validateAuthEnvelopeFixture,
   validateFixtureManifest,
+  validateHistoricalSearchFixtures,
   validateStreamEventCorpus,
   type FixtureManifest,
 } from "../src/projectx/fixture-corpus.js";
+import type { OrderInfo, TradeInfo } from "../src/domain/models.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const FIXTURE_DIR = path.join(ROOT, "tests", "fixtures", "projectx", "live");
@@ -44,6 +46,15 @@ describe("TS-R2-02 ProjectX fixture corpus", () => {
       "stream_event_samples",
     );
     const failures = validateStreamEventCorpus(corpus.samples);
+    assert.deepEqual(failures, [], failures.join(", "));
+  });
+});
+
+describe("TS-R2-06 ProjectX historical search identity", () => {
+  it("retains glt custom tags on orders and orderId linkage on trades", () => {
+    const orders = readFixture<OrderInfo[]>("historical_orders_24h");
+    const trades = readFixture<TradeInfo[]>("historical_trades_24h");
+    const failures = validateHistoricalSearchFixtures(orders, trades);
     assert.deepEqual(failures, [], failures.join(", "));
   });
 });

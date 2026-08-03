@@ -26,6 +26,7 @@
     "TS-R2-03",
     "TS-R2-04",
     "TS-R2-05",
+    "TS-R2-06",
     "TS-R2-07",
     "TS-R4-00",
     "TS-R4-03",
@@ -101,17 +102,27 @@
     {
       "id": "TS-R2-06",
       "title": "Real ProjectX historical order and trade identity retention",
-      "status": "external_acceptance_required",
+      "status": "done",
       "priority": "P1",
       "owner_role": "operator_tests",
       "issue": 50,
+      "pull_request": 56,
       "depends_on": [],
       "acceptance": [
         "Historical order search retains custom tags and full order identity.",
         "Historical trade search retains trade.orderId linkage to submitted entries."
       ],
       "code_state": "implemented",
-      "blocked_reason": "Requires account history and an authenticated target-machine capture."
+      "evidence": [
+        "2026-08-03: src/projectx/fixture-corpus.ts validateHistoricalSearchFixtures + tests/fixture-corpus.test.ts (TS-R2-06).",
+        "2026-08-03: npm run capture:fixtures on armed PRAC gateway — historical_orders_24h.json (90 glt-* tags) and historical_trades_24h.json (orderId linkage); 72h window (PRAC idle >24h between sessions)."
+      ],
+      "sources": [
+        "src/projectx/fixture-corpus.ts",
+        "scripts/capture-projectx-fixtures.mjs",
+        "tests/fixtures/projectx/live/historical_orders_24h.json",
+        "tests/fixtures/projectx/live/historical_trades_24h.json"
+      ]
     },
     {
       "id": "TS-R2-07",
@@ -120,6 +131,7 @@
       "priority": "P1",
       "owner_role": "operator_tests",
       "issue": 51,
+      "pull_request": 57,
       "depends_on": [],
       "acceptance": [
         "Quote, print, and depth event rates are measured over a named market interval.",
@@ -128,7 +140,7 @@
       "code_state": "implemented",
       "evidence": [
         "2026-08-03: src/projectx/event-rates-proof.ts + tests/event-rates-proof.test.ts validate bounded 30-minute quote/print/depth rates and retention policy.",
-        "2026-08-03: npm run capture:event-rates on armed Windows PRAC gateway — event_rates_proof.json (30m window 2026-08-03T01:07–01:37Z; ~13.3 quote/s, ~4.4 print/s, ~13.3 depth/s; 439373824-byte evidence DB within 509999 retention cap).",
+        "2026-08-03: npm run capture:event-rates on armed Windows PRAC gateway — event_rates_proof.json (30m window 2026-08-03T01:07–01:37Z; ~13.3 quote/s, ~4.4 print/s, ~13.3 depth/s; evidence DB within 509999 retention cap).",
         "2026-08-03: 60s disk sample recorded +1798144 bytes across live event ingestion (~bytes_per_event in fixture)."
       ],
       "sources": [

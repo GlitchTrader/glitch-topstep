@@ -12,20 +12,20 @@
   },
   "files": [
     {
-      "name": "auth_login",
-      "path": "tests\\fixtures\\projectx\\live\\auth_login.json"
-    },
-    {
       "name": "auth_login_key_envelope",
       "path": "tests\\fixtures\\projectx\\live\\auth_login_key_envelope.json"
     },
     {
-      "name": "auth_validate",
-      "path": "tests\\fixtures\\projectx\\live\\auth_validate.json"
-    },
-    {
       "name": "auth_validate_envelope",
       "path": "tests\\fixtures\\projectx\\live\\auth_validate_envelope.json"
+    },
+    {
+      "name": "auth_login",
+      "path": "tests\\fixtures\\projectx\\live\\auth_login.json"
+    },
+    {
+      "name": "auth_validate",
+      "path": "tests\\fixtures\\projectx\\live\\auth_validate.json"
     },
     {
       "name": "accounts_search",
@@ -76,6 +76,7 @@
       "path": "tests\\fixtures\\projectx\\live\\event_rates_proof.json"
     }
   ],
+  "history_search_window_hours": 72,
   "secret_scan": "passed",
-  "note": "Read-only capture for TS-R2-01..05; includes sanitized auth envelopes, stream corpus, subscription and reconnect proofs."
+  "note": "Read-only capture for TS-R2-01..07; includes sanitized auth envelopes, stream corpus, subscription/reconnect proofs, and historical identity fixtures."
 }
