@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 ## Objective
 
@@ -6,14 +6,14 @@ Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. 
 
 ```text
 ProjectX / TopstepX
-        │
-        ▼
+        â”‚
+        â–¼
 Glitch Topstep gateway
-  provider truth · evidence · calculations · execution · recovery
-        │ sanitized packet / strict intent
-        ▼
+  provider truth Â· evidence Â· calculations Â· execution Â· recovery
+        â”‚ sanitized packet / strict intent
+        â–¼
 Hermes profile: glitch-topstep
-  observation · judgment · decision · review · learning
+  observation Â· judgment Â· decision Â· review Â· learning
 ```
 
 Venue-neutral contracts may be extracted later from proven Topstep behaviour. Premature abstraction must not weaken the tailored Topstep implementation.
@@ -36,16 +36,16 @@ See [`AUTHORITY.md`](AUTHORITY.md).
 
 ```text
 ProjectX REST
-  authentication · discovery · bars · reconciliation · mutations
+  authentication Â· discovery Â· bars Â· reconciliation Â· mutations
   bounded historical order/trade windows
 
 ProjectX User SignalR Hub
-  account · position · order · trade events
+  account Â· position Â· order Â· trade events
 
 ProjectX Market SignalR Hub
-  quote · print · depth events
-            │
-            ▼
+  quote Â· print Â· depth events
+            â”‚
+            â–¼
 Provider evidence boundary
   parse payload
   redact secret-like fields
@@ -53,28 +53,28 @@ Provider evidence boundary
   assign sequence + payload hash
   preserve explicit provider relationships
   preserve durable historical record heads
-            │ persistence succeeds
-            ▼
+            â”‚ persistence succeeds
+            â–¼
 VenueStateStore
   connection generation
   stream health and payload faults
   reconciliation state
   account-wide conservative bid/ask marking
-            │
-            ├────────────────────────┐
-            ▼                        ▼
+            â”‚
+            â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+            â–¼                        â–¼
 DecisionPacketService         Hard execution calculations
   current packet               tick and point value
   issued snapshot lease        stop-aware protected loss
   sanitized identity           hard contract ceiling
   explicit data quality        hard loss-floor headroom
-            │                        │
-            ▼                        │
-Hermes Topstep operator               │
-  chooses the trade                   │
-            │ strict intent           │
-            └──────────────┬──────────┘
-                           ▼
+            â”‚                        â”‚
+            â–¼                        â”‚
+Hermes Topstep operator               â”‚
+  chooses the trade                   â”‚
+            â”‚ strict intent           â”‚
+            â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                           â–¼
 ExecutionCoordinator
   serialized intent handling
   issued-packet identity
@@ -82,10 +82,10 @@ ExecutionCoordinator
   current venue freshness and reconciliation
   structural geometry and hard boundaries
   durable outbox and entry-settlement latch
-                           │
-                           ▼
+                           â”‚
+                           â–¼
 ProjectX order mutation
-  entry · close · provider-side protection
+  entry Â· close Â· provider-side protection
 
 Query-only ownership projection
   durable Glitch intent + submitted provider order ID
@@ -141,7 +141,7 @@ Each event contains:
 - normalized payload used by Glitch;
 - SHA-256 hash of the stored event content.
 
-The first explicit relationship is user trade → order. For a normalized `TradeInfo`, `trade.orderId` is stored as `related_provider_entity_id`. The relation is indexed and included in the evidence hash. Older persisted trade events are migrated by reading their normalized `orderId`, backfilling the relation, and recomputing the hash.
+The first explicit relationship is user trade â†’ order. For a normalized `TradeInfo`, `trade.orderId` is stored as `related_provider_entity_id`. The relation is indexed and included in the evidence hash. Older persisted trade events are migrated by reading their normalized `orderId`, backfilling the relation, and recomputing the hash.
 
 If a realtime payload parses but cannot be persisted, Glitch does not silently advance state. The stream becomes degraded and REST reconciliation is requested.
 
@@ -180,9 +180,9 @@ Realtime streams alone cannot reconstruct an offline interval. `ProjectXHistoryS
 
 ```text
 last completed cursor - correction overlap
-  → fetch ProjectX orders and trades for one bounded window
-  → persist changed provider records
-  → advance cursor only after both retrievals succeed
+  â†’ fetch ProjectX orders and trades for one bounded window
+  â†’ persist changed provider records
+  â†’ advance cursor only after both retrievals succeed
 ```
 
 The history contract is:
@@ -285,7 +285,7 @@ Hermes supplies:
 - account alias, not numeric provider account ID;
 - instrument identity, not provider contract ID;
 - `operator_profile: glitch-topstep`;
-- `prompt_version: glitch-topstep-v2`;
+- `prompt_version: glitch-topstep-v4`;
 - action and confidence;
 - absolute structural stop and target prices for entries;
 - compact adversarial evidence audit.

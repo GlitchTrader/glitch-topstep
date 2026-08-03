@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TS-R1-01: actual child-process kill matrix against a deterministic fake provider.
  * Proves durable intent/outbox survival and recovery without duplicate placeOrder calls.
  */
@@ -282,7 +282,7 @@ describe("TS-R1-01 process-kill matrix (fake provider)", () => {
         confidence: 0.6,
         snapshotHash: "restart-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v2",
+        promptVersion: "glitch-topstep-v4",
         reason: "Restart persistence.",
         decisionAudit: {
           bullCase: "Bull.",

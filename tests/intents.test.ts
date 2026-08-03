@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseTradeIntent } from "../src/domain/intents.js";
 
@@ -14,7 +14,7 @@ function baseIntent() {
     confidence: 0.5,
     snapshot_hash: "snapshot",
     model_version: "test",
-    prompt_version: "glitch-topstep-v2",
+    prompt_version: "glitch-topstep-v4",
     reason: "No edge.",
     decision_audit: {
       bull_case: "Limited bullish evidence.",

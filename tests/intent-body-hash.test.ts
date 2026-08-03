@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { computeIntentBodyHash } from "../src/domain/intent-body-hash.js";
 import { parseTradeIntent } from "../src/domain/intents.js";
@@ -16,7 +16,7 @@ describe("intent body hash", () => {
       confidence: 0.6,
       snapshot_hash: "snapshot-hash",
       model_version: "test",
-      prompt_version: "glitch-topstep-v2",
+      prompt_version: "glitch-topstep-v4",
       reason: "Stable hash.",
       decision_audit: {
         bull_case: "Bull case.",
@@ -51,7 +51,7 @@ describe("intent body hash", () => {
       confidence: 0.6,
       snapshot_hash: "snapshot-hash",
       model_version: "test",
-      prompt_version: "glitch-topstep-v2",
+      prompt_version: "glitch-topstep-v4",
       reason: "First reason.",
       decision_audit: {
         bull_case: "Bull case.",

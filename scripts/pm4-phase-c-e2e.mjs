@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -204,7 +204,7 @@ function baseIntent(action, snap, intentId = randomUUID()) {
     confidence: 0.6,
     snapshot_hash: snap,
     model_version: "pm4-phase-c-e2e",
-    prompt_version: "glitch-topstep-v2",
+    prompt_version: "glitch-topstep-v4",
     reason: `pm4-phase-c ${action}`,
     decision_audit: audit(action),
   };
@@ -267,7 +267,7 @@ function isVelocityRejected(res) {
     && String(res.body.detail ?? "").toLowerCase().includes("velocity control");
 }
 
-// ponytail: venue lockout resets on mutation attempts — fail fast, no recon interleave
+// ponytail: venue lockout resets on mutation attempts â€” fail fast, no recon interleave
 let velocityBlocked = false;
 const VELOCITY_COOLDOWN_MS = 180_000;
 const MAX_VELOCITY_WAITS = 2;
@@ -300,7 +300,7 @@ function hadRecentVelocityInLog(withinMs = 30 * 60_000) {
 async function maybePreSubmitVelocityCooldown(steps) {
   if (!hadRecentVelocityInLog()) return;
   const waitMs = 900_000;
-  console.warn(`[pm4-e2e] velocity in prior run within 30 min — pre-submit cooldown ${waitMs / 1000}s`);
+  console.warn(`[pm4-e2e] velocity in prior run within 30 min â€” pre-submit cooldown ${waitMs / 1000}s`);
   steps.push({
     step: "PRE_SUBMIT_VELOCITY_COOLDOWN",
     wait_ms: waitMs,
