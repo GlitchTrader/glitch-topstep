@@ -1,6 +1,7 @@
 name: locate-ts-rel-01
 
 on:
+  pull_request:
   push:
     branches:
       - architect/ts-rel-01-compat-meta
