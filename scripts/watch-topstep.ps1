@@ -1,4 +1,5 @@
 # Observa ciclos Hermes + receipts do gateway (uma linha por poll).
+# Compatível com Windows PowerShell 5.1.
 param(
     [string]$StateRoot = (Join-Path $env:LOCALAPPDATA 'hermes\profiles\glitch-topstep\state'),
     [string]$GatewayUrl = 'http://127.0.0.1:8790',
@@ -17,6 +18,23 @@ function Read-LastJsonLine {
     $line = Get-Content -LiteralPath $Path -Tail 1 -ErrorAction SilentlyContinue
     if (-not $line) { return $null }
     try { return ($line | ConvertFrom-Json) } catch { return $null }
+}
+
+function Get-NestedString {
+    param(
+        [object]$Object,
+        [string[]]$Path,
+        [string]$Default = '-'
+    )
+    $current = $Object
+    foreach ($segment in $Path) {
+        if ($null -eq $current) { return $Default }
+        $current = $current.$segment
+    }
+    if ($null -eq $current -or [string]::IsNullOrEmpty([string]$current)) {
+        return $Default
+    }
+    return [string]$current
 }
 
 function Read-ProfileToken {
@@ -56,19 +74,20 @@ while ($true) {
     $receipt = Read-LastJsonLine $receiptsPath
     $worker = Read-LastJsonLine $workerPath
 
-    $action = if ($decision?.intent?.action) { [string]$decision.intent.action } else { '-' }
-    $decisionUtc = if ($decision?.recorded_utc) { [string]$decision.recorded_utc } else { '-' }
-    $prompt = if ($decision?.intent?.prompt_version) { [string]$decision.intent.prompt_version } else { '-' }
+    $action = Get-NestedString $decision @('intent', 'action')
+    $decisionUtc = Get-NestedString $decision @('recorded_utc')
+    $prompt = Get-NestedString $decision @('intent', 'prompt_version')
 
-    $receiptStatus = if ($receipt?.result?.body?.status) { [string]$receipt.result.body.status } else { '-' }
-    $receiptCode = if ($receipt?.result?.body?.code) { [string]$receipt.result.body.code } else { '-' }
-    $receiptHttp = if ($receipt?.result?.http_status) { [string]$receipt.result.http_status } else { '-' }
-    $receiptUtc = if ($receipt?.recorded_utc) { [string]$receipt.recorded_utc } else { '-' }
+    $receiptStatus = Get-NestedString $receipt @('result', 'body', 'status')
+    $receiptCode = Get-NestedString $receipt @('result', 'body', 'code')
+    $receiptHttp = Get-NestedString $receipt @('result', 'http_status')
+    $receiptUtc = Get-NestedString $receipt @('recorded_utc')
 
-    $workerStatus = if ($worker?.status) { [string]$worker.status } else { 'unknown' }
+    $workerStatus = Get-NestedString $worker @('status') 'unknown'
 
     $fingerprint = "$decisionUtc|$action|$receiptUtc|$receiptStatus|$receiptCode"
-    $suffix = if ($fingerprint -eq $lastFingerprint) { ' (sem mudança)' } else { '' }
+    $suffix = ''
+    if ($fingerprint -eq $lastFingerprint) { $suffix = ' (sem mudanca)' }
     $lastFingerprint = $fingerprint
 
     Write-Host (
