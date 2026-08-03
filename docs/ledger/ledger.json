@@ -71,6 +71,7 @@
       "status": "external_acceptance_required",
       "priority": "P0",
       "owner_role": "operator_tests",
+      "issue": 49,
       "depends_on": [],
       "acceptance": [
         "An explicitly approved disposable ProjectX acceptance session exercises kill, reconnect, and same-intent retry without duplicate exposure.",
@@ -86,6 +87,7 @@
       "status": "external_acceptance_required",
       "priority": "P1",
       "owner_role": "operator_tests",
+      "issue": 50,
       "depends_on": [],
       "acceptance": [
         "Historical order search retains custom tags and full order identity.",
@@ -100,6 +102,7 @@
       "status": "external_acceptance_required",
       "priority": "P1",
       "owner_role": "operator_tests",
+      "issue": 51,
       "depends_on": [],
       "acceptance": [
         "Quote, print, and depth event rates are measured over a named market interval.",
@@ -115,11 +118,12 @@
       "status": "external_acceptance_required",
       "priority": "P0",
       "owner_role": "operator",
+      "issue": 52,
       "depends_on": [
         "TS-R1-04",
         "TS-R2-06",
         "TS-R2-07",
-        "glitch-topstep-hermes-profile:RAIL-006"
+        "glitch-topstep-hermes-profile:PROFILE-BETA-01"
       ],
       "acceptance": [
         "Installed gateway and Hermes profile pass shadow and approved Sim/PRAC acceptance on the target machine.",
