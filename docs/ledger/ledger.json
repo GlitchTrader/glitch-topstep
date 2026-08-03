@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-02",
+  "updated": "2026-08-03",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -26,6 +26,7 @@
     "TS-R2-03",
     "TS-R2-04",
     "TS-R2-05",
+    "TS-R2-07",
     "TS-R4-00",
     "TS-R4-03",
     "TS-R4-04",
@@ -115,7 +116,7 @@
     {
       "id": "TS-R2-07",
       "title": "Sustained stream-rate and evidence-disk-growth measurement",
-      "status": "external_acceptance_required",
+      "status": "done",
       "priority": "P1",
       "owner_role": "operator_tests",
       "issue": 51,
@@ -124,9 +125,17 @@
         "Quote, print, and depth event rates are measured over a named market interval.",
         "Evidence retention and actual disk growth are recorded with start/end timestamps and bytes per event."
       ],
-      "code_state": "instrumented",
-      "existing_evidence": "Windows reboot evidence preserved 112853 events and a 126013440-byte ProjectX evidence database without corruption.",
-      "blocked_reason": "The existing sample proves persistence but does not yet provide a bounded start/end rate calculation."
+      "code_state": "implemented",
+      "evidence": [
+        "2026-08-03: src/projectx/event-rates-proof.ts + tests/event-rates-proof.test.ts validate bounded 30-minute quote/print/depth rates and retention policy.",
+        "2026-08-03: npm run capture:event-rates on armed Windows PRAC gateway — event_rates_proof.json (30m window 2026-08-03T01:07–01:37Z; ~13.3 quote/s, ~4.4 print/s, ~13.3 depth/s; 439373824-byte evidence DB within 509999 retention cap).",
+        "2026-08-03: 60s disk sample recorded +1798144 bytes across live event ingestion (~bytes_per_event in fixture)."
+      ],
+      "sources": [
+        "src/projectx/event-rates-proof.ts",
+        "scripts/capture-event-rates.mjs",
+        "tests/fixtures/projectx/live/event_rates_proof.json"
+      ]
     },
     {
       "id": "TS-BETA-01",

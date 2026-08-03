@@ -15,7 +15,8 @@
     "start": "node --enable-source-maps dist/src/index.js",
     "replay:evidence": "npm run build && node --enable-source-maps dist/src/cli/replay-provider-evidence.js",
     "capture:fixtures": "npm run build && node scripts/capture-projectx-fixtures.mjs",
-    "capture:reconnect": "npm run build && node scripts/capture-reconnect-proof.mjs"
+    "capture:reconnect": "npm run build && node scripts/capture-reconnect-proof.mjs",
+    "capture:event-rates": "npm run build && node scripts/capture-event-rates.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^8.0.7"
