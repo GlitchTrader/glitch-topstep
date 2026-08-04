@@ -25,6 +25,13 @@ import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { TradeOutcomePublisher } from "./learning/trade-outcome-publisher.js";
+import {
+  projectedInstrumentOpenContracts,
+  shouldPublishTradeOutcomesOnFlat,
+  tranchesForClosedPosition,
+  type TradeOutcomeFlatTrigger,
+} from "./learning/trade-outcome-flat.js";
+import type { TrancheView } from "./ownership/tranches.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { TradeOutcomeStore } from "./storage/trade-outcome-store.js";
@@ -67,6 +74,9 @@ export class GlitchTopstepService {
   private marketObservationTimer: NodeJS.Timeout | null = null;
   private orderFlowTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
+  private tradeOutcomePublishInFlight = false;
+  private lastReconciledOpenContracts = 0;
+  private cachedOpenTranches: TrancheView[] = [];
   private storesClosed = false;
 
   public constructor(private readonly config: AppConfig) {
@@ -259,6 +269,9 @@ export class GlitchTopstepService {
           } catch (error: unknown) {
             console.error("ProjectX reconciliation failed after state invalidation", error);
           }
+        },
+        onBeforePositionApply: (position, receivedUtc) => {
+          this.handleStreamPositionBeforeApply(position, receivedUtc);
         },
       },
       this.state,
@@ -495,9 +508,7 @@ export class GlitchTopstepService {
         this.config.scope.accountId,
         this.config.scope.contractId,
       ).instrumentOpenContracts;
-      const openTranches = beforeOpen > 0 && this.ownershipService
-        ? [...this.ownershipService.current(beforeOpen).tranches]
-        : [];
+      const openTranches = this.resolveClosedTranchesForFlat(beforeOpen);
       const [accounts, positions, orders] = await Promise.all([
         this.api.searchAccounts(true),
         this.api.searchOpenPositions(this.config.scope.accountId),
@@ -540,27 +551,20 @@ export class GlitchTopstepService {
         this.config.scope.accountId,
         this.config.scope.contractId,
       ).instrumentOpenContracts;
-      if (beforeOpen > 0 && afterOpen === 0 && openTranches.length > 0) {
-        const published = await this.tradeOutcomePublisher.publishClosedTranches({
-          accountId: this.config.scope.accountId,
-          accountName: this.config.scope.accountName,
-          contractId: this.config.scope.contractId,
-          instrument: this.config.scope.instrument,
-          tranches: openTranches,
-          exitUtc: receivedAt,
-        });
-        if (published.length > 0) {
-          await this.ledger.append({
-            schema_version: "glitch.direct.event.v1",
-            event_id: randomUUID(),
-            recorded_utc: receivedAt,
-            event: "trade_outcomes_published",
-            payload: {
-              count: published.length,
-              intent_ids: published.map((outcome) => outcome.intent_id),
-            },
-          });
-        }
+      if (shouldPublishTradeOutcomesOnFlat({
+        beforeOpen,
+        afterOpen,
+        lastReconciledOpenContracts: this.lastReconciledOpenContracts,
+        tranches: openTranches,
+      })) {
+        await this.publishTradeOutcomesOnFlat(openTranches, receivedAt, "reconcile");
+      }
+      this.lastReconciledOpenContracts = afterOpen;
+      if (afterOpen > 0) {
+        this.refreshCachedOpenTranches(afterOpen);
+      } else {
+        this.cachedOpenTranches = [];
+        await this.retryIncompleteTradeOutcomes(receivedAt);
       }
 
       const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders);
@@ -626,6 +630,121 @@ export class GlitchTopstepService {
       throw error;
     } finally {
       this.reconciliationInFlight = false;
+    }
+  }
+
+  private handleStreamPositionBeforeApply(position: PositionInfo, receivedUtc: string): void {
+    if (position.accountId !== this.config.scope.accountId
+      || position.contractId !== this.config.scope.contractId) {
+      return;
+    }
+    const snapshot = this.state.buildSnapshot(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    const beforeOpen = snapshot.instrumentOpenContracts;
+    if (beforeOpen === 0) {
+      return;
+    }
+    const afterOpen = projectedInstrumentOpenContracts(
+      snapshot.positions,
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+      position,
+    );
+    if (afterOpen > 0) {
+      this.refreshCachedOpenTranches(afterOpen);
+      return;
+    }
+    const tranches = this.resolveClosedTranchesForFlat(beforeOpen);
+    void this.publishTradeOutcomesOnFlat(tranches, receivedUtc, "stream").catch((error: unknown) => {
+      console.error("Trade outcome publication failed after stream flat", error);
+    });
+  }
+
+  private resolveClosedTranchesForFlat(beforeOpen: number): TrancheView[] {
+    if (beforeOpen > 0 && this.ownershipService) {
+      return tranchesForClosedPosition(this.ownershipService.current(beforeOpen).tranches);
+    }
+    if (this.cachedOpenTranches.length > 0) {
+      return tranchesForClosedPosition(this.cachedOpenTranches);
+    }
+    if (this.ownershipService) {
+      return tranchesForClosedPosition(this.ownershipService.current(0).tranches);
+    }
+    return [];
+  }
+
+  private refreshCachedOpenTranches(openContracts: number): void {
+    if (!this.ownershipService || openContracts <= 0) {
+      return;
+    }
+    const active = this.ownershipService.current(openContracts).tranches
+      .filter((tranche) => tranche.remaining_qty > 0);
+    if (active.length > 0) {
+      this.cachedOpenTranches = [...active];
+    }
+  }
+
+  private async retryIncompleteTradeOutcomes(exitUtc: string): Promise<void> {
+    if (!this.ownershipService) {
+      return;
+    }
+    await this.tradeOutcomeStore.load();
+    const filled = this.ownershipService.current(0).tranches
+      .filter((tranche) => tranche.filled_qty > 0);
+    const incomplete = filled.filter((tranche) => {
+      const existing = this.tradeOutcomeStore.get(tranche.intent_id);
+      return existing !== undefined && (
+        ((existing.attribution?.trade_count ?? 0) < 2 && existing.realized_pnl_usd === 0)
+        || (
+          (existing.attribution?.trade_count ?? 0) >= 2
+          && existing.learning_eligible === false
+          && existing.attribution?.protection_status !== "proven"
+        )
+      );
+    });
+    if (incomplete.length === 0) {
+      return;
+    }
+    await this.publishTradeOutcomesOnFlat(incomplete, exitUtc, "reconcile");
+  }
+
+  private async publishTradeOutcomesOnFlat(
+    tranches: readonly TrancheView[],
+    exitUtc: string,
+    trigger: TradeOutcomeFlatTrigger,
+  ): Promise<void> {
+    if (tranches.length === 0 || this.tradeOutcomePublishInFlight) {
+      return;
+    }
+    this.tradeOutcomePublishInFlight = true;
+    try {
+      const published = await this.tradeOutcomePublisher.publishClosedTranches({
+        accountId: this.config.scope.accountId,
+        accountName: this.config.scope.accountName,
+        contractId: this.config.scope.contractId,
+        instrument: this.config.scope.instrument,
+        tranches: [...tranches],
+        exitUtc,
+      });
+      if (published.length > 0) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: exitUtc,
+          event: "trade_outcomes_published",
+          payload: {
+            count: published.length,
+            intent_ids: published.map((outcome) => outcome.intent_id),
+            trigger,
+          },
+        });
+        this.cachedOpenTranches = [];
+        this.lastReconciledOpenContracts = 0;
+      }
+    } finally {
+      this.tradeOutcomePublishInFlight = false;
     }
   }
 

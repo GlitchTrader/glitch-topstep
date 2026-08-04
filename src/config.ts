@@ -6,6 +6,11 @@ import type {
   TopstepPolicyState,
   TradingMode,
 } from "./domain/models.js";
+import {
+  assertValidSessionTimezone,
+  parseSessionLocalTime,
+  type TopstepSessionConfig,
+} from "./policy/session-calendar.js";
 
 export interface AppConfig {
   projectX: {
@@ -37,6 +42,7 @@ export interface AppConfig {
   };
   tradingMode: TradingMode;
   policy: TopstepPolicyState;
+  session: TopstepSessionConfig;
   risk: RiskSettings;
   providerEvidence: {
     marketEventRetention: number;
@@ -240,6 +246,23 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     (value) => Number.isInteger(value) && value >= 30_000 && value <= 86_400_000,
   );
 
+  const sessionTimezone = optional(environment, "GLITCH_SESSION_TIMEZONE", "America/Chicago");
+  assertValidSessionTimezone(sessionTimezone);
+  const mustFlatLocalTime = environment.GLITCH_SESSION_MUST_FLAT_LOCAL_TIME?.trim() || null;
+  if (mustFlatLocalTime) {
+    parseSessionLocalTime(mustFlatLocalTime);
+  }
+  const entryOpenLocalTime = environment.GLITCH_SESSION_ENTRY_OPEN_LOCAL_TIME?.trim() || null;
+  if (entryOpenLocalTime) {
+    parseSessionLocalTime(entryOpenLocalTime);
+  }
+  const sessionAuthority = enumValue(
+    environment,
+    "GLITCH_SESSION_AUTHORITY",
+    ["operator_configured", "topstep_verified"],
+    "operator_configured",
+  );
+
   return {
     projectX: {
       username: required(environment, "PROJECTX_USERNAME"),
@@ -286,6 +309,13 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       payoutProcessed: booleanValue(environment, "GLITCH_PAYOUT_PROCESSED", false),
       operatorProvidedLossFloorUsd,
       maxContracts: numberValue(environment, "GLITCH_MAX_CONTRACTS", 1, (value) => Number.isInteger(value) && value > 0),
+    },
+    session: {
+      authority: sessionAuthority,
+      timezone: sessionTimezone,
+      mustFlatLocalTime,
+      entryOpenLocalTime,
+      notes: [],
     },
     risk: {
       estimatedRoundTurnFeesUsd: numberValue(environment, "GLITCH_ESTIMATED_ROUND_TURN_FEES_USD", 2.5, (value) => value >= 0),

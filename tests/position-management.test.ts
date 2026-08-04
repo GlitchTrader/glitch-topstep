@@ -12,7 +12,7 @@ import type { TrancheView } from "../src/ownership/tranches.js";
 import type { ModifyOrderRequest, ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { orderFlowWithTrades, snapshot } from "./fixtures.js";
+import { orderFlowWithTrades, snapshot, testSessionConfig } from "./fixtures.js";
 
 const INTENT_ID = "00000000-0000-4000-8000-00000000b001";
 const ENTRY_INTENT_ID = "00000000-0000-4000-8000-00000000b000";
@@ -53,6 +53,7 @@ function config(dataDir: string): AppConfig {
       operatorProvidedLossFloorUsd: null,
       maxContracts: 3,
     },
+    session: testSessionConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

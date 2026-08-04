@@ -10,7 +10,7 @@ import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient, PlaceOrderRequest } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { snapshot, orderFlowWithTrades } from "./fixtures.js";
+import { snapshot, orderFlowWithTrades, testSessionConfig } from "./fixtures.js";
 
 function config(dataDir: string): AppConfig {
   return {
@@ -47,6 +47,7 @@ function config(dataDir: string): AppConfig {
       operatorProvidedLossFloorUsd: null,
       maxContracts: 3,
     },
+    session: testSessionConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

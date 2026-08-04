@@ -38,6 +38,7 @@ export class DecisionPacketService {
       this.marketObservation(),
       this.orderFlow(),
       this.tranches(),
+      this.config.session,
     );
     this.store.recordIssuedPacket(packet);
     return packet;

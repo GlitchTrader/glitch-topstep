@@ -1,5 +1,8 @@
 import type { AccountVenueSnapshot, VenueOperationalStatus } from "../src/domain/models.js";
 import type { ProjectXOrderFlowState } from "../src/domain/order-flow.js";
+import { emptySessionConfig } from "../src/policy/session-calendar.js";
+
+export const testSessionConfig = emptySessionConfig();
 
 export function orderFlowWithTrades(tradeCount: number): ProjectXOrderFlowState {
   return {

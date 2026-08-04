@@ -5,7 +5,7 @@ import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import type { MarketObservationState } from "../src/domain/market-observation.js";
 import { DecisionPacketService } from "../src/hermes/packet-service.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { snapshot } from "./fixtures.js";
+import { snapshot, testSessionConfig } from "./fixtures.js";
 
 const NOW = Date.parse("2026-07-21T12:00:05Z");
 
@@ -43,6 +43,7 @@ const config: AppConfig = {
     operatorProvidedLossFloorUsd: null,
     maxContracts: 5,
   },
+  session: testSessionConfig,
   risk: {
     estimatedRoundTurnFeesUsd: 2.5,
     slippageReserveTicks: 2,

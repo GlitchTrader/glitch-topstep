@@ -25,24 +25,57 @@ export interface PublishTradeOutcomeInput {
   exitUtc: string;
 }
 
+export interface TradeOutcomePublisherOptions {
+  /** Wait before Trade/search so stream-flat does not outrun the closing fill. */
+  settleMs?: number;
+  /** Extend search end past flat detection; closing prints often land 1–2s later. */
+  searchTailMs?: number;
+  /** Second settle when the first search still has no realized PnL. */
+  retrySettleMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+const DEFAULT_SETTLE_MS = 2_500;
+const DEFAULT_SEARCH_TAIL_MS = 15_000;
+const DEFAULT_RETRY_SETTLE_MS = 2_500;
+
 export class TradeOutcomePublisher {
+  private readonly settleMs: number;
+  private readonly searchTailMs: number;
+  private readonly retrySettleMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+
   public constructor(
     private readonly api: TradeSearchApi,
     private readonly store: TradeOutcomeStore,
-  ) {}
+    options: TradeOutcomePublisherOptions = {},
+  ) {
+    this.settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
+    this.searchTailMs = options.searchTailMs ?? DEFAULT_SEARCH_TAIL_MS;
+    this.retrySettleMs = options.retrySettleMs ?? DEFAULT_RETRY_SETTLE_MS;
+    this.sleep = options.sleep ?? defaultSleep;
+  }
 
   public async publishClosedTranches(input: PublishTradeOutcomeInput): Promise<TradeOutcomeV1[]> {
     await this.store.load();
     const published: TradeOutcomeV1[] = [];
     for (const tranche of input.tranches) {
-      if (this.store.hasIntent(tranche.intent_id)) {
+      const existing = this.store.get(tranche.intent_id);
+      if (existing && !isIncompleteOutcome(existing)) {
         continue;
       }
-      const outcome = await this.buildOutcome(input, tranche);
+      const outcome = await this.buildOutcome(input, tranche, existing);
       if (!outcome) {
         continue;
       }
-      await this.store.append(outcome);
+      if (existing) {
+        if (!isRicherOutcome(outcome, existing) && outcome.learning_eligible === existing.learning_eligible) {
+          continue;
+        }
+        await this.store.replace(outcome);
+      } else {
+        await this.store.append(outcome);
+      }
       published.push(outcome);
     }
     return published;
@@ -51,22 +84,17 @@ export class TradeOutcomePublisher {
   private async buildOutcome(
     input: PublishTradeOutcomeInput,
     tranche: TrancheView,
+    existing?: TradeOutcomeV1,
   ): Promise<TradeOutcomeV1 | null> {
-    const trades = await this.api.searchTrades(
-      input.accountId,
-      tranche.created_utc,
-      input.exitUtc,
-    );
-    const scoped = trades.filter(
-      (trade) => trade.contractId === input.contractId
-        && !trade.voided
-        && trade.creationTimestamp >= tranche.created_utc
-        && trade.creationTimestamp <= input.exitUtc,
-    );
-    const entryOrderId = tranche.entry_order_id;
-    const attributed = entryOrderId === null
-      ? scoped
-      : scoped.filter((trade) => trade.orderId === entryOrderId || trade.creationTimestamp >= tranche.created_utc);
+    if (this.settleMs > 0) {
+      await this.sleep(this.settleMs);
+    }
+
+    let attributed = await this.searchAttributedTrades(input, tranche, input.exitUtc);
+    if (!hasRealizedPnl(attributed) && this.retrySettleMs > 0) {
+      await this.sleep(this.retrySettleMs);
+      attributed = await this.searchAttributedTrades(input, tranche, input.exitUtc);
+    }
 
     const realized = attributed.reduce(
       (sum, trade) => sum + (trade.profitAndLoss ?? 0),
@@ -76,9 +104,26 @@ export class TradeOutcomePublisher {
       (sum, trade) => sum + (trade.fees ?? 0),
       0,
     );
-    const protectionProven = tranche.protection.status === "proven";
+    const protectionStatus = tranche.protection.status === "proven"
+      ? "proven"
+      : (existing?.attribution?.protection_status === "proven" ? "proven" : tranche.protection.status);
     const hasTrades = attributed.length > 0;
-    const learningEligible = protectionProven && hasTrades && entryOrderId !== null;
+    const learningEligible = protectionStatus === "proven"
+      && hasTrades
+      && tranche.entry_order_id !== null;
+    const closingTrade = attributed
+      .filter((trade) => trade.profitAndLoss !== null)
+      .sort((left, right) => left.creationTimestamp.localeCompare(right.creationTimestamp))
+      .at(-1);
+    const latestTradeUtc = attributed.reduce<string | null>((latest, trade) => {
+      if (latest === null || trade.creationTimestamp > latest) {
+        return trade.creationTimestamp;
+      }
+      return latest;
+    }, null);
+    const exitUtc = closingTrade?.creationTimestamp
+      ?? latestTradeUtc
+      ?? input.exitUtc;
 
     return {
       schema_version: TRADE_OUTCOME_SCHEMA,
@@ -87,22 +132,108 @@ export class TradeOutcomePublisher {
       account: input.accountName,
       instrument: input.instrument,
       entry_utc: tranche.created_utc,
-      exit_utc: input.exitUtc,
+      exit_utc: exitUtc,
       realized_pnl_usd: roundUsd(realized),
       fees_usd: roundUsd(fees),
       learning_eligible: learningEligible,
       exit_reason: "instrument_flat",
       attribution: {
-        entry_order_id: entryOrderId,
+        entry_order_id: tranche.entry_order_id,
         trade_count: attributed.length,
-        protection_status: tranche.protection.status,
+        protection_status: protectionStatus,
       },
     };
   }
+
+  private async searchAttributedTrades(
+    input: PublishTradeOutcomeInput,
+    tranche: TrancheView,
+    exitUtc: string,
+  ): Promise<TradeInfo[]> {
+    const searchEndUtc = addMs(exitUtc, this.searchTailMs);
+    const trades = await this.api.searchTrades(
+      input.accountId,
+      tranche.created_utc,
+      searchEndUtc,
+    );
+    const orderIds = attributedOrderIds(tranche);
+    const scoped = trades.filter(
+      (trade) => trade.contractId === input.contractId
+        && !trade.voided
+        && trade.creationTimestamp >= tranche.created_utc
+        && trade.creationTimestamp <= searchEndUtc,
+    );
+    return scoped.filter((trade) => {
+      if (orderIds.has(trade.orderId)) {
+        return true;
+      }
+      // EXIT / flatten fills use a fresh provider order id; realized PnL marks the close.
+      return trade.profitAndLoss !== null;
+    });
+  }
+}
+
+export function isIncompleteOutcome(outcome: TradeOutcomeV1): boolean {
+  const tradeCount = outcome.attribution?.trade_count ?? 0;
+  if (tradeCount < 2 && outcome.realized_pnl_usd === 0) {
+    return true;
+  }
+  // Repair path: richer fills arrived while ownership already forgot proven protection.
+  return tradeCount >= 2
+    && outcome.learning_eligible === false
+    && outcome.attribution?.protection_status !== "proven";
+}
+
+export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcomeV1): boolean {
+  const candidateCount = candidate.attribution?.trade_count ?? 0;
+  const existingCount = existing.attribution?.trade_count ?? 0;
+  if (candidateCount > existingCount) {
+    return true;
+  }
+  if (
+    candidateCount === existingCount
+    && Math.abs(candidate.realized_pnl_usd) > Math.abs(existing.realized_pnl_usd)
+  ) {
+    return true;
+  }
+  if (
+    candidateCount === existingCount
+    && candidate.realized_pnl_usd === existing.realized_pnl_usd
+    && candidate.fees_usd > existing.fees_usd
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function attributedOrderIds(tranche: TrancheView): Set<number> {
+  const ids = new Set<number>();
+  if (tranche.entry_order_id !== null) {
+    ids.add(tranche.entry_order_id);
+  }
+  if (tranche.protection.stop.provider_order_id !== null) {
+    ids.add(tranche.protection.stop.provider_order_id);
+  }
+  if (tranche.protection.target.provider_order_id !== null) {
+    ids.add(tranche.protection.target.provider_order_id);
+  }
+  return ids;
+}
+
+function hasRealizedPnl(trades: readonly TradeInfo[]): boolean {
+  return trades.some((trade) => trade.profitAndLoss !== null);
+}
+
+function addMs(iso: string, ms: number): string {
+  return new Date(Date.parse(iso) + ms).toISOString();
 }
 
 function roundUsd(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function stableOutcomeFingerprint(outcome: TradeOutcomeV1): string {

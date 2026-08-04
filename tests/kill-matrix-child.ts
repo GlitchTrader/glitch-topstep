@@ -14,7 +14,7 @@ import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { orderFlowWithTrades, snapshot } from "./fixtures.js";
+import { orderFlowWithTrades, snapshot, testSessionConfig } from "./fixtures.js";
 
 const INTENT_ID = "00000000-0000-4000-8000-000000000a01";
 const EXIT_INTENT_ID = "00000000-0000-4000-8000-000000000a08";
@@ -85,6 +85,7 @@ function config(dataDir: string): AppConfig {
       operatorProvidedLossFloorUsd: null,
       maxContracts: 3,
     },
+    session: testSessionConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

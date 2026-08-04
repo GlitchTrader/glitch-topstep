@@ -17,6 +17,16 @@ A commercial product should install a customer-side gateway and keep credentials
 7. Keep `GLITCH_ENTRY_WINDOW_OPEN=false` until a session-policy service is implemented.
 8. Run `npm run check` and `npm start`.
 
+## Epoch / account reset checklist
+
+Do this **every** time you reset epoch state or switch to a new Topstep/PRAC account. New accounts often default to Position Brackets; protected API entries then fail with `Brackets cannot be used with Position Brackets`.
+
+1. **Enable Auto OCO Brackets** on the account in TopstepX (disable Position Brackets if both appear).
+2. Confirm account ID / name / contract / loss-floor fields in gateway `.env`.
+3. Confirm `GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH` points at Hermes `state/outcomes.jsonl`.
+4. Restart gateway; prove `/health` is `armed` or `shadow` as intended and `state_complete=true`.
+5. Run one protected round-trip (ENTER → fill → flat) before trusting learning/outcomes.
+
 ## Shadow acceptance
 
 Before any armed test, prove:
