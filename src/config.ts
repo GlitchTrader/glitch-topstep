@@ -291,7 +291,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       estimatedRoundTurnFeesUsd: numberValue(environment, "GLITCH_ESTIMATED_ROUND_TURN_FEES_USD", 2.5, (value) => value >= 0),
       slippageReserveTicks: numberValue(environment, "GLITCH_SLIPPAGE_RESERVE_TICKS", 2, (value) => Number.isInteger(value) && value >= 0),
       maxQuoteAgeMs: numberValue(environment, "GLITCH_MAX_QUOTE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
-      maxStateAgeMs: numberValue(environment, "GLITCH_MAX_STATE_AGE_MS", 5_000, (value) => Number.isInteger(value) && value > 0),
+      maxStateAgeMs: numberValue(environment, "GLITCH_MAX_STATE_AGE_MS", 15_000, (value) => Number.isInteger(value) && value > 0),
       maxIntentAgeMs: numberValue(environment, "GLITCH_MAX_INTENT_AGE_MS", 300_000, (value) => Number.isInteger(value) && value > 0),
     },
     providerEvidence: {

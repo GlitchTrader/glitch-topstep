@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-03",
+  "updated": "2026-08-04",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -252,34 +252,40 @@
     },
     {
       "id": "TS-R3-03",
-      "title": "Rich trade outcomes for Hermes learning (MAE/MFE, exit cause, R-multiple)",
+      "title": "Reliable trade outcomes and learning-grade execution evidence",
       "status": "open",
-      "priority": "P1",
+      "priority": "P0",
       "owner_role": "coder",
-      "issue": 63,
+      "issue": 70,
       "depends_on": [
         "TS-R3-01"
       ],
       "acceptance": [
-        "trade_outcome v1.1 publishes MAE/MFE and canonical exit_reason when learning_eligible=true.",
-        "initial_risk_usd and r_multiple computed from structural entry geometry.",
-        "learning_eligible=false when protection, attribution, or excursion metrics are incomplete.",
-        "GET /outcomes and export path carry v1.1 fields; v1 consumers remain compatible.",
+        "Stream or reconcile flat transition publishes deduplicated glitch.topstep.trade_outcome.v1 rows to data/trade-outcomes.jsonl and GET /outcomes.",
+        "Configured GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH mirrors outcomes into Hermes state/outcomes.jsonl and sync_gateway_outcomes consumes them.",
+        "One learning-eligible PRAC round-trip produces trade-episodes.jsonl and trade_episode_count >= 1 after debrief.",
+        "trade_outcome v1.1 publishes MAE/MFE, fills, and canonical exit_reason when learning_eligible=true.",
+        "initial_risk_usd and r_multiple computed from structural entry geometry when available.",
+        "Regression test proves publication when GatewayUserPosition marks flat before REST reconcile.",
+        "Optional backfill script can reconstruct missing outcomes from SQLite and Trade/search without duplicate intent_id.",
         "docs/PARITY.md canonical outcomes row updated when implemented."
       ],
-      "stop_line": "No counterfactual abstention PnL in outcomes; no master/follower replication fields.",
+      "stop_line": "Do not mark TS-R3-01 production-complete for learning until live PRAC flat publishes at least one canonical outcome and Hermes debriefs it.",
       "evidence": [
         "2026-08-03: parity gap documented vs Glitch NT reconcile-hermes-outcomes.",
+        "2026-08-04: production PRAC sessions show zero published outcomes despite armed fills.",
         "docs/specs/TS-R3-03.md"
       ],
       "sources": [
+        "docs/specs/TS-R3-03.md",
+        "src/service.ts",
+        "src/projectx/realtime.ts",
         "src/learning/trade-outcome.ts",
         "src/learning/trade-outcome-publisher.ts",
         "src/storage/trade-outcome-store.ts",
         "src/server/local-gateway.ts",
         "tests/trade-outcome-publisher.test.ts",
         "docs/PARITY.md",
-        "docs/specs/TS-R3-03.md",
         "glitch-topstep-hermes-profile:GTHP-012"
       ]
     }
