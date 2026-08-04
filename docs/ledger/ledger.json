@@ -205,7 +205,20 @@
         "Restart, reconnect, pause, flatten, and receipt paths are evidenced.",
         "The operator explicitly promotes the named immutable artifact to beta."
       ],
-      "stop_line": "No claim of beta readiness before the cross-repository profile acceptance and operator-approved real mutation evidence are attached."
+      "stop_line": "No claim of beta readiness before the cross-repository profile acceptance and operator-approved real mutation evidence are attached.",
+      "evidence": [
+        "2026-08-04: immutable baseline candidate recorded — gateway 0.1.3@c83a22f + profile 0.1.13@a7f37a6 on PRAC-V2-645601-90809185/MNQ.",
+        "docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md",
+        "Dependency proofs: TS-R1-04 / TS-R2-06 / TS-R2-07 / TS-REL-01 done; PROFILE-BETA-01 done on prior 0.1.2 pair (2026-08-03).",
+        "Awaiting explicit operator promotion signature in the baseline doc."
+      ],
+      "sources": [
+        "docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md",
+        "docs/OPERATIONS.md",
+        "tests/fixtures/projectx/live/r1_04_kill_matrix_proof.json",
+        "tests/fixtures/projectx/live/event_rates_proof.json",
+        "glitch-topstep-hermes-profile:docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.md"
+      ]
     },
     {
       "id": "TS-R3-01",
