@@ -42,12 +42,24 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
           contractId: "CON.F.US.MNQ.U26",
           creationTimestamp: "2026-08-03T13:59:50.000Z",
           price: 28580,
-          profitAndLoss: 42.5,
-          fees: 2.1,
-          side: 1,
+          profitAndLoss: null,
+          fees: 1.0,
+          side: 0,
           size: 1,
           voided: false,
           orderId: 3353603011,
+        }, {
+          id: 100,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-03T14:00:00.500Z",
+          price: 28620,
+          profitAndLoss: 42.5,
+          fees: 1.1,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 2,
         }];
       },
     },
@@ -62,6 +74,10 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
     instrument: "MNQ",
     tranches: [tranche],
     exitUtc: "2026-08-03T14:00:00.000Z",
+    tickSize: 0.25,
+    tickValue: 0.5,
+    maeUsd: 8,
+    mfeUsd: 50,
   });
 
   assert.equal(published.length, 1);
@@ -69,6 +85,13 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
   assert.equal(published[0]?.learning_eligible, true);
   assert.equal(published[0]?.realized_pnl_usd, 42.5);
   assert.equal(published[0]?.fees_usd, 2.1);
+  assert.equal(published[0]?.exit_reason, "take_profit");
+  assert.equal(published[0]?.fills?.length, 2);
+  assert.equal(published[0]?.mae_usd, 8);
+  assert.equal(published[0]?.mfe_usd, 50);
+  assert.equal(published[0]?.side, "long");
+  assert.ok((published[0]?.initial_risk_usd ?? 0) > 0);
+  assert.ok(published[0]?.r_multiple !== null && published[0]?.r_multiple !== undefined);
 
   const file = await readFile(join(dir, "trade-outcomes.jsonl"), "utf8");
   assert.match(file, /774b92f8-61a2-5c3a-b68e-e7f722bf1cf0/);
@@ -80,6 +103,8 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
     instrument: "MNQ",
     tranches: [tranche],
     exitUtc: "2026-08-03T14:00:00.000Z",
+    maeUsd: 8,
+    mfeUsd: 50,
   });
   assert.equal(second.length, 0);
 });
@@ -188,6 +213,8 @@ test("TradeOutcomePublisher includes closing fill that lands after stream flat u
   assert.equal(published[0]?.fees_usd, 1.22);
   assert.equal(published[0]?.attribution?.trade_count, 2);
   assert.equal(published[0]?.exit_utc, "2026-08-04T19:12:57.570Z");
+  assert.equal(published[0]?.learning_eligible, false);
+  assert.equal(published[0]?.fills?.length, 2);
 });
 
 test("TradeOutcomePublisher replaces incomplete entry-only outcome after richer search", async () => {

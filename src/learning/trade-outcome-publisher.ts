@@ -2,6 +2,18 @@ import { createHash } from "node:crypto";
 import type { TradeInfo } from "../domain/models.js";
 import type { TrancheView } from "../ownership/tranches.js";
 import {
+  entryAndExitPrices,
+  inferExitReason,
+  inferSideFromFills,
+  rMultiple,
+  stopTargetFromTranche,
+  structuralRiskUsd,
+  ticksFromUsd,
+  toOutcomeFills,
+} from "./trade-outcome-enrichment.js";
+import type { TradeOutcomeFlatTrigger } from "./trade-outcome-flat.js";
+import {
+  TRADE_OUTCOME_PUBLISHER_VERSION,
   TRADE_OUTCOME_SCHEMA,
   tradeOutcomeId,
   type TradeOutcomeV1,
@@ -23,6 +35,13 @@ export interface PublishTradeOutcomeInput {
   instrument: string;
   tranches: TrancheView[];
   exitUtc: string;
+  trigger?: TradeOutcomeFlatTrigger;
+  tickSize?: number;
+  tickValue?: number;
+  maeUsd?: number | null;
+  mfeUsd?: number | null;
+  hadExitIntentByTranche?: ReadonlyMap<string, boolean>;
+  bufferImpactUsd?: number | null;
 }
 
 export interface TradeOutcomePublisherOptions {
@@ -108,9 +127,37 @@ export class TradeOutcomePublisher {
       ? "proven"
       : (existing?.attribution?.protection_status === "proven" ? "proven" : tranche.protection.status);
     const hasTrades = attributed.length > 0;
-    const learningEligible = protectionStatus === "proven"
+    const fills = toOutcomeFills(attributed);
+    const side = inferSideFromFills(attributed, tranche.entry_order_id);
+    const prices = entryAndExitPrices(attributed, tranche.entry_order_id);
+    const geometry = stopTargetFromTranche(tranche);
+    const quantity = Math.max(
+      1,
+      attributed
+        .filter((trade) => trade.orderId === tranche.entry_order_id)
+        .reduce((sum, trade) => sum + trade.size, 0)
+        || attributed[0]?.size
+        || 1,
+    );
+    const tickSize = input.tickSize ?? 0;
+    const tickValue = input.tickValue ?? 0;
+    const initialRisk = structuralRiskUsd({
+      side,
+      entryPrice: prices.entry_price,
+      stopPrice: geometry.stop_price,
+      quantity,
+      tickSize,
+      tickValue,
+    });
+    const maeUsd = input.maeUsd ?? existing?.mae_usd ?? null;
+    const mfeUsd = input.mfeUsd ?? existing?.mfe_usd ?? null;
+    const excursionComplete = maeUsd !== null && mfeUsd !== null;
+    const protectionConfirmed = protectionStatus === "proven";
+    const learningEligible = protectionConfirmed
       && hasTrades
-      && tranche.entry_order_id !== null;
+      && tranche.entry_order_id !== null
+      && excursionComplete
+      && fills.length >= 2;
     const closingTrade = attributed
       .filter((trade) => trade.profitAndLoss !== null)
       .sort((left, right) => left.creationTimestamp.localeCompare(right.creationTimestamp))
@@ -124,6 +171,14 @@ export class TradeOutcomePublisher {
     const exitUtc = closingTrade?.creationTimestamp
       ?? latestTradeUtc
       ?? input.exitUtc;
+    const exitReason = inferExitReason({
+      closingOrderId: closingTrade?.orderId ?? null,
+      stopOrderId: tranche.protection.stop.provider_order_id,
+      targetOrderId: tranche.protection.target.provider_order_id,
+      entryOrderId: tranche.entry_order_id,
+      trigger: input.trigger ?? "reconcile",
+      hadExitIntent: input.hadExitIntentByTranche?.get(tranche.intent_id) === true,
+    });
 
     return {
       schema_version: TRADE_OUTCOME_SCHEMA,
@@ -136,11 +191,34 @@ export class TradeOutcomePublisher {
       realized_pnl_usd: roundUsd(realized),
       fees_usd: roundUsd(fees),
       learning_eligible: learningEligible,
-      exit_reason: "instrument_flat",
+      exit_reason: exitReason,
       attribution: {
         entry_order_id: tranche.entry_order_id,
         trade_count: attributed.length,
         protection_status: protectionStatus,
+      },
+      fills,
+      entry_price: prices.entry_price,
+      exit_price: prices.exit_price,
+      stop_price: geometry.stop_price,
+      target_price: geometry.target_price,
+      quantity,
+      side,
+      slippage_ticks: null,
+      mae_usd: maeUsd,
+      mfe_usd: mfeUsd,
+      mae_ticks: ticksFromUsd(maeUsd, quantity, tickValue),
+      mfe_ticks: ticksFromUsd(mfeUsd, quantity, tickValue),
+      initial_risk_usd: initialRisk,
+      r_multiple: rMultiple(realized, initialRisk),
+      buffer_impact_usd: input.bufferImpactUsd ?? null,
+      protection_confirmed: protectionConfirmed,
+      packet_id: existing?.packet_id ?? null,
+      snapshot_hash: existing?.snapshot_hash ?? null,
+      evidence: {
+        publisher_version: TRADE_OUTCOME_PUBLISHER_VERSION,
+        trade_ids: attributed.map((trade) => trade.id),
+        order_ids: [...new Set(attributed.map((trade) => trade.orderId))],
       },
     };
   }
@@ -167,7 +245,6 @@ export class TradeOutcomePublisher {
       if (orderIds.has(trade.orderId)) {
         return true;
       }
-      // EXIT / flatten fills use a fresh provider order id; realized PnL marks the close.
       return trade.profitAndLoss !== null;
     });
   }
@@ -178,16 +255,34 @@ export function isIncompleteOutcome(outcome: TradeOutcomeV1): boolean {
   if (tradeCount < 2 && outcome.realized_pnl_usd === 0) {
     return true;
   }
-  // Repair path: richer fills arrived while ownership already forgot proven protection.
-  return tradeCount >= 2
+  if (
+    tradeCount >= 2
     && outcome.learning_eligible === false
-    && outcome.attribution?.protection_status !== "proven";
+    && outcome.attribution?.protection_status !== "proven"
+  ) {
+    return true;
+  }
+  // Upgrade pre-v1.1 rows that lack fill enrichment.
+  if (tradeCount >= 2 && (outcome.fills?.length ?? 0) < 2) {
+    return true;
+  }
+  return false;
 }
 
 export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcomeV1): boolean {
   const candidateCount = candidate.attribution?.trade_count ?? 0;
   const existingCount = existing.attribution?.trade_count ?? 0;
   if (candidateCount > existingCount) {
+    return true;
+  }
+  if ((candidate.fills?.length ?? 0) > (existing.fills?.length ?? 0)) {
+    return true;
+  }
+  if (
+    candidate.mae_usd != null
+    && candidate.mfe_usd != null
+    && (existing.mae_usd == null || existing.mfe_usd == null)
+  ) {
     return true;
   }
   if (

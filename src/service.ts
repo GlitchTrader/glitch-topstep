@@ -24,13 +24,14 @@ import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-owners
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
-import { TradeOutcomePublisher } from "./learning/trade-outcome-publisher.js";
+import { TradeOutcomePublisher, isIncompleteOutcome } from "./learning/trade-outcome-publisher.js";
 import {
   projectedInstrumentOpenContracts,
   shouldPublishTradeOutcomesOnFlat,
   tranchesForClosedPosition,
   type TradeOutcomeFlatTrigger,
 } from "./learning/trade-outcome-flat.js";
+import { TradeExcursionTracker } from "./learning/trade-excursion-tracker.js";
 import type { TrancheView } from "./ownership/tranches.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
@@ -77,6 +78,7 @@ export class GlitchTopstepService {
   private tradeOutcomePublishInFlight = false;
   private lastReconciledOpenContracts = 0;
   private cachedOpenTranches: TrancheView[] = [];
+  private readonly tradeExcursion = new TradeExcursionTracker();
   private storesClosed = false;
 
   public constructor(private readonly config: AppConfig) {
@@ -562,6 +564,10 @@ export class GlitchTopstepService {
       this.lastReconciledOpenContracts = afterOpen;
       if (afterOpen > 0) {
         this.refreshCachedOpenTranches(afterOpen);
+        this.tradeExcursion.observe(afterOpen, this.state.buildSnapshot(
+          this.config.scope.accountId,
+          this.config.scope.contractId,
+        ).unrealizedPnl);
       } else {
         this.cachedOpenTranches = [];
         await this.retryIncompleteTradeOutcomes(receivedAt);
@@ -654,8 +660,15 @@ export class GlitchTopstepService {
     );
     if (afterOpen > 0) {
       this.refreshCachedOpenTranches(afterOpen);
+      const live = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      this.tradeExcursion.observe(afterOpen, live.unrealizedPnl);
       return;
     }
+    // Capture excursion against the last open unrealized before publishing.
+    this.tradeExcursion.observe(beforeOpen, snapshot.unrealizedPnl);
     const tranches = this.resolveClosedTranchesForFlat(beforeOpen);
     void this.publishTradeOutcomesOnFlat(tranches, receivedUtc, "stream").catch((error: unknown) => {
       console.error("Trade outcome publication failed after stream flat", error);
@@ -695,14 +708,7 @@ export class GlitchTopstepService {
       .filter((tranche) => tranche.filled_qty > 0);
     const incomplete = filled.filter((tranche) => {
       const existing = this.tradeOutcomeStore.get(tranche.intent_id);
-      return existing !== undefined && (
-        ((existing.attribution?.trade_count ?? 0) < 2 && existing.realized_pnl_usd === 0)
-        || (
-          (existing.attribution?.trade_count ?? 0) >= 2
-          && existing.learning_eligible === false
-          && existing.attribution?.protection_status !== "proven"
-        )
-      );
+      return existing !== undefined && isIncompleteOutcome(existing);
     });
     if (incomplete.length === 0) {
       return;
@@ -720,6 +726,11 @@ export class GlitchTopstepService {
     }
     this.tradeOutcomePublishInFlight = true;
     try {
+      const snapshot = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      const excursion = this.tradeExcursion.excursionUsd();
       const published = await this.tradeOutcomePublisher.publishClosedTranches({
         accountId: this.config.scope.accountId,
         accountName: this.config.scope.accountName,
@@ -727,6 +738,11 @@ export class GlitchTopstepService {
         instrument: this.config.scope.instrument,
         tranches: [...tranches],
         exitUtc,
+        trigger,
+        tickSize: snapshot.contract.tickSize,
+        tickValue: snapshot.contract.tickValue,
+        maeUsd: excursion?.mae_usd ?? null,
+        mfeUsd: excursion?.mfe_usd ?? null,
       });
       if (published.length > 0) {
         await this.ledger.append({
@@ -742,6 +758,7 @@ export class GlitchTopstepService {
         });
         this.cachedOpenTranches = [];
         this.lastReconciledOpenContracts = 0;
+        this.tradeExcursion.reset();
       }
     } finally {
       this.tradeOutcomePublishInFlight = false;
