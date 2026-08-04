@@ -6,6 +6,12 @@ Run on the trader's personal local device. Do not deploy this Topstep adapter to
 
 A commercial product should install a customer-side gateway and keep credentials local.
 
+## One-account beta pair (TS-BETA-01)
+
+Immutable candidate baseline: [`docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md`](evidence/TS-BETA-01-immutable-baseline-2026-08-04.md).
+
+Pin: gateway **0.1.3** (`c83a22f`) + Hermes profile **0.1.13** (`a7f37a6`) on the named PRAC account/MNQ. Status stays candidate until the operator signs the promotion block in that file.
+
 ## Initial configuration
 
 1. Link TopstepX to ProjectX.
