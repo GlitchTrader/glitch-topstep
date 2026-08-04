@@ -14,7 +14,7 @@ import {
 } from "../src/projectx/reconnect-proof.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { VenueStateStore } from "../src/state/venue-state.js";
-import { snapshot } from "./fixtures.js";
+import { snapshot, testSessionConfig } from "./fixtures.js";
 
 function healthyRecovery(): ExecutionRecoveryStatus {
   return {
@@ -67,6 +67,7 @@ function config(): AppConfig {
       operatorProvidedLossFloorUsd: null,
       maxContracts: 5,
     },
+    session: testSessionConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

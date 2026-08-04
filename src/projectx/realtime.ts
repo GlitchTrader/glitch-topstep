@@ -39,6 +39,7 @@ export interface ProjectXRealtimeOptions {
   logLevel?: number;
   onReconnected?: () => void | Promise<void>;
   onStateInvalidated?: () => void | Promise<void>;
+  onBeforePositionApply?: (position: PositionInfo, receivedUtc: string) => void | Promise<void>;
 }
 
 interface SignalRConnection {
@@ -132,7 +133,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: String(value.id),
           providerTimestampUtc: null,
         }),
-        (value) => this.state.applyAccount(value),
+        (value, receivedUtc) => this.state.applyAccount(value, receivedUtc),
       );
     });
     this.userConnection.on("GatewayUserPosition", (input: unknown) => {
@@ -148,7 +149,10 @@ export class ProjectXRealtimeClient {
           providerEntityId: String(value.id),
           providerTimestampUtc: value.creationTimestamp,
         }),
-        (value) => this.state.applyPosition(value),
+        (value, receivedUtc) => {
+          void this.options.onBeforePositionApply?.(value, receivedUtc);
+          this.state.applyPosition(value, receivedUtc);
+        },
       );
     });
     this.userConnection.on("GatewayUserOrder", (input: unknown) => {
@@ -164,7 +168,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: String(value.id),
           providerTimestampUtc: value.updateTimestamp,
         }),
-        (value) => this.state.applyOrder(value),
+        (value, receivedUtc) => this.state.applyOrder(value, receivedUtc),
       );
     });
     this.userConnection.on("GatewayUserTrade", (input: unknown) => {
@@ -180,7 +184,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: String(value.id),
           providerTimestampUtc: value.creationTimestamp,
         }),
-        (value) => this.state.applyTrade(value),
+        (value, receivedUtc) => this.state.applyTrade(value, receivedUtc),
       );
     });
 
@@ -200,7 +204,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: value.contractId,
           providerTimestampUtc: value.timestamp,
         }),
-        (value) => this.state.applyQuote(value),
+        (value, receivedUtc) => this.state.applyQuote(value, receivedUtc),
       );
     });
     this.marketConnection.on("GatewayTrade", (contractId: unknown, input: unknown) => {
@@ -222,7 +226,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: `${value.contractId}:${value.timestamp}`,
           providerTimestampUtc: value.timestamp,
         }),
-        (value) => this.state.applyMarketTrade(value),
+        (value, receivedUtc) => this.state.applyMarketTrade(value, receivedUtc),
       );
     });
     this.marketConnection.on("GatewayDepth", (contractId: unknown, input: unknown) => {
@@ -244,7 +248,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: `${value.contractId}:${value.timestamp}:${value.type}:${value.price}`,
           providerTimestampUtc: value.timestamp,
         }),
-        (value) => this.state.applyDepth(value),
+        (value, receivedUtc) => this.state.applyDepth(value, receivedUtc),
       );
     });
   }
@@ -299,19 +303,20 @@ export class ProjectXRealtimeClient {
       providerEntityId: string | null;
       providerTimestampUtc: string | null;
     },
-    apply: (value: T) => void,
+    apply: (value: T, receivedUtc: string) => void,
   ): void {
     try {
+      const receivedUtc = new Date().toISOString();
       recordProviderEventBeforeApply({
         sink: this.options.evidence,
-        receivedUtc: new Date().toISOString(),
+        receivedUtc,
         source: kind === "user" ? "projectx_user_stream" : "projectx_market_stream",
         eventType,
         generation: this.state.operationalStatus().generation,
         rawPayload,
         parse,
         identity,
-        apply,
+        apply: (value) => apply(value, receivedUtc),
       });
       this.state.markStreamEvent(kind);
     } catch (error) {

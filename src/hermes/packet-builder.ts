@@ -32,6 +32,12 @@ import {
 } from "../ownership/protection.js";
 import { deriveScaleInSupportedAction } from "../ownership/scale-in.js";
 import type { TrancheView } from "../ownership/tranches.js";
+import {
+  emptySessionConfig,
+  resolveTopstepSession,
+  type TopstepSessionConfig,
+  type TopstepSessionPacket,
+} from "../policy/session-calendar.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -102,6 +108,7 @@ export interface DirectDecisionPacket {
     current_buffer_usd: number;
     max_contracts: number;
   };
+  session: TopstepSessionPacket;
   execution: {
     gateway_mode: EffectiveGatewayMode;
     gateway_mode_configured: "disabled" | "shadow" | "armed";
@@ -336,6 +343,7 @@ export function buildDecisionPacket(
   marketObservation: MarketObservationState = emptyMarketObservationState(),
   orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
   tranches: TrancheView[] = [],
+  session: TopstepSessionConfig = emptySessionConfig(),
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -452,6 +460,7 @@ export function buildDecisionPacket(
       current_buffer_usd: riskBudget.currentBuffer,
       max_contracts: policy.maxContracts,
     },
+    session: resolveTopstepSession(session, now),
     execution: {
       gateway_mode: gatewayMode.effective,
       gateway_mode_configured: gatewayMode.configured,

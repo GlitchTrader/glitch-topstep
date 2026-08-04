@@ -235,9 +235,10 @@
     {
       "id": "TS-R3-02",
       "title": "Expose Topstep session calendar and must_flat_utc in decision packets",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "coder",
+      "issue": 65,
       "depends_on": [
         "TS-R3-01"
       ],
@@ -245,8 +246,18 @@
         "Packet carries explicit session authority and must_flat_utc or null.",
         "Hermes can plan positioned EXIT before mandatory flat without inventing session truth."
       ],
-      "sources": [
+      "evidence": [
+        "src/policy/session-calendar.ts",
+        "src/hermes/packet-builder.ts session field",
+        "tests/session-calendar.test.ts",
+        "tests/packet-session.test.ts",
         "docs/specs/TS-R3-02.md"
+      ],
+      "sources": [
+        "docs/specs/TS-R3-02.md",
+        "src/policy/session-calendar.ts",
+        "src/config.ts",
+        "src/hermes/packet-builder.ts"
       ],
       "stop_line": "No SOUL claim of must_flat compliance until authoritative packet fields exist."
     },
@@ -274,11 +285,13 @@
       "evidence": [
         "2026-08-03: parity gap documented vs Glitch NT reconcile-hermes-outcomes.",
         "2026-08-04: production PRAC sessions show zero published outcomes despite armed fills.",
+        "2026-08-04: Phase A stream-flat + reconcile fallback implemented in src/service.ts and tests/trade-outcome-flat.test.ts.",
         "docs/specs/TS-R3-03.md"
       ],
       "sources": [
         "docs/specs/TS-R3-03.md",
         "src/service.ts",
+        "src/learning/trade-outcome-flat.ts",
         "src/projectx/realtime.ts",
         "src/learning/trade-outcome.ts",
         "src/learning/trade-outcome-publisher.ts",

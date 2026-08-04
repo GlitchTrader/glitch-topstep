@@ -44,7 +44,8 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | `MOVE_TP` | Implemented in software — [#25](https://github.com/GlitchTrader/glitch-topstep/issues/25) | Live acceptance 2026-07-30: short+long cycles, venue TP moved |
 | Partial scale-out (`EXIT` quantity) | Implemented in software — [#26](https://github.com/GlitchTrader/glitch-topstep/issues/26) | Full flat `EXIT` live 2026-07-30 (202/`close_contract_submitted`); partial qty not exercised (1 MNQ contract) |
 | Multiple independent entry tranches | Implemented in software (Phase A+B+C) — [#27](https://github.com/GlitchTrader/glitch-topstep/issues/27), [#37](https://github.com/GlitchTrader/glitch-topstep/pull/37), [#38](https://github.com/GlitchTrader/glitch-topstep/pull/38) | Live A/B/C `all_pass: true` on PRAC nova (`data/pm4-phase-c-e2e.json`, 2026-07-31, `PM4_E2E_RESTART=1`) |
-| Canonical completed outcomes | Missing | After-fee fill attribution, MFE, MAE, exit cause |
+| Canonical completed outcomes | Implemented (v1 publish + settle/repair) — [#70](https://github.com/GlitchTrader/glitch-topstep/issues/70) | MAE/MFE, fills array, exit_reason enrichment (TS-R3-03 Phase C); commission field if ProjectX exposes it |
+| Session, holiday, and early-close truth | Session packet fields implemented (operator-configured) — [#65](https://github.com/GlitchTrader/glitch-topstep/issues/65) | Authoritative Topstep-verified calendar; holiday/early-close |
 | Deterministic provider replay | Implemented offline and query-only | Compare replay state with real TopstepX state and observed corrections |
 | Replay gaps, truncation, and invalid payload reporting | Implemented | Tune retention/export so required corpora remain complete |
 | Native 1m/5m/15m/60m ProjectX bars | Implemented | Verify real History API boundaries, ordering, limits, and partial bars |
@@ -58,7 +59,6 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Order-flow packet identity and health | Implemented without execution gating | Real Hermes latency and retention acceptance |
 | Instrument-general Topstep support | Configurable single contract | At least two Topstep-supported contracts |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
-| Session, holiday, and early-close truth | Missing | Authoritative calendar and failure visibility |
 | Replay and comparative cognition evaluation | Replay foundation implemented | Identical evidence corpus across cognition versions |
 | Hermes autonomous cognition | Implemented in companion profile | Actual Windows/Hermes acceptance |
 | First complete payout lifecycle | Missing | Reconciled account progression and payout evidence |
