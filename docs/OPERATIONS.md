@@ -97,3 +97,14 @@ No entry when:
 - working orders or an existing instrument position are present in the initial implementation
 
 Risk-reducing exits should remain available after the corresponding ownership and stale-state rules are explicitly implemented.
+
+## Bracket verification failure (`protection_status: failed`)
+
+When SL/TP children are not observed within **30 seconds** of fill (`BRACKET_VERIFICATION_TIMEOUT_MS`), the decision packet exposes `protection.protection_status: failed` and the entry receipt code becomes `entry_protection_verification_failed`. The gateway does **not** auto-flatten.
+
+Operator steps:
+
+1. Verify TopstepX account has **Auto OCO Brackets** enabled (not Position Brackets).
+2. Check `/ownership` and TopstepX for missing protective orders.
+3. Issue `EXIT` via Hermes if the position should be closed.
+4. After partial scale-out, wait for `tranche_protection_rearmed` or restart reconcile — see `docs/PARITY.md` PM-3 notes.

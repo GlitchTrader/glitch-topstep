@@ -617,6 +617,15 @@ export class GlitchTopstepService {
       if (latchCleared || receiptReconciliation.changed) {
         this.packets?.invalidateAll();
       }
+      for (const event of receiptReconciliation.events) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: receivedAt,
+          event: event.event,
+          payload: event,
+        });
+      }
       const liveSnapshot = this.state.buildSnapshot(
         this.config.scope.accountId,
         this.config.scope.contractId,
