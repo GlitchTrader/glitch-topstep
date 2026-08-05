@@ -3,6 +3,7 @@ import test from "node:test";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import { emptySessionConfig } from "../src/policy/session-calendar.js";
 import { snapshot } from "./fixtures.js";
+import { orderFlowWithTrades } from "./fixtures.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import type { TopstepPolicyState } from "../src/domain/models.js";
 
@@ -47,7 +48,7 @@ test("buildDecisionPacket exposes session authority and must_flat_utc", () => {
     300_000,
     new Date("2026-08-04T14:00:00.000Z"),
     undefined,
-    undefined,
+    orderFlowWithTrades(42),
     [],
     {
       ...emptySessionConfig(),
@@ -60,4 +61,8 @@ test("buildDecisionPacket exposes session authority and must_flat_utc", () => {
   assert.ok(packet.session.must_flat_utc);
   assert.equal(typeof packet.session.entry_window_open, "boolean");
   assert.ok(Array.isArray(packet.session.notes));
+  assert.equal(packet.session.phase, null);
+  assert.ok(typeof packet.stream_health.quote_age_ms === "number");
+  assert.equal(packet.stream_health.trade_count_60s, 42);
+  assert.equal(packet.stream_health.reconnect_pending, false);
 });

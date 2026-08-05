@@ -131,6 +131,14 @@ export function buildProjectXOrderFlowObservation(
     issues.push("market_evidence_query_truncated");
   }
 
+  let lastTradeUtc: string | null = null;
+  for (const item of trades) {
+    const tradeUtc = new Date(item.epochMs).toISOString();
+    if (!lastTradeUtc || item.epochMs > Date.parse(lastTradeUtc)) {
+      lastTradeUtc = tradeUtc;
+    }
+  }
+
   return {
     schema_version: "glitch.projectx.order_flow.v1",
     generated_utc: generatedAt.toISOString(),
@@ -158,6 +166,7 @@ export function buildProjectXOrderFlowObservation(
       depthEventsInvalid,
     }),
     issues,
+    last_trade_utc: lastTradeUtc,
   };
 }
 

@@ -67,6 +67,7 @@ export function orderFlowWithTrades(tradeCount: number): ProjectXOrderFlowState 
         depth_events_invalid: 0,
       },
       issues: [],
+      last_trade_utc: tradeCount > 0 ? "2026-07-21T12:00:00Z" : null,
     },
   };
 }

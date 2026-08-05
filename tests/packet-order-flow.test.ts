@@ -124,6 +124,7 @@ it("changes packet identity with order flow but never turns flow into an executi
           depth_events_invalid: 0,
         },
         issues: [],
+        last_trade_utc: null,
       },
     };
     const observed = service.current();

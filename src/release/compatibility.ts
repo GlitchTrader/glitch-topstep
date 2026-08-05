@@ -1,6 +1,6 @@
 export const GATEWAY_COMPATIBILITY = Object.freeze({
   gateway_name: "glitch-topstep",
-  gateway_version: "0.1.4",
+  gateway_version: "0.1.5",
   health_schema: "glitch.direct.health.v2",
   intent_schemas: Object.freeze(["glitch.intent.v2"]),
   decision_packet_schemas: Object.freeze([

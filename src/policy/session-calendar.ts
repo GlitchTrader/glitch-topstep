@@ -1,4 +1,6 @@
 export type TopstepSessionAuthority = "operator_configured" | "topstep_verified";
+export type SessionPhase = "regular" | "maintenance" | "asia";
+export type SessionPhaseAuthority = "operator_configured" | "exchange_calendar";
 
 export interface TopstepSessionConfig {
   authority: TopstepSessionAuthority;
@@ -7,6 +9,12 @@ export interface TopstepSessionConfig {
   tradingDayResetLocalTime: string;
   mustFlatLocalTime: string | null;
   entryOpenLocalTime: string | null;
+  /** When true, publish session.phase from configured exchange maintenance / asia windows. */
+  phaseCalendarEnabled: boolean;
+  maintenanceStartLocalTime: string | null;
+  maintenanceEndLocalTime: string | null;
+  asiaStartLocalTime: string | null;
+  asiaEndLocalTime: string | null;
   notes: readonly string[];
 }
 
@@ -14,6 +22,8 @@ export interface TopstepSessionPacket {
   authority: TopstepSessionAuthority;
   must_flat_utc: string | null;
   entry_window_open: boolean;
+  phase: SessionPhase | null;
+  phase_authority: SessionPhaseAuthority | null;
   notes: string[];
 }
 
@@ -157,6 +167,73 @@ function entryWindowOpen(now: Date, config: TopstepSessionConfig, mustFlatUtc: s
   return now.getTime() < Date.parse(mustFlatUtc);
 }
 
+function localMinutes(parts: LocalDateParts): number {
+  return parts.hour * 60 + parts.minute;
+}
+
+function isWithinLocalTimeWindow(
+  now: Date,
+  timezone: string,
+  startLocalTime: string,
+  endLocalTime: string,
+): boolean {
+  const start = parseSessionLocalTime(startLocalTime);
+  const end = parseSessionLocalTime(endLocalTime);
+  const startMinutes = start.hour * 60 + start.minute;
+  const endMinutes = end.hour * 60 + end.minute;
+  const nowMinutes = localMinutes(localParts(now, timezone));
+  if (startMinutes === endMinutes) {
+    return false;
+  }
+  if (startMinutes < endMinutes) {
+    return nowMinutes >= startMinutes && nowMinutes < endMinutes;
+  }
+  return nowMinutes >= startMinutes || nowMinutes < endMinutes;
+}
+
+function resolveSessionPhase(
+  config: TopstepSessionConfig,
+  now: Date,
+): { phase: SessionPhase | null; phase_authority: SessionPhaseAuthority | null; notes: string[] } {
+  if (!config.phaseCalendarEnabled) {
+    return {
+      phase: null,
+      phase_authority: null,
+      notes: ["session.phase suppressed; GLITCH_SESSION_PHASE_CALENDAR=false"],
+    };
+  }
+  const notes: string[] = [];
+  const phaseAuthority: SessionPhaseAuthority = "exchange_calendar";
+  if (config.maintenanceStartLocalTime && config.maintenanceEndLocalTime) {
+    if (isWithinLocalTimeWindow(
+      now,
+      config.timezone,
+      config.maintenanceStartLocalTime,
+      config.maintenanceEndLocalTime,
+    )) {
+      notes.push(
+        `maintenance window ${config.maintenanceStartLocalTime}-${config.maintenanceEndLocalTime} ${config.timezone} (CME-style daily halt; exchange_calendar).`,
+      );
+      return { phase: "maintenance", phase_authority: phaseAuthority, notes };
+    }
+  }
+  if (config.asiaStartLocalTime && config.asiaEndLocalTime) {
+    if (isWithinLocalTimeWindow(
+      now,
+      config.timezone,
+      config.asiaStartLocalTime,
+      config.asiaEndLocalTime,
+    )) {
+      notes.push(
+        `asia window ${config.asiaStartLocalTime}-${config.asiaEndLocalTime} ${config.timezone} (operator_configured).`,
+      );
+      return { phase: "asia", phase_authority: "operator_configured", notes };
+    }
+  }
+  notes.push("session.phase=regular outside configured maintenance and asia windows.");
+  return { phase: "regular", phase_authority: phaseAuthority, notes };
+}
+
 export function emptySessionConfig(): TopstepSessionConfig {
   return {
     authority: "operator_configured",
@@ -164,6 +241,11 @@ export function emptySessionConfig(): TopstepSessionConfig {
     tradingDayResetLocalTime: "17:00",
     mustFlatLocalTime: null,
     entryOpenLocalTime: null,
+    phaseCalendarEnabled: false,
+    maintenanceStartLocalTime: null,
+    maintenanceEndLocalTime: null,
+    asiaStartLocalTime: null,
+    asiaEndLocalTime: null,
     notes: [],
   };
 }
@@ -221,10 +303,14 @@ export function resolveTopstepSession(
   if (!config.mustFlatLocalTime) {
     notes.push("must_flat_utc unknown until GLITCH_SESSION_MUST_FLAT_LOCAL_TIME is configured.");
   }
+  const phase = resolveSessionPhase(config, now);
+  notes.push(...phase.notes);
   return {
     authority: config.authority,
     must_flat_utc: mustFlatUtc,
     entry_window_open: entryWindowOpen(now, config, mustFlatUtc),
+    phase: phase.phase,
+    phase_authority: phase.phase_authority,
     notes,
   };
 }

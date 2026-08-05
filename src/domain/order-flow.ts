@@ -59,6 +59,8 @@ export interface ProjectXOrderFlowObservation {
   windows: RollingTapeObservation[];
   depth: DepthBookObservation;
   issues: string[];
+  /** Most recent market_trade timestamp in the 300s lookback, when any trade exists. */
+  last_trade_utc: string | null;
 }
 
 export interface ProjectXOrderFlowState {
