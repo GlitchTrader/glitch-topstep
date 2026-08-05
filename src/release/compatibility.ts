@@ -14,6 +14,7 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
     "native_protection",
     "durable_mutation_receipts",
     "restart_reconciliation",
+    "intent_receipt_lookup",
   ]),
 });
 

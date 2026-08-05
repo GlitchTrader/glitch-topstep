@@ -132,6 +132,20 @@ export class LocalGatewayServer {
         });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/intent/receipt") {
+        const intentId = url.searchParams.get("intent_id")?.trim();
+        if (!intentId) {
+          this.json(response, 400, { error: "intent_id_required" });
+          return;
+        }
+        const receipt = this.coordinator.receiptForIntent(intentId);
+        if (!receipt) {
+          this.json(response, 404, { error: "intent_receipt_not_found" });
+          return;
+        }
+        this.json(response, 200, receipt);
+        return;
+      }
       if (request.method === "POST" && url.pathname === "/intent") {
         const body = await this.readJsonBody(request);
         const receipt: ExecutionReceipt = await this.coordinator.handleWireIntent(body);
