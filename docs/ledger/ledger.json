@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-05",
+  "updated": "2026-07-31",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -459,6 +459,54 @@
       "sources": [
         "docs/PARITY.md",
         "src/service.ts"
+      ]
+    },
+    {
+      "id": "TS-R4-07",
+      "title": "Session phase and stream-health evidence in decision packet",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "coder",
+      "issue": 85,
+      "depends_on": [
+        "TS-R3-02"
+      ],
+      "acceptance": [
+        "Packet carries session.phase and stream_health with labeled authority and nullable fields.",
+        "quote_age_ms, last_trade_age_ms, trade_count_60s, reconnect_pending exposed when computable.",
+        "Regression tests; docs/PARITY.md row; docs/specs/TS-R4-07.md.",
+        "No ENTER_* rejection on phase or stream_health alone."
+      ],
+      "stop_line": "Evidence only — no strategy gates or auto-flatten on maintenance.",
+      "sources": [
+        "docs/specs/TS-R4-07.md",
+        "src/hermes/packet-builder.ts",
+        "src/policy/session-calendar.ts",
+        "glitch-topstep-hermes-profile:GTHP-018",
+        "glitch-topstep-hermes-profile:GTHP-019"
+      ]
+    },
+    {
+      "id": "TS-R4-08",
+      "title": "Post-entry bracket verification and protection_status terminal state",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "execution",
+      "issue": 86,
+      "depends_on": [
+        "TS-BRACKET-01"
+      ],
+      "acceptance": [
+        "After ENTER fill, coordinator verifies SL/TP within documented timeout.",
+        "Packet exposes protection_status pending|confirmed|failed|unknown.",
+        "Failed protection auditable; operator retry path documented.",
+        "docs/specs/TS-R4-08.md and regression tests."
+      ],
+      "stop_line": "Factual protection verification only — no hidden strategy on pending state.",
+      "sources": [
+        "docs/specs/TS-R4-08.md",
+        "src/execution/coordinator.ts",
+        "glitch-topstep-hermes-profile:GTHP-020"
       ]
     }
   ],
