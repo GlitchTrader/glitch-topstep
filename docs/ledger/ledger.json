@@ -278,7 +278,7 @@
     {
       "id": "TS-R4-06",
       "title": "Enforce amendment tightening and optional entry drift bounds",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "execution",
       "issue": 75,
@@ -292,6 +292,11 @@
         "Optional phase B: entry drift tick bound documented and enforced pre-submit when configured."
       ],
       "stop_line": "Factual execution geometry only — no session/news/strategy gates.",
+      "evidence": [
+        "src/execution/amendment-safety.ts enforces stop_would_widen / target_would_widen.",
+        "tests/amendment-safety.test.ts and tests/position-management.test.ts regression coverage.",
+        "Optional phase B entry drift tick bound remains unconfigured (YAGNI until operator requests)."
+      ],
       "sources": [
         "src/execution/coordinator.ts",
         "src/domain/intents.ts",
