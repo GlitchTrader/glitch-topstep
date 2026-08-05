@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,7 +30,7 @@ function intent(
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v4",
+    promptVersion: "glitch-topstep-v5",
     reason: "Ownership fixture.",
     decisionAudit: {
       bullCase: "Bull.",
@@ -480,7 +480,7 @@ describe("multi-tranche ownership reconstruction", () => {
         confidence: 0.7,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v4",
+        promptVersion: "glitch-topstep-v5",
         reason: "Exit second tranche.",
         decisionAudit: {
           bullCase: "Bull.",

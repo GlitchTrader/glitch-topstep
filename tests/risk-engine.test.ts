@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type {
   RiskSettings,
@@ -42,7 +42,7 @@ function intent(): TradeIntent {
     confidence: 0.6,
     snapshotHash: "hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v4",
+    promptVersion: "glitch-topstep-v5",
     reason: "Test entry.",
     decisionAudit: {
       bullCase: "Bull.",

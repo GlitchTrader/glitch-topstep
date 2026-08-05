@@ -1,4 +1,4 @@
-﻿/**
+/**
  * TS-R1-04: real ProjectX PRAC kill-matrix acceptance (operator-approved #49).
  * Proves at most one provider entry per intent_id across kill/restart/replay.
  */
@@ -226,7 +226,7 @@ function buildEntryIntent(intentId, pkt, killPoint) {
     confidence: 0.6,
     snapshot_hash: pkt.market.snapshot_hash,
     model_version: "r1-04-kill-matrix",
-    prompt_version: "glitch-topstep-v4",
+    prompt_version: "glitch-topstep-v5",
     reason: `TS-R1-04 kill ${killPoint}`,
     decision_audit: audit("ENTER_LONG"),
     quantity: 1,
@@ -386,7 +386,7 @@ async function ensureFlat(steps, label = "FLAT") {
       confidence: 0.6,
       snapshot_hash: pkt.market.snapshot_hash,
       model_version: "r1-04-kill-matrix",
-      prompt_version: "glitch-topstep-v4",
+      prompt_version: "glitch-topstep-v5",
       reason: `${label} flatten`,
       decision_audit: audit("EXIT"),
     };

@@ -3,7 +3,9 @@ import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { MarketObservationState } from "../domain/market-observation.js";
 import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type { AccountVenueSnapshot } from "../domain/models.js";
+import { computeDailyEconomics } from "../policy/daily-economics.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import {
   buildDecisionPacket,
   emptyMarketObservationState,
@@ -22,23 +24,38 @@ export class DecisionPacketService {
     private readonly marketObservation: () => MarketObservationState = emptyMarketObservationState,
     private readonly orderFlow: () => ProjectXOrderFlowState = emptyOrderFlowState,
     private readonly tranches: () => TrancheView[] = () => [],
+    private readonly tradeOutcomes: () => TradeOutcomeV1[] = () => [],
+    private readonly tradeOutcomesLoaded: () => boolean = () => false,
   ) {}
 
   public current(): DirectDecisionPacket {
     const nowMs = this.now();
+    const now = new Date(nowMs);
+    const venueSnapshot = this.snapshot();
+    const dailyEconomics = computeDailyEconomics(
+      this.config.dailyEconomics,
+      this.config.session,
+      this.config.policy,
+      venueSnapshot.unrealizedPnl,
+      venueSnapshot.conservativeEquity,
+      this.tradeOutcomes(),
+      this.tradeOutcomesLoaded(),
+      now,
+    );
     const packet = buildDecisionPacket(
-      this.snapshot(),
+      venueSnapshot,
       this.config.policy,
       this.config.risk,
       this.recovery(),
       this.config.scope.instrument,
       this.config.tradingMode,
       this.config.packetLeaseMs,
-      new Date(nowMs),
+      now,
       this.marketObservation(),
       this.orderFlow(),
       this.tranches(),
       this.config.session,
+      dailyEconomics,
     );
     this.store.recordIssuedPacket(packet);
     return packet;

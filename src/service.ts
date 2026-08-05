@@ -228,6 +228,7 @@ export class GlitchTopstepService {
       this.config.scope.accountId,
       this.config.scope.contractId,
     );
+    await this.tradeOutcomeStore.load();
     this.packets = new DecisionPacketService(
       this.config,
       snapshot,
@@ -242,6 +243,8 @@ export class GlitchTopstepService {
         observation: null,
       },
       () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
+      () => this.tradeOutcomeStore.all(),
+      () => this.tradeOutcomeStore.isLoaded(),
     );
 
     this.realtime = new ProjectXRealtimeClient(

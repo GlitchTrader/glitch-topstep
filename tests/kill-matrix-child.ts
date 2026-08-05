@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Child process for TS-R1-01 kill-matrix fixtures.
  * Driven by env: GLITCH_KILL_POINT, GLITCH_KILL_DB, GLITCH_KILL_DATA_DIR,
  * GLITCH_KILL_COUNTER, GLITCH_KILL_READY_FILE (optional).
@@ -14,7 +14,7 @@ import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { orderFlowWithTrades, snapshot, testSessionConfig } from "./fixtures.js";
+import { orderFlowWithTrades, snapshot, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 
 const INTENT_ID = "00000000-0000-4000-8000-000000000a01";
 const EXIT_INTENT_ID = "00000000-0000-4000-8000-000000000a08";
@@ -86,6 +86,7 @@ function config(dataDir: string): AppConfig {
       maxContracts: 3,
     },
     session: testSessionConfig,
+    dailyEconomics: testDailyEconomicsConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,
@@ -115,7 +116,7 @@ function entryIntent(snapshotHash: string, createdUtc: string): Record<string, u
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v4",
+    prompt_version: "glitch-topstep-v5",
     reason: "Kill-matrix entry fixture.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -147,7 +148,7 @@ function exitIntent(snapshotHash: string, createdUtc: string): Record<string, un
     confidence: 0.9,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v4",
+    prompt_version: "glitch-topstep-v5",
     reason: "Kill-matrix exit fixture.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -189,7 +190,7 @@ async function runRecoveryScenario(dbPath: string): Promise<void> {
       confidence: 0.6,
       snapshotHash: "kill-matrix-recovery",
       modelVersion: "test",
-      promptVersion: "glitch-topstep-v4",
+      promptVersion: "glitch-topstep-v5",
       reason: "Recovery kill seed.",
       decisionAudit: {
         bullCase: "Bull.",

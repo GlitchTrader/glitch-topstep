@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ExecutionReceipt } from "../src/execution/coordinator.js";
 import { reconcilePendingReceipts } from "../src/execution/receipt-reconciliation.js";
@@ -21,7 +21,7 @@ describe("pending receipt reconciliation", () => {
         confidence: 0.6,
         snapshotHash: "snapshot",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v4",
+        promptVersion: "glitch-topstep-v5",
         reason: "Entry.",
         decisionAudit: {
           bullCase: "Bull.",

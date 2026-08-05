@@ -11,6 +11,7 @@ import {
   parseSessionLocalTime,
   type TopstepSessionConfig,
 } from "./policy/session-calendar.js";
+import type { DailyEconomicsConfig } from "./policy/daily-economics.js";
 
 export interface AppConfig {
   projectX: {
@@ -43,6 +44,7 @@ export interface AppConfig {
   tradingMode: TradingMode;
   policy: TopstepPolicyState;
   session: TopstepSessionConfig;
+  dailyEconomics: DailyEconomicsConfig;
   risk: RiskSettings;
   providerEvidence: {
     marketEventRetention: number;
@@ -262,6 +264,23 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     ["operator_configured", "topstep_verified"],
     "operator_configured",
   );
+  const tradingDayResetLocalTime = optional(
+    environment,
+    "GLITCH_TRADING_DAY_RESET_LOCAL_TIME",
+    "17:00",
+  );
+  parseSessionLocalTime(tradingDayResetLocalTime);
+  const dailyEconomicsEnabled = booleanValue(environment, "GLITCH_DAILY_ECONOMICS", true);
+  const nominalSizeUsd = nullableNumberValue(
+    environment,
+    "GLITCH_NOMINAL_SIZE_USD",
+    (value) => value > 0,
+  );
+  const profitTargetUsd = nullableNumberValue(
+    environment,
+    "GLITCH_PROFIT_TARGET_USD",
+    (value) => value > 0,
+  );
 
   return {
     projectX: {
@@ -313,9 +332,15 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     session: {
       authority: sessionAuthority,
       timezone: sessionTimezone,
+      tradingDayResetLocalTime,
       mustFlatLocalTime,
       entryOpenLocalTime,
       notes: [],
+    },
+    dailyEconomics: {
+      enabled: dailyEconomicsEnabled,
+      nominalSizeUsd,
+      profitTargetUsd,
     },
     risk: {
       estimatedRoundTurnFeesUsd: numberValue(environment, "GLITCH_ESTIMATED_ROUND_TURN_FEES_USD", 2.5, (value) => value >= 0),

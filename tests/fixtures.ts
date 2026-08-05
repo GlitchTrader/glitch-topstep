@@ -4,6 +4,12 @@ import { emptySessionConfig } from "../src/policy/session-calendar.js";
 
 export const testSessionConfig = emptySessionConfig();
 
+export const testDailyEconomicsConfig = {
+  enabled: false,
+  nominalSizeUsd: null,
+  profitTargetUsd: null,
+} as const;
+
 export function orderFlowWithTrades(tradeCount: number): ProjectXOrderFlowState {
   return {
     last_attempt_utc: "2026-07-21T12:00:00Z",

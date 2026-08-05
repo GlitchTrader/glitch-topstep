@@ -38,6 +38,7 @@ import {
   type TopstepSessionConfig,
   type TopstepSessionPacket,
 } from "../policy/session-calendar.js";
+import type { DailyEconomicsPacket } from "../policy/daily-economics.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -109,6 +110,7 @@ export interface DirectDecisionPacket {
     max_contracts: number;
   };
   session: TopstepSessionPacket;
+  daily_economics?: DailyEconomicsPacket;
   execution: {
     gateway_mode: EffectiveGatewayMode;
     gateway_mode_configured: "disabled" | "shadow" | "armed";
@@ -344,6 +346,7 @@ export function buildDecisionPacket(
   orderFlow: ProjectXOrderFlowState = emptyOrderFlowState(),
   tranches: TrancheView[] = [],
   session: TopstepSessionConfig = emptySessionConfig(),
+  dailyEconomics: DailyEconomicsPacket | null = null,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -461,6 +464,7 @@ export function buildDecisionPacket(
       max_contracts: policy.maxContracts,
     },
     session: resolveTopstepSession(session, now),
+    ...(dailyEconomics ? { daily_economics: dailyEconomics } : {}),
     execution: {
       gateway_mode: gatewayMode.effective,
       gateway_mode_configured: gatewayMode.configured,
