@@ -4,7 +4,7 @@ import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { DecisionPacketService } from "../src/hermes/packet-service.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { snapshot, testSessionConfig } from "./fixtures.js";
+import { snapshot, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 
 const CURRENT_TIME_MS = Date.parse("2026-07-21T12:00:05Z");
 
@@ -44,6 +44,11 @@ function config(): AppConfig {
       maxContracts: 5,
     },
     session: testSessionConfig,
+    dailyEconomics: {
+      enabled: true,
+      nominalSizeUsd: 50_000,
+      profitTargetUsd: null,
+    },
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

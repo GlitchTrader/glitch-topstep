@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TradeAction, TradeIntent } from "../src/domain/models.js";
 import { recoverExecutionMutations } from "../src/execution/recovery.js";
@@ -16,7 +16,7 @@ function intent(id: string, action: TradeAction): TradeIntent {
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v4",
+    promptVersion: "glitch-topstep-v5",
     reason: "Test.",
     decisionAudit: {
       bullCase: "Bull.",

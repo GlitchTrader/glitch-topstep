@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +10,7 @@ import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient, PlaceOrderRequest } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { snapshot, orderFlowWithTrades, testSessionConfig } from "./fixtures.js";
+import { snapshot, orderFlowWithTrades, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 
 function config(dataDir: string): AppConfig {
   return {
@@ -48,6 +48,7 @@ function config(dataDir: string): AppConfig {
       maxContracts: 3,
     },
     session: testSessionConfig,
+    dailyEconomics: testDailyEconomicsConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,
@@ -81,7 +82,7 @@ function intent(
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v4",
+    prompt_version: "glitch-topstep-v5",
     reason: "Test concurrent entry.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -348,7 +349,7 @@ describe("execution coordinator serialization", () => {
         confidence: 0.4,
         snapshot_hash: "expired-or-unknown-hash",
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "No trade this cycle.",
         decision_audit: {
           bull_case: "Bull case.",

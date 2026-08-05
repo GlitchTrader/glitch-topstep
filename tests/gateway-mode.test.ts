@@ -6,7 +6,7 @@ import {
   gatewayModePermitsLiveOrders,
   resolveGatewayMode,
 } from "../src/execution/gateway-mode.js";
-import { snapshot, orderFlowWithTrades, testSessionConfig } from "./fixtures.js";
+import { snapshot, orderFlowWithTrades, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 
@@ -46,6 +46,7 @@ function config(tradingMode: AppConfig["tradingMode"]): AppConfig {
       maxContracts: 3,
     },
     session: testSessionConfig,
+    dailyEconomics: testDailyEconomicsConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,

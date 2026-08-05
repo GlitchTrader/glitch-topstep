@@ -3,6 +3,8 @@ export type TopstepSessionAuthority = "operator_configured" | "topstep_verified"
 export interface TopstepSessionConfig {
   authority: TopstepSessionAuthority;
   timezone: string;
+  /** Local clock when the Topstep trading day rolls (default 17:00 CT). */
+  tradingDayResetLocalTime: string;
   mustFlatLocalTime: string | null;
   entryOpenLocalTime: string | null;
   notes: readonly string[];
@@ -159,9 +161,51 @@ export function emptySessionConfig(): TopstepSessionConfig {
   return {
     authority: "operator_configured",
     timezone: "America/Chicago",
+    tradingDayResetLocalTime: "17:00",
     mustFlatLocalTime: null,
     entryOpenLocalTime: null,
     notes: [],
+  };
+}
+
+function formatTradingDayId(parts: Pick<LocalDateParts, "year" | "month" | "day">): string {
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
+
+/** Topstep maintenance-to-maintenance trading day label in the session timezone. */
+export function resolveTradingDayId(
+  now: Date,
+  timezone: string,
+  resetLocalTime: string,
+): string {
+  const { hour, minute } = parseSessionLocalTime(resetLocalTime);
+  const today = localParts(now, timezone);
+  const resetMinutes = hour * 60 + minute;
+  const nowMinutes = today.hour * 60 + today.minute;
+  if (nowMinutes >= resetMinutes) {
+    const next = addCalendarDays(today, 1, timezone);
+    return formatTradingDayId(next);
+  }
+  return formatTradingDayId(today);
+}
+
+export function tradingDayBoundsUtc(
+  tradingDayId: string,
+  timezone: string,
+  resetLocalTime: string,
+): { startUtc: string; endExclusiveUtc: string } {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tradingDayId);
+  if (!match) {
+    throw new Error(`invalid_trading_day_id:${tradingDayId}`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const { hour, minute } = parseSessionLocalTime(resetLocalTime);
+  const previous = addCalendarDays({ year, month, day, hour: 0, minute: 0 }, -1, timezone);
+  return {
+    startUtc: localDateTimeToUtcIso(previous.year, previous.month, previous.day, hour, minute, timezone),
+    endExclusiveUtc: localDateTimeToUtcIso(year, month, day, hour, minute, timezone),
   };
 }
 

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,7 +12,7 @@ import type { TrancheView } from "../src/ownership/tranches.js";
 import type { ModifyOrderRequest, ProjectXApiClient } from "../src/projectx/client.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
-import { orderFlowWithTrades, snapshot, testSessionConfig } from "./fixtures.js";
+import { orderFlowWithTrades, snapshot, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 
 const INTENT_ID = "00000000-0000-4000-8000-00000000b001";
 const ENTRY_INTENT_ID = "00000000-0000-4000-8000-00000000b000";
@@ -54,6 +54,7 @@ function config(dataDir: string): AppConfig {
       maxContracts: 3,
     },
     session: testSessionConfig,
+    dailyEconomics: testDailyEconomicsConfig,
     risk: {
       estimatedRoundTurnFeesUsd: 2.5,
       slippageReserveTicks: 2,
@@ -237,7 +238,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Tighten tranche B stop.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_000,
@@ -317,7 +318,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Refresh target after partial exit.",
         decision_audit: audit("MOVE_TP"),
         new_take_profit: 20_030,
@@ -391,7 +392,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Ambiguous tranche.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_005,
@@ -454,7 +455,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Raise stop to breakeven.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_000,
@@ -517,7 +518,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Attempt to widen stop.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 19_980,
@@ -582,7 +583,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Attempt marketable stop.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_000.25,
@@ -645,7 +646,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Raise stop to breakeven.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_000,
@@ -680,7 +681,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshotHash: "prior-snapshot",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v4",
+        promptVersion: "glitch-topstep-v5",
         reason: "First tighten.",
         decisionAudit: {
           bullCase: "Bull.",
@@ -756,7 +757,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Second tighten.",
         decision_audit: audit("MOVE_STOP"),
         new_stop_price: 20_000,
@@ -828,7 +829,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Bank one contract.",
         decision_audit: audit("EXIT"),
         quantity: 1,
@@ -910,7 +911,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Exit the second tranche only.",
         decision_audit: audit("EXIT"),
         quantity: 1,
@@ -992,7 +993,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Exit the second tranche only with split venue rows.",
         decision_audit: audit("EXIT"),
         quantity: 1,
@@ -1061,7 +1062,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Too large for tranche.",
         decision_audit: audit("EXIT"),
         quantity: 2,
@@ -1091,7 +1092,7 @@ describe("position management coordinator", () => {
         confidence: 0.6,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v4",
+        promptVersion: "glitch-topstep-v5",
         reason: "Entry for rearm.",
         decisionAudit: {
           bullCase: "Bull.",
@@ -1184,7 +1185,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v4",
+        promptVersion: "glitch-topstep-v5",
         reason: "Exit pending.",
         decisionAudit: {
           bullCase: "Bull.",
@@ -1403,7 +1404,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Flatten while entry is degraded by stale quote evidence.",
         decision_audit: audit("EXIT"),
       });
@@ -1462,7 +1463,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Should reject.",
         decision_audit: audit("EXIT"),
       });
@@ -1527,7 +1528,7 @@ describe("position management coordinator", () => {
         confidence: 0.7,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v4",
+        prompt_version: "glitch-topstep-v5",
         reason: "Flatten after amendments.",
         decision_audit: audit("EXIT"),
       });

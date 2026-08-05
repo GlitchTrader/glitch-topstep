@@ -50,6 +50,14 @@ export class TradeOutcomeStore {
     return this.known.get(intentId);
   }
 
+  public all(): TradeOutcomeV1[] {
+    return [...this.known.values()];
+  }
+
+  public isLoaded(): boolean {
+    return this.loaded;
+  }
+
   public append(outcome: TradeOutcomeV1): Promise<void> {
     if (this.known.has(outcome.intent_id)) {
       return Promise.resolve();
