@@ -14,7 +14,7 @@ import {
   sanitizeRearmProtectionPrices,
   type ResolvedProtection,
 } from "../ownership/protection.js";
-import { isProtectiveCustomTag } from "../ownership/scale-in.js";
+import { isProtectiveCustomTag, scaleInActionForPosition } from "../ownership/scale-in.js";
 import type { TrancheView } from "../ownership/tranches.js";
 import {
   type ModifyOrderRequest,
@@ -23,6 +23,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { validateProtectiveAmendment } from "./amendment-safety.js";
 import { instrumentNetSignedLots } from "../state/venue-state.js";
 import {
   gatewayModePermitsLiveOrders,
@@ -68,6 +69,10 @@ export class ExecutionCoordinator {
       () => undefined,
     );
     return result;
+  }
+
+  public receiptForIntent(intentId: string): ExecutionReceipt | null {
+    return this.store.receiptForIntent<ExecutionReceipt>(intentId);
   }
 
   private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
@@ -520,6 +525,36 @@ export class ExecutionCoordinator {
         intentId: intent.intentId,
         status: "rejected",
         code: leg === "stop" ? "new_stop_not_tick_aligned" : "new_target_not_tick_aligned",
+      });
+    }
+    const position = snapshot.positions.find(
+      (candidate) => candidate.accountId === this.config.scope.accountId
+        && candidate.contractId === this.config.scope.contractId
+        && candidate.type !== 0
+        && Math.abs(candidate.size) > 0,
+    );
+    const scaleInAction = position ? scaleInActionForPosition(position) : null;
+    if (!scaleInAction) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "position_side_unknown",
+      });
+    }
+    const amendmentSafety = validateProtectiveAmendment({
+      side: scaleInAction === "ENTER_LONG" ? "long" : "short",
+      leg,
+      currentPrice: protectiveLeg.price,
+      newPrice,
+      averageEntry: position?.averagePrice ?? null,
+      bestBid: snapshot.quote?.bestBid ?? null,
+      bestAsk: snapshot.quote?.bestAsk ?? null,
+    });
+    if (!amendmentSafety.ok) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: amendmentSafety.code,
       });
     }
     if (protectiveLeg.providerOrderId === null) {
