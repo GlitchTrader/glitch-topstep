@@ -240,13 +240,13 @@ describe("position management coordinator", () => {
         prompt_version: "glitch-topstep-v4",
         reason: "Tighten tranche B stop.",
         decision_audit: audit("MOVE_STOP"),
-        new_stop_price: 20_005,
+        new_stop_price: 20_000,
         target_intent_id: ENTRY_INTENT_ID_B,
       });
       assert.equal(receipt.status, "pending");
       assert.equal(receipt.code, "move_stop_submitted_pending_reconciliation");
       assert.equal(modified?.orderId, 9201);
-      assert.equal(modified?.stopPrice, 20_005);
+      assert.equal(modified?.stopPrice, 20_000);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
@@ -464,6 +464,131 @@ describe("position management coordinator", () => {
       assert.equal(modified?.orderId, 9201);
       assert.equal(modified?.stopPrice, 20_000);
       assert.equal(packet.execution.supported_actions.includes("MOVE_STOP"), true);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects MOVE_STOP when new stop would widen protection", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-move-stop-widen-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b010",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v4",
+        reason: "Attempt to widen stop.",
+        decision_audit: audit("MOVE_STOP"),
+        new_stop_price: 19_980,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "stop_would_widen");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects MOVE_STOP when stop would be marketable through the spread", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-move-stop-market-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = {
+        ...current.quote!,
+        bestBid: 20_000,
+        bestAsk: 20_000.25,
+        timestamp: now.toISOString(),
+      };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const api = {
+        placeOrder: async () => 9001,
+        modifyOrder: async () => undefined,
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b011",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v4",
+        reason: "Attempt marketable stop.",
+        decision_audit: audit("MOVE_STOP"),
+        new_stop_price: 20_000.25,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "stop_wrong_side_of_market");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
