@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-04",
+  "updated": "2026-08-05",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -272,15 +272,39 @@
         "src/config.ts",
         "src/hermes/packet-builder.ts"
       ],
-      "stop_line": "No SOUL claim of must_flat compliance until authoritative packet fields exist."
+      "stop_line": "Remaining acceptance: docs/PARITY.md session row and operator-configured GLITCH_SESSION_* live reconciliation — not packet schema work."
+    },
+    {
+      "id": "TS-R4-06",
+      "title": "Enforce amendment tightening and optional entry drift bounds",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "execution",
+      "issue": 75,
+      "depends_on": [
+        "TS-R4-00"
+      ],
+      "acceptance": [
+        "MOVE_STOP rejected when new stop would widen risk for position direction.",
+        "Amendment prices validated against bid/ask and average entry where applicable.",
+        "Stable rejection codes and regression tests in tests/position-management.test.ts or tests/amendment-safety.test.ts.",
+        "Optional phase B: entry drift tick bound documented and enforced pre-submit when configured."
+      ],
+      "stop_line": "Factual execution geometry only — no session/news/strategy gates.",
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/domain/intents.ts",
+        "tests/position-management.test.ts"
+      ]
     },
     {
       "id": "TS-R3-03",
       "title": "Reliable trade outcomes and learning-grade execution evidence",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "coder",
       "issue": 70,
+      "pull_request": 73,
       "depends_on": [
         "TS-R3-01"
       ],
@@ -297,10 +321,10 @@
       "stop_line": "Do not mark TS-R3-01 production-complete for learning until live PRAC flat publishes at least one canonical outcome and Hermes debriefs it.",
       "evidence": [
         "2026-08-03: parity gap documented vs Glitch NT reconcile-hermes-outcomes.",
-        "2026-08-04: production PRAC sessions show zero published outcomes despite armed fills.",
-        "2026-08-04: Phase A stream-flat + reconcile fallback implemented in src/service.ts and tests/trade-outcome-flat.test.ts.",
-        "2026-08-04: Phase B live PRAC outcome published (stream flat) and Hermes debrief wrote trade-episodes.jsonl.",
-        "2026-08-04: Phase C enrichment implemented — fills[], exit_reason, MAE/MFE via TradeExcursionTracker, initial_risk/r_multiple; learning_eligible requires proven protection + >=2 fills + MAE/MFE; tests/trade-outcome-enrichment.test.ts; publisher_version 0.1.3-r3-03c.",
+        "2026-08-04: Phase A stream-flat + reconcile fallback — src/service.ts, tests/trade-outcome-flat.test.ts.",
+        "2026-08-04: Phase B live PRAC outcome published; Hermes debrief wrote trade-episodes.jsonl.",
+        "2026-08-04: Phase C enrichment — MAE/MFE, exit_reason, fills, R-multiple; tests/trade-outcome-enrichment.test.ts.",
+        "2026-08-05: merged main @990ea8b (PR #73); issues #63 and #70 closed.",
         "docs/specs/TS-R3-03.md"
       ],
       "sources": [
@@ -316,16 +340,123 @@
         "src/server/local-gateway.ts",
         "tests/trade-outcome-publisher.test.ts",
         "tests/trade-outcome-enrichment.test.ts",
+        "tests/trade-outcome-flat.test.ts",
         "docs/PARITY.md",
         "glitch-topstep-hermes-profile:GTHP-012"
+      ]
+    },
+    {
+      "id": "TS-R3-04",
+      "title": "Daily economics mirror in decision packets (cognition evidence only)",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "coder",
+      "issue": 76,
+      "depends_on": [
+        "TS-R3-01",
+        "TS-R2-06",
+        "TS-R3-02"
+      ],
+      "acceptance": [
+        "Packet publishes daily_economics mirror with trading_day_id, net daily PnL, and calibration band.",
+        "Fields null when history incomplete; authority and notes label mirror provenance.",
+        "tests/packet-daily-economics.test.ts green.",
+        "docs/AUTHORITY.md invariant preserved: no ENTER_* rejection on PnL band."
+      ],
+      "stop_line": "Evidence only — no profit lock, guardian auto-flatten, or daily PnL execution gates.",
+      "sources": [
+        "docs/specs/TS-R3-04.md",
+        "src/hermes/packet-builder.ts",
+        "src/policy/session-calendar.ts",
+        "glitch-topstep-hermes-profile:GTHP-017"
+      ]
+    },
+    {
+      "id": "TS-R2-08",
+      "title": "Retain sanitized raw REST reconciliation envelopes",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "coder",
+      "issue": 66,
+      "depends_on": [
+        "TS-R2-07"
+      ],
+      "acceptance": [
+        "Sanitized REST envelopes stored with reconciliation snapshot identity.",
+        "Authenticated inspection path documented; retention within evidence DB caps.",
+        "Fixture round-trip test; docs/PARITY.md raw-envelope gap updated when met."
+      ],
+      "stop_line": "No JWT or credential-bearing request storage.",
+      "sources": [
+        "docs/PARITY.md",
+        "src/storage/",
+        "src/server/local-gateway.ts"
+      ]
+    },
+    {
+      "id": "TS-PM-03-EVIDENCE",
+      "title": "Document and test ProjectX bracket behavior on partial EXIT",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "operator_tests",
+      "issue": 67,
+      "depends_on": [],
+      "acceptance": [
+        "Behavior matrix for partial EXIT qty N of M versus venue SL/TP state.",
+        "Sanitized fixture with partial qty greater than zero or documented operator block.",
+        "docs/PARITY.md PM-3 evidence column updated."
+      ],
+      "sources": [
+        "src/execution/coordinator.ts",
+        "docs/PARITY.md",
+        "docs/PROJECTX-API-REFERENCE.md"
+      ]
+    },
+    {
+      "id": "TS-EVAL-01",
+      "title": "Comparative cognition evaluation on frozen evidence corpus",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "operator_tests",
+      "issue": 68,
+      "depends_on": [
+        "TS-R2-06"
+      ],
+      "acceptance": [
+        "Workflow replays frozen minute-frames through two prompt_version artifacts.",
+        "Diff report covers actions, rejections, and abstention classifications.",
+        "Evaluation-only; no live mutation or armed promotion from scores."
+      ],
+      "sources": [
+        "docs/PARITY.md",
+        "docs/OPERATIONS.md"
+      ]
+    },
+    {
+      "id": "TS-MULTI-01",
+      "title": "Second Topstep-supported contract in packet and execution path",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "coder",
+      "issue": 69,
+      "depends_on": [
+        "TS-BETA-01"
+      ],
+      "acceptance": [
+        "Second contract configurable without code fork; outcomes and ownership scoped per instrument.",
+        "Shadow session per contract with sanitized fixtures.",
+        "docs/PARITY.md instrument-general row acceptance updated."
+      ],
+      "stop_line": "No simultaneous multi-instrument trading in this row.",
+      "sources": [
+        "docs/PARITY.md",
+        "src/service.ts"
       ]
     }
   ],
   "roadmap_only": [
     "provider-event replay and archive",
-    "versioned Topstep policy and session calendar",
-    "multi-timeframe and multi-product observation enrichment",
-    "comparative cognition evaluation",
-    "additional instruments, account stages, and venue-neutral extraction"
+    "versioned Topstep policy and session calendar beyond operator_configured",
+    "multi-timeframe and multi-product observation enrichment"
   ]
 }
