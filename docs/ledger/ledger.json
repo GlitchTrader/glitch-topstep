@@ -301,6 +301,7 @@
         "2026-08-04: Phase A stream-flat + reconcile fallback implemented in src/service.ts and tests/trade-outcome-flat.test.ts.",
         "2026-08-04: Phase B live PRAC outcome published (stream flat) and Hermes debrief wrote trade-episodes.jsonl.",
         "2026-08-04: Phase C enrichment implemented — fills[], exit_reason, MAE/MFE via TradeExcursionTracker, initial_risk/r_multiple; learning_eligible requires proven protection + >=2 fills + MAE/MFE; tests/trade-outcome-enrichment.test.ts; publisher_version 0.1.3-r3-03c.",
+        "2026-08-05: Phase C live evidenced — intent 3deeab7f-311b-5641-9f09-bcd0a321f78c stream flat; fills=2; mae_usd=42.5; mfe_usd=0; mae_ticks=85; publisher 0.1.3-r3-03c; Hermes outcomes.jsonl mirrored. learning_eligible=false because protection_status=pending (exit ~33s before brackets proven). Remaining: learning_eligible=true with proven protection + debrief episode; Phase D backfill deferred.",
         "docs/specs/TS-R3-03.md"
       ],
       "sources": [
