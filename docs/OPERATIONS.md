@@ -10,7 +10,7 @@ A commercial product should install a customer-side gateway and keep credentials
 
 Immutable candidate baseline: [`docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md`](evidence/TS-BETA-01-immutable-baseline-2026-08-04.md).
 
-Pin: gateway **0.1.3** (`c83a22f`) + Hermes profile **0.1.13** (`a7f37a6`) on the named PRAC account/MNQ. Status stays candidate until the operator signs the promotion block in that file.
+Pin: gateway **0.1.4** (`abf7a02`) + Hermes profile **0.1.17** (`efb8c22`) on PRAC `47191819` / MNQ. Promoted 2026-08-05 via operator shortcut acceptance in the baseline doc.
 
 ## Initial configuration
 

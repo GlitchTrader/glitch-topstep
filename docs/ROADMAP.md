@@ -195,7 +195,7 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] complete reconnect and restart recovery
 - [ ] complete attribution
 - [ ] reconciled after-fee shadow sample
-- [ ] explicit operator promotion review
+- [x] explicit operator promotion review (TS-BETA-01, 2026-08-05 shortcut acceptance)
 - [ ] first complete account and payout lifecycle evidence
 
 ## R10 — scale only after evidence
