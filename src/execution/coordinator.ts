@@ -71,6 +71,10 @@ export class ExecutionCoordinator {
     return result;
   }
 
+  public receiptForIntent(intentId: string): ExecutionReceipt | null {
+    return this.store.receiptForIntent<ExecutionReceipt>(intentId);
+  }
+
   private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
     let intent: TradeIntent;
     try {
