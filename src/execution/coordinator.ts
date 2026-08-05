@@ -44,6 +44,8 @@ export interface ExecutionReceipt {
   code: string;
   order_id?: number;
   detail?: string;
+  /** ISO timestamp when an open position was first observed for this entry. */
+  fill_observed_utc?: string;
 }
 
 export class ExecutionCoordinator {

@@ -9,6 +9,10 @@ import type {
   TradeAction,
 } from "../domain/models.js";
 import {
+  resolvePacketProtectionStatus,
+  type PacketProtectionStatus,
+} from "../execution/bracket-verification.js";
+import {
   buildExecutionGates,
   gatewayModePermitsRiskReduction,
   resolveGatewayMode,
@@ -134,6 +138,7 @@ export interface DirectDecisionPacket {
   };
   protection: {
     status: ResolvedProtection["status"];
+    protection_status: PacketProtectionStatus;
     reason: string;
     intent_id: string | null;
     stop: {
@@ -219,21 +224,48 @@ export function decisionStateHash(
     .digest("hex");
 }
 
+export interface BracketVerificationContext {
+  fillObservedUtc: string | null;
+  stateComplete: boolean;
+  nowUtc: string;
+}
+
+function attachProtectionStatus(
+  protection: Omit<DirectDecisionPacket["protection"], "protection_status">,
+  snapshot: AccountVenueSnapshot,
+  verification: BracketVerificationContext | null,
+): DirectDecisionPacket["protection"] {
+  const positionOpen = snapshot.instrumentOpenContracts > 0;
+  const resolved = resolvePacketProtectionStatus({
+    positionOpen,
+    internalStatus: protection.status,
+    fillObservedUtc: verification?.fillObservedUtc ?? null,
+    stateComplete: verification?.stateComplete ?? snapshot.stateComplete,
+    nowUtc: verification?.nowUtc ?? new Date().toISOString(),
+  });
+  return {
+    ...protection,
+    protection_status: resolved.protection_status,
+    reason: protection.reason || resolved.reason,
+  };
+}
+
 export function derivePacketProtection(
   snapshot: AccountVenueSnapshot,
   activeIntentId: string | null = null,
   tranches: TrancheView[] = [],
+  verification: BracketVerificationContext | null = null,
 ): DirectDecisionPacket["protection"] {
   const positionOpen = snapshot.instrumentOpenContracts > 0;
   if (!positionOpen) {
-    return {
+    return attachProtectionStatus({
       status: "unknown",
       reason: "no_open_position",
       intent_id: null,
       stop: null,
       target: null,
       tranches: [],
-    };
+    }, snapshot, verification);
   }
 
   const activeTranches = tranches.filter((tranche) => tranche.remaining_qty > 0);
@@ -242,7 +274,7 @@ export function derivePacketProtection(
     const status = aggregateProtectionStatus(activeTranches, true);
     const first = activeTranches.find((tranche) => tranche.protection.status !== "proven")
       ?? activeTranches[0]!;
-    return {
+    return attachProtectionStatus({
       status,
       reason: first.protection.reason,
       intent_id: first.intent_id,
@@ -261,7 +293,7 @@ export function derivePacketProtection(
             price: first.protection.target.price,
           },
       tranches: activeTranches,
-    };
+    }, snapshot, verification);
   }
 
   const intentId = activeIntentId
@@ -270,14 +302,14 @@ export function derivePacketProtection(
       .find((candidate) => candidate !== null)
     ?? null;
   if (!intentId) {
-    return {
+    return attachProtectionStatus({
       status: "pending",
       reason: "active_entry_intent_unresolved",
       intent_id: null,
       stop: null,
       target: null,
       tranches: [],
-    };
+    }, snapshot, verification);
   }
 
   const protection = bindProtection(
@@ -287,7 +319,7 @@ export function derivePacketProtection(
     snapshot.contract.id,
     true,
   );
-  return {
+  return attachProtectionStatus({
     status: protection.status,
     reason: protection.reason,
     intent_id: intentId,
@@ -306,7 +338,7 @@ export function derivePacketProtection(
           price: protection.target.price,
         },
     tranches: [],
-  };
+  }, snapshot, verification);
 }
 
 export function deriveSupportedActions(
@@ -352,6 +384,7 @@ export function buildDecisionPacket(
   tranches: TrancheView[] = [],
   session: TopstepSessionConfig = emptySessionConfig(),
   dailyEconomics: DailyEconomicsPacket | null = null,
+  bracketVerification: BracketVerificationContext | null = null,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -386,7 +419,7 @@ export function buildDecisionPacket(
     now,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
-  const protection = derivePacketProtection(snapshot, null, tranches);
+  const protection = derivePacketProtection(snapshot, null, tranches, bracketVerification);
   // EXIT is live under degraded_armed; only disabled/shadow omit or shadow the submit path.
   const exitPermitted = tradingMode !== "disabled"
     && (tradingMode === "shadow" || gatewayModePermitsRiskReduction(gatewayMode.effective));

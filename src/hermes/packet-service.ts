@@ -10,6 +10,7 @@ import {
   buildDecisionPacket,
   emptyMarketObservationState,
   emptyOrderFlowState,
+  type BracketVerificationContext,
   type DirectDecisionPacket,
 } from "./packet-builder.js";
 import type { TrancheView } from "../ownership/tranches.js";
@@ -32,6 +33,12 @@ export class DecisionPacketService {
     const nowMs = this.now();
     const now = new Date(nowMs);
     const venueSnapshot = this.snapshot();
+    const qualityStateComplete = venueSnapshot.stateComplete;
+    const bracketVerification: BracketVerificationContext = {
+      fillObservedUtc: this.store.earliestPendingEntryFillObservedUtc(),
+      stateComplete: qualityStateComplete,
+      nowUtc: now.toISOString(),
+    };
     const dailyEconomics = computeDailyEconomics(
       this.config.dailyEconomics,
       this.config.session,
@@ -56,6 +63,7 @@ export class DecisionPacketService {
       this.tranches(),
       this.config.session,
       dailyEconomics,
+      bracketVerification,
     );
     this.store.recordIssuedPacket(packet);
     return packet;

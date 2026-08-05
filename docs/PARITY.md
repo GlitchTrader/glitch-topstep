@@ -10,6 +10,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Account, contract, instrument, profile, and prompt identity | Implemented | Real sanitized ProjectX session |
 | User and market stream health | Implemented | Real disconnect/reconnect fixture |
 | Session phase and stream_health packet mirrors | Implemented | `session.phase`, `stream_health.*` in decision packet v2 (TS-R4-07) |
+| Post-entry bracket verification (`protection_status`) | Implemented in software — [#86](https://github.com/GlitchTrader/glitch-topstep/issues/86) | `protection.protection_status` pending\|confirmed\|failed\|unknown; 30s timeout; live fill fixture |
 | REST reconciliation after reconnect | Implemented | Compare restored state with TopstepX UI |
 | Truthful `/health`, packet, and execution freshness | Implemented | Runtime stale/future timestamp fixture |
 | Account-wide conservative equity | Implemented | Reconcile every open contract against TopstepX UI |

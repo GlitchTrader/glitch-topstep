@@ -177,6 +177,26 @@ export class SqliteExecutionStore {
     return rows.map((row) => String(row.intent_id));
   }
 
+  /** Earliest fill observation among pending entry receipts, for bracket verification timeout. */
+  public earliestPendingEntryFillObservedUtc(): string | null {
+    let earliest: string | null = null;
+    for (const intentId of this.pendingReceiptIntentIds()) {
+      const mutation = this.mutationForIntent(intentId);
+      if (mutation?.operation !== "place_order") {
+        continue;
+      }
+      const receipt = this.receiptForIntent<{ fill_observed_utc?: string }>(intentId);
+      const candidate = receipt?.fill_observed_utc ?? null;
+      if (!candidate) {
+        continue;
+      }
+      if (!earliest || candidate.localeCompare(earliest) < 0) {
+        earliest = candidate;
+      }
+    }
+    return earliest;
+  }
+
   public prepareMutation(
     intentId: string,
     operation: ExecutionOperation,

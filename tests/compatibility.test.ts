@@ -24,6 +24,7 @@ describe("gateway compatibility contract", () => {
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("packet_supported_actions"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("position_management"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("native_protection"));
+    assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("bracket_verification"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("restart_reconciliation"));
   });
 

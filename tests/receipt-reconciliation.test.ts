@@ -107,8 +107,88 @@ describe("pending receipt reconciliation", () => {
       );
       const receipt = store.receiptForIntent<ExecutionReceipt>(intentId);
       assert.equal(result.reconciled, 1);
+      assert.equal(result.events.length, 1);
+      assert.equal(result.events[0]?.event, "bracket_verification_confirmed");
       assert.equal(receipt?.status, "open_protected");
       assert.equal(receipt?.code, "entry_open_with_proven_protection");
+    } finally {
+      store.close();
+    }
+  });
+
+  it("marks entry protection verification failed after the timeout without child legs", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const intentId = "00000000-0000-4000-8000-00000000c002";
+    try {
+      store.registerIntent({
+        schemaVersion: "glitch.intent.v2",
+        intentId,
+        createdUtc: "2026-07-21T12:00:00Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "ENTER_LONG",
+        confidence: 0.6,
+        snapshotHash: "snapshot",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v5",
+        reason: "Entry.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "ENTER_LONG",
+        },
+        quantity: 1,
+        orderType: "MARKET",
+        stopLoss: 19_990,
+        takeProfit1: 20_020,
+      }, "2026-07-21T12:00:01Z");
+      store.recordReceipt({
+        schema_version: "glitch.direct.execution_receipt.v1",
+        receipt_id: "receipt-2",
+        recorded_utc: "2026-07-21T12:00:10Z",
+        intent_id: intentId,
+        mode: "armed",
+        status: "pending",
+        code: "entry_submitted_pending_reconciliation",
+        order_id: 9002,
+        fill_observed_utc: "2026-07-21T12:00:10Z",
+      });
+      store.prepareMutation(
+        intentId,
+        "place_order",
+        {
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          type: 2,
+          side: 0,
+          size: 1,
+        },
+        `glt-${intentId}`,
+        "2026-07-21T12:00:02Z",
+      );
+      store.markMutationSubmitting(intentId, "2026-07-21T12:00:03Z");
+      store.markMutationSubmitted(intentId, 9002, "2026-07-21T12:00:04Z");
+
+      const result = reconcilePendingReceipts(
+        store,
+        [],
+        101,
+        "CON.F.US.MNQ.U26",
+        true,
+        "2026-07-21T12:00:41Z",
+      );
+      const receipt = store.receiptForIntent<ExecutionReceipt>(intentId);
+      assert.equal(result.reconciled, 1);
+      assert.equal(result.events[0]?.event, "bracket_verification_failed");
+      assert.equal(receipt?.code, "entry_protection_verification_failed");
+      assert.equal(receipt?.status, "pending");
     } finally {
       store.close();
     }

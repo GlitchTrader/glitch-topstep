@@ -498,7 +498,7 @@
     {
       "id": "TS-R4-08",
       "title": "Post-entry bracket verification and protection_status terminal state",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "execution",
       "issue": 86,
@@ -512,6 +512,12 @@
         "docs/specs/TS-R4-08.md and regression tests."
       ],
       "stop_line": "Factual protection verification only — no hidden strategy on pending state.",
+      "evidence": [
+        "src/execution/bracket-verification.ts — 30s timeout, packet protection_status mapping.",
+        "src/execution/receipt-reconciliation.ts — fill_observed_utc, bracket_verification_* events.",
+        "tests/bracket-verification.test.ts and tests/receipt-reconciliation.test.ts regression coverage.",
+        "docs/OPERATIONS.md operator retry on protection_status failed."
+      ],
       "sources": [
         "docs/specs/TS-R4-08.md",
         "src/execution/coordinator.ts",
