@@ -39,6 +39,10 @@ import {
   type TopstepSessionPacket,
 } from "../policy/session-calendar.js";
 import type { DailyEconomicsPacket } from "../policy/daily-economics.js";
+import {
+  buildStreamHealthPacket,
+  type StreamHealthPacket,
+} from "../policy/stream-health.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -110,6 +114,7 @@ export interface DirectDecisionPacket {
     max_contracts: number;
   };
   session: TopstepSessionPacket;
+  stream_health: StreamHealthPacket;
   daily_economics?: DailyEconomicsPacket;
   execution: {
     gateway_mode: EffectiveGatewayMode;
@@ -464,6 +469,13 @@ export function buildDecisionPacket(
       max_contracts: policy.maxContracts,
     },
     session: resolveTopstepSession(session, now),
+    stream_health: buildStreamHealthPacket(
+      quality,
+      orderFlow,
+      snapshot.operational.marketStream.state,
+      snapshot.operational.userStream.state,
+      now,
+    ),
     ...(dailyEconomics ? { daily_economics: dailyEconomics } : {}),
     execution: {
       gateway_mode: gatewayMode.effective,

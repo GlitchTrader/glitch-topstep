@@ -270,6 +270,27 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     "17:00",
   );
   parseSessionLocalTime(tradingDayResetLocalTime);
+  const phaseCalendarEnabled = booleanValue(environment, "GLITCH_SESSION_PHASE_CALENDAR", true);
+  const maintenanceStartLocalTime = phaseCalendarEnabled
+    ? optional(environment, "GLITCH_SESSION_MAINTENANCE_START_LOCAL_TIME", "16:00")
+    : null;
+  const maintenanceEndLocalTime = phaseCalendarEnabled
+    ? optional(environment, "GLITCH_SESSION_MAINTENANCE_END_LOCAL_TIME", "17:00")
+    : null;
+  if (maintenanceStartLocalTime) {
+    parseSessionLocalTime(maintenanceStartLocalTime);
+  }
+  if (maintenanceEndLocalTime) {
+    parseSessionLocalTime(maintenanceEndLocalTime);
+  }
+  const asiaStartLocalTime = environment.GLITCH_SESSION_ASIA_START_LOCAL_TIME?.trim() || null;
+  const asiaEndLocalTime = environment.GLITCH_SESSION_ASIA_END_LOCAL_TIME?.trim() || null;
+  if (asiaStartLocalTime) {
+    parseSessionLocalTime(asiaStartLocalTime);
+  }
+  if (asiaEndLocalTime) {
+    parseSessionLocalTime(asiaEndLocalTime);
+  }
   const dailyEconomicsEnabled = booleanValue(environment, "GLITCH_DAILY_ECONOMICS", true);
   const nominalSizeUsd = nullableNumberValue(
     environment,
@@ -335,6 +356,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       tradingDayResetLocalTime,
       mustFlatLocalTime,
       entryOpenLocalTime,
+      phaseCalendarEnabled,
+      maintenanceStartLocalTime,
+      maintenanceEndLocalTime,
+      asiaStartLocalTime,
+      asiaEndLocalTime,
       notes: [],
     },
     dailyEconomics: {
