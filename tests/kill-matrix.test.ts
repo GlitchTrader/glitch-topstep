@@ -282,7 +282,7 @@ describe("TS-R1-01 process-kill matrix (fake provider)", () => {
         confidence: 0.6,
         snapshotHash: "restart-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v5",
+        promptVersion: "glitch-topstep-v9",
         reason: "Restart persistence.",
         decisionAudit: {
           bullCase: "Bull.",

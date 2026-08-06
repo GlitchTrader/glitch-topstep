@@ -82,7 +82,7 @@ function intent(
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v5",
+    prompt_version: "glitch-topstep-v9",
     reason: "Test concurrent entry.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -349,7 +349,7 @@ describe("execution coordinator serialization", () => {
         confidence: 0.4,
         snapshot_hash: "expired-or-unknown-hash",
         model_version: "test",
-        prompt_version: "glitch-topstep-v5",
+        prompt_version: "glitch-topstep-v9",
         reason: "No trade this cycle.",
         decision_audit: {
           bull_case: "Bull case.",

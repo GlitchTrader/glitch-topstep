@@ -16,7 +16,7 @@ describe("intent body hash", () => {
       confidence: 0.6,
       snapshot_hash: "snapshot-hash",
       model_version: "test",
-      prompt_version: "glitch-topstep-v5",
+      prompt_version: "glitch-topstep-v9",
       reason: "Stable hash.",
       decision_audit: {
         bull_case: "Bull case.",
@@ -51,7 +51,7 @@ describe("intent body hash", () => {
       confidence: 0.6,
       snapshot_hash: "snapshot-hash",
       model_version: "test",
-      prompt_version: "glitch-topstep-v5",
+      prompt_version: "glitch-topstep-v9",
       reason: "First reason.",
       decision_audit: {
         bull_case: "Bull case.",
