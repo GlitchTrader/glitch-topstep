@@ -21,7 +21,7 @@ describe("pending receipt reconciliation", () => {
         confidence: 0.6,
         snapshotHash: "snapshot",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v5",
+        promptVersion: "glitch-topstep-v9",
         reason: "Entry.",
         decisionAudit: {
           bullCase: "Bull.",
@@ -131,7 +131,7 @@ describe("pending receipt reconciliation", () => {
         confidence: 0.6,
         snapshotHash: "snapshot",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v5",
+        promptVersion: "glitch-topstep-v9",
         reason: "Entry.",
         decisionAudit: {
           bullCase: "Bull.",

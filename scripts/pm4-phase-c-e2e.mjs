@@ -204,7 +204,7 @@ function baseIntent(action, snap, intentId = randomUUID()) {
     confidence: 0.6,
     snapshot_hash: snap,
     model_version: "pm4-phase-c-e2e",
-    prompt_version: "glitch-topstep-v5",
+    prompt_version: "glitch-topstep-v9",
     reason: `pm4-phase-c ${action}`,
     decision_audit: audit(action),
   };
