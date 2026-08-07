@@ -85,8 +85,8 @@ describe("snapshot data quality", () => {
     assert.ok(invalidResult.issues.includes("account_state_timestamp_invalid"));
 
     const future = snapshot();
-    future.capturedAt = "2026-07-21T12:00:08Z";
-    future.quote = { ...future.quote!, timestamp: "2026-07-21T12:00:08Z" };
+    future.capturedAt = "2026-07-21T12:00:12Z";
+    future.quote = { ...future.quote!, timestamp: "2026-07-21T12:00:12Z" };
     const futureResult = evaluateSnapshotDataQuality(
       future,
       settings,
@@ -96,9 +96,9 @@ describe("snapshot data quality", () => {
     assert.ok(futureResult.issues.includes("account_state_timestamp_future"));
   });
 
-  it("clamps mild quote clock skew to zero without blocking state_complete", () => {
+  it("treats quote clock skew up to 5s as fresh with no advisory", () => {
     const skewed = snapshot();
-    skewed.quote = { ...skewed.quote!, timestamp: "2026-07-21T12:00:05.500Z" };
+    skewed.quote = { ...skewed.quote!, timestamp: "2026-07-21T12:00:09.500Z" };
     const result = evaluateSnapshotDataQuality(
       skewed,
       settings,
@@ -107,7 +107,6 @@ describe("snapshot data quality", () => {
     assert.equal(result.quoteAgeMs, 0);
     assert.equal(result.stateComplete, true);
     assert.equal(result.issues.length, 0);
-    assert.ok(result.optionalIssues.includes("quote_clock_skew"));
-    assert.ok(!result.optionalIssues.includes("quote_timestamp_future"));
+    assert.equal(result.optionalIssues.length, 0);
   });
 });
