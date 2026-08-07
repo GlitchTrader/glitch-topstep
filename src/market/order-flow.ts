@@ -11,8 +11,10 @@ const WINDOWS: OrderFlowWindowSeconds[] = [15, 60, 300];
 const MAX_WINDOW_SECONDS = 300;
 const BUY = 0;
 const SELL = 1;
-const DOM_ASK_TYPES = new Set([1, 3, 10]);
-const DOM_BID_TYPES = new Set([2, 4, 9]);
+const DOM_ASK = 1;
+const DOM_BID = 2;
+const DOM_BEST_ASK = new Set([3, 10]); // BestAsk, NewBestAsk
+const DOM_BEST_BID = new Set([4, 9]); // BestBid, NewBestBid
 const DOM_RESET = 6;
 const DOM_IGNORED_TYPES = new Set([0, 5, 7, 8, 11]);
 const EPSILON = 1e-12;
@@ -99,13 +101,26 @@ export function buildProjectXOrderFlowObservation(
       depthEventsApplied += 1;
       continue;
     }
-    if (DOM_ASK_TYPES.has(depth.type)) {
-      applyDepthLevel(askLevels, depth.price, restingDepthSize(depth));
+    const size = restingDepthSize(depth);
+    if (DOM_BEST_ASK.has(depth.type)) {
+      applyBestAsk(askLevels, bidLevels, depth.price, size);
       depthEventsApplied += 1;
       continue;
     }
-    if (DOM_BID_TYPES.has(depth.type)) {
-      applyDepthLevel(bidLevels, depth.price, restingDepthSize(depth));
+    if (DOM_BEST_BID.has(depth.type)) {
+      applyBestBid(bidLevels, askLevels, depth.price, size);
+      depthEventsApplied += 1;
+      continue;
+    }
+    if (depth.type === DOM_ASK) {
+      applyDepthLevel(askLevels, depth.price, size);
+      pruneCrossedLevels(bidLevels, askLevels);
+      depthEventsApplied += 1;
+      continue;
+    }
+    if (depth.type === DOM_BID) {
+      applyDepthLevel(bidLevels, depth.price, size);
+      pruneCrossedLevels(bidLevels, askLevels);
       depthEventsApplied += 1;
       continue;
     }
@@ -297,6 +312,85 @@ function applyDepthLevel(levels: Map<number, number>, price: number, currentVolu
     levels.delete(price);
   } else {
     levels.set(price, currentVolume);
+  }
+}
+
+/**
+ * BestBid/NewBestBid are BBO pointers, not additive ladder rows.
+ * Live ProjectX often streams only BestBid/BestAsk; upserting without pruning leaves
+ * every prior best price in the map and reconstructs a crossed book as price moves.
+ */
+function applyBestBid(
+  bidLevels: Map<number, number>,
+  askLevels: Map<number, number>,
+  price: number,
+  currentVolume: number,
+): void {
+  applyDepthLevel(bidLevels, price, currentVolume);
+  if (currentVolume <= 0) {
+    pruneCrossedLevels(bidLevels, askLevels);
+    return;
+  }
+  for (const level of [...bidLevels.keys()]) {
+    if (level > price) {
+      bidLevels.delete(level);
+    }
+  }
+  for (const level of [...askLevels.keys()]) {
+    if (level <= price) {
+      askLevels.delete(level);
+    }
+  }
+}
+
+function applyBestAsk(
+  askLevels: Map<number, number>,
+  bidLevels: Map<number, number>,
+  price: number,
+  currentVolume: number,
+): void {
+  applyDepthLevel(askLevels, price, currentVolume);
+  if (currentVolume <= 0) {
+    pruneCrossedLevels(bidLevels, askLevels);
+    return;
+  }
+  for (const level of [...askLevels.keys()]) {
+    if (level < price) {
+      askLevels.delete(level);
+    }
+  }
+  for (const level of [...bidLevels.keys()]) {
+    if (level >= price) {
+      bidLevels.delete(level);
+    }
+  }
+}
+
+function pruneCrossedLevels(
+  bidLevels: Map<number, number>,
+  askLevels: Map<number, number>,
+): void {
+  let bestBid: number | null = null;
+  for (const price of bidLevels.keys()) {
+    bestBid = bestBid === null ? price : Math.max(bestBid, price);
+  }
+  let bestAsk: number | null = null;
+  for (const price of askLevels.keys()) {
+    bestAsk = bestAsk === null ? price : Math.min(bestAsk, price);
+  }
+  if (bestBid !== null) {
+    for (const price of [...askLevels.keys()]) {
+      if (price <= bestBid) {
+        askLevels.delete(price);
+      }
+    }
+  }
+  if (bestAsk !== null) {
+    for (const price of [...bidLevels.keys()]) {
+      if (price >= bestAsk) {
+        bidLevels.delete(price);
+      }
+    }
   }
 }
 
