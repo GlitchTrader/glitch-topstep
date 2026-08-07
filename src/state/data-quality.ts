@@ -10,7 +10,7 @@ export interface SnapshotDataQuality {
   stateAgeMs: number | null;
 }
 
-const FUTURE_TOLERANCE_MS = 2_000;
+const FUTURE_TOLERANCE_MS = 5_000;
 /** Reconciliation cycles can block on ProjectX REST for several seconds. */
 const RECONCILIATION_STALE_GRACE_MS = 30_000;
 
@@ -37,10 +37,8 @@ export function evaluateSnapshotDataQuality(
       issues.add("quote_timestamp_future");
       quoteAgeMs = 0;
     } else if (quoteAgeMs < 0) {
-      // Mild provider/local clock skew inside FUTURE_TOLERANCE: treat quote as fresh.
-      // Do not fail state_complete / reject entries — that conflates NTP jitter with
-      // true venue incompleteness (seen as intermittent venue_state_incomplete:quote_clock_skew).
-      optionalIssues.add("quote_clock_skew");
+      // Provider/local clock skew within FUTURE_TOLERANCE is normal NTP jitter.
+      // Treat as fresh; do not publish advisory noise or block execution.
       quoteAgeMs = 0;
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
