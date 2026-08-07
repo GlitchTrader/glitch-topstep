@@ -2,7 +2,10 @@ import type { AccountVenueSnapshot, RiskSettings } from "../domain/models.js";
 
 export interface SnapshotDataQuality {
   stateComplete: boolean;
+  /** Execution-blocking completeness / freshness failures. */
   issues: string[];
+  /** Advisory timing/evidence notes that must not veto new exposure by themselves. */
+  optionalIssues: string[];
   quoteAgeMs: number | null;
   stateAgeMs: number | null;
 }
@@ -17,6 +20,7 @@ export function evaluateSnapshotDataQuality(
   now: Date = new Date(),
 ): SnapshotDataQuality {
   const issues = new Set(snapshot.stateIssues);
+  const optionalIssues = new Set<string>();
   if (!snapshot.stateComplete && issues.size === 0) {
     issues.add("venue_state_incomplete");
   }
@@ -33,7 +37,10 @@ export function evaluateSnapshotDataQuality(
       issues.add("quote_timestamp_future");
       quoteAgeMs = 0;
     } else if (quoteAgeMs < 0) {
-      issues.add("quote_clock_skew");
+      // Mild provider/local clock skew inside FUTURE_TOLERANCE: treat quote as fresh.
+      // Do not fail state_complete / reject entries — that conflates NTP jitter with
+      // true venue incompleteness (seen as intermittent venue_state_incomplete:quote_clock_skew).
+      optionalIssues.add("quote_clock_skew");
       quoteAgeMs = 0;
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
@@ -51,6 +58,7 @@ export function evaluateSnapshotDataQuality(
   return {
     stateComplete: issues.size === 0,
     issues: [...issues],
+    optionalIssues: [...optionalIssues],
     quoteAgeMs,
     stateAgeMs,
   };
