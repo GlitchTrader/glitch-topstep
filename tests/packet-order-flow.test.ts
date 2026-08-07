@@ -109,6 +109,7 @@ it("changes packet identity with order flow but never turns flow into an executi
         depth: {
           depth_levels_requested: 10,
           available: true,
+          unavailable_reason: null,
           reconstruction_basis: "bounded_window_without_reset",
           book_complete: false,
           latest_reset_sequence: null,
@@ -166,6 +167,36 @@ it("changes packet identity with order flow but never turns flow into an executi
     assert.equal(depthMissing.execution.new_exposure_technically_supported, true);
     const stateGate = depthMissing.execution.gates.find((gate) => gate.id === "state_complete");
     assert.equal(stateGate?.passed, true);
+
+    orderFlow = {
+      ...orderFlow,
+      observation: {
+        ...orderFlow.observation!,
+        depth: {
+          ...orderFlow.observation!.depth,
+          available: true,
+          unavailable_reason: null,
+          best_bid: 20_050,
+          best_ask: 20_050.25,
+          spread_ticks: 1,
+          bid_volume: 10,
+          ask_volume: 8,
+          imbalance_ratio: 0.1,
+          bid_levels: [{ price: 20_050, current_volume: 10 }],
+          ask_levels: [{ price: 20_050.25, current_volume: 8 }],
+        },
+      },
+    };
+    const depthDiverged = service.current();
+    assert.equal(depthDiverged.order_flow.observation?.depth.available, false);
+    assert.equal(
+      depthDiverged.order_flow.observation?.depth.unavailable_reason,
+      "depth_bbo_diverges_from_quote",
+    );
+    assert.equal(depthDiverged.order_flow.observation?.depth.imbalance_ratio, null);
+    assert.deepEqual(depthDiverged.data_quality.optional_issues, ["order_flow_depth_unavailable"]);
+    assert.equal(depthDiverged.data_quality.state_complete, true);
+    assert.equal(depthDiverged.execution.new_exposure_technically_supported, true);
   } finally {
     store.close();
   }
