@@ -482,9 +482,9 @@ export function buildDecisionPacket(
     exitPermitted,
   );
   const sessionLevels = resolveSessionMarketLevels(quote);
-  // Required issues only — depth is useful evidence, not an execution completeness gate.
+  // Required issues only — depth and mild quote clock skew are optional evidence notes.
   const requiredIssues = [...quality.issues];
-  const optionalIssues: string[] = [];
+  const optionalIssues: string[] = [...quality.optionalIssues];
   const depthObservation = publishedOrderFlow.observation?.depth;
   if (depthObservation?.available === false) {
     optionalIssues.push("order_flow_depth_unavailable");
