@@ -40,13 +40,13 @@ function trade(timestamp: string, type: 0 | 1, price: number, volume: number) {
   };
 }
 
-function depth(type: number, price: number, currentVolume: number) {
+function depth(type: number, price: number, currentVolume: number, volume = currentVolume) {
   return {
     contractId: CONTRACT,
     timestamp: "2026-07-21T12:04:59Z",
     type,
     price,
-    volume: currentVolume,
+    volume,
     currentVolume,
   };
 }
@@ -140,5 +140,23 @@ describe("ProjectX order flow", () => {
     assert.ok(observation.issues.includes("market_evidence_does_not_cover_full_lookback"));
     assert.ok(observation.issues.includes("market_evidence_query_truncated"));
     assert.equal(observation.depth.available, false);
+  });
+
+  it("uses BestBid/BestAsk volume when currentVolume is zero (live ProjectX shape)", () => {
+    const observation = buildProjectXOrderFlowObservation({
+      contractId: CONTRACT,
+      tickSize: 0.25,
+      generatedAt: GENERATED,
+      coverageStartUtc: "2026-07-21T11:59:00Z",
+      events: [
+        event(1, "depth", depth(4, 100, 0, 1)),
+        event(2, "depth", depth(3, 100.25, 0, 8)),
+      ],
+    });
+    assert.equal(observation.depth.available, true);
+    assert.equal(observation.depth.best_bid, 100);
+    assert.equal(observation.depth.best_ask, 100.25);
+    assert.equal(observation.depth.bid_volume, 1);
+    assert.equal(observation.depth.ask_volume, 8);
   });
 });

@@ -141,6 +141,31 @@ it("changes packet identity with order flow but never turns flow into an executi
     assert.equal(observed.execution.new_exposure_technically_supported, true);
     assert.equal(degraded.execution.new_exposure_technically_supported, true);
     assert.equal(degraded.order_flow.last_error, "Error:evidence database unavailable");
+
+    orderFlow = {
+      ...orderFlow,
+      last_error: null,
+      observation: {
+        ...orderFlow.observation!,
+        depth: {
+          ...orderFlow.observation!.depth,
+          available: false,
+          best_bid: null,
+          best_ask: null,
+          bid_volume: 0,
+          ask_volume: 0,
+          bid_levels: [],
+          ask_levels: [],
+        },
+      },
+    };
+    const depthMissing = service.current();
+    assert.equal(depthMissing.data_quality.state_complete, true);
+    assert.deepEqual(depthMissing.data_quality.issues, []);
+    assert.deepEqual(depthMissing.data_quality.optional_issues, ["order_flow_depth_unavailable"]);
+    assert.equal(depthMissing.execution.new_exposure_technically_supported, true);
+    const stateGate = depthMissing.execution.gates.find((gate) => gate.id === "state_complete");
+    assert.equal(stateGate?.passed, true);
   } finally {
     store.close();
   }
