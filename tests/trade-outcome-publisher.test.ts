@@ -306,3 +306,305 @@ test("TradeOutcomePublisher replaces incomplete entry-only outcome after richer 
     .split(/\r?\n/);
   assert.equal(rows.length, 1);
 });
+
+test("TradeOutcomePublisher does not attribute later foreign PnL fills into an older tranche", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gt-outcomes-"));
+  const store = new TradeOutcomeStore(dir);
+  const publisher = new TradeOutcomePublisher(
+    {
+      async searchTrades() {
+        return [{
+          id: 1,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T00:01:29.990Z",
+          price: 29583.5,
+          profitAndLoss: null,
+          fees: 0.36,
+          side: 0,
+          size: 1,
+          voided: false,
+          orderId: 3375341458,
+        }, {
+          id: 2,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T00:01:53.776Z",
+          price: 29594.25,
+          profitAndLoss: 21.5,
+          fees: 0.36,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 3375341460,
+        }, {
+          id: 3,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T08:02:17.946Z",
+          price: 29598.25,
+          profitAndLoss: 5,
+          fees: 0.36,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 3376774091,
+        }, {
+          id: 4,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T11:03:46.235Z",
+          price: 29636.25,
+          profitAndLoss: 22.5,
+          fees: 0.36,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 3377043621,
+        }];
+      },
+    },
+    store,
+    instantPublisherOptions,
+  );
+
+  const published = await publisher.publishClosedTranches({
+    accountId: 1,
+    accountName: "PRAC-V2-645601-47191819",
+    contractId: "CON.F.US.MNQ.U26",
+    instrument: "MNQ",
+    tranches: [{
+      ...tranche,
+      intent_id: "00dda083-f4b3-5c18-a931-939b05e54580",
+      entry_order_id: 3375341458,
+      created_utc: "2026-08-07T00:01:29.767Z",
+      protection: {
+        status: "proven",
+        reason: "ok",
+        stop: {
+          provider_order_id: 3375341459,
+          custom_tag: "sl",
+          price: 29576.25,
+        },
+        target: {
+          provider_order_id: 3375341460,
+          custom_tag: "tp",
+          price: 29594.25,
+        },
+      },
+    }],
+    // Simulate a late incomplete retry using "now" as input.exitUtc.
+    exitUtc: "2026-08-07T13:00:00.000Z",
+    maeUsd: 0,
+    mfeUsd: 20.5,
+    tickSize: 0.25,
+    tickValue: 0.5,
+  });
+
+  assert.equal(published.length, 1);
+  assert.equal(published[0]?.realized_pnl_usd, 21.5);
+  assert.equal(published[0]?.fees_usd, 0.72);
+  assert.equal(published[0]?.attribution?.trade_count, 2);
+  assert.equal(published[0]?.exit_reason, "take_profit");
+});
+
+test("TradeOutcomePublisher replaces contaminated outcome with cleaned attribution", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gt-outcomes-"));
+  const store = new TradeOutcomeStore(dir);
+  await store.append({
+    schema_version: TRADE_OUTCOME_SCHEMA,
+    outcome_id: "outcome:00dda083-f4b3-5c18-a931-939b05e54580",
+    intent_id: "00dda083-f4b3-5c18-a931-939b05e54580",
+    account: "PRAC",
+    instrument: "MNQ",
+    entry_utc: "2026-08-07T00:01:29.767Z",
+    exit_utc: "2026-08-07T00:01:53.776Z",
+    realized_pnl_usd: 71,
+    fees_usd: 1.8,
+    learning_eligible: false,
+    exit_reason: "unknown",
+    attribution: {
+      entry_order_id: 3375341458,
+      trade_count: 5,
+      protection_status: "unknown",
+    },
+    fills: [
+      {
+        price: 1, size: 1, side: 0, order_id: 3375341458, timestamp: "2026-08-07T00:01:29.990Z",
+        profit_and_loss: null, fees: 0.36,
+      },
+      {
+        price: 1, size: 1, side: 1, order_id: 10, timestamp: "2026-08-07T00:01:53.776Z",
+        profit_and_loss: 21.5, fees: 0.36,
+      },
+      {
+        price: 1, size: 1, side: 1, order_id: 11, timestamp: "2026-08-07T08:02:17.946Z",
+        profit_and_loss: 5, fees: 0.36,
+      },
+      {
+        price: 1, size: 1, side: 1, order_id: 12, timestamp: "2026-08-07T10:29:46.024Z",
+        profit_and_loss: 22, fees: 0.36,
+      },
+      {
+        price: 1, size: 1, side: 1, order_id: 13, timestamp: "2026-08-07T11:03:46.235Z",
+        profit_and_loss: 22.5, fees: 0.36,
+      },
+    ],
+    protection_confirmed: false,
+  });
+
+  const publisher = new TradeOutcomePublisher(
+    {
+      async searchTrades() {
+        return [{
+          id: 1,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T00:01:29.990Z",
+          price: 29583.5,
+          profitAndLoss: null,
+          fees: 0.36,
+          side: 0,
+          size: 1,
+          voided: false,
+          orderId: 3375341458,
+        }, {
+          id: 2,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T00:01:53.776Z",
+          price: 29594.25,
+          profitAndLoss: 21.5,
+          fees: 0.36,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 3375341460,
+        }];
+      },
+    },
+    store,
+    instantPublisherOptions,
+  );
+
+  const published = await publisher.publishClosedTranches({
+    accountId: 1,
+    accountName: "PRAC",
+    contractId: "CON.F.US.MNQ.U26",
+    instrument: "MNQ",
+    tranches: [{
+      ...tranche,
+      intent_id: "00dda083-f4b3-5c18-a931-939b05e54580",
+      entry_order_id: 3375341458,
+      created_utc: "2026-08-07T00:01:29.767Z",
+      protection: {
+        status: "proven",
+        reason: "ok",
+        stop: { provider_order_id: 3375341459, custom_tag: "sl", price: 29576.25 },
+        target: { provider_order_id: 3375341460, custom_tag: "tp", price: 29594.25 },
+      },
+    }],
+    exitUtc: "2026-08-07T13:00:00.000Z",
+    maeUsd: 0,
+    mfeUsd: 20.5,
+    tickSize: 0.25,
+    tickValue: 0.5,
+  });
+
+  assert.equal(published.length, 1);
+  assert.equal(published[0]?.realized_pnl_usd, 21.5);
+  assert.equal(published[0]?.attribution?.trade_count, 2);
+  assert.equal(published[0]?.learning_eligible, true);
+});
+
+test("TradeOutcomePublisher does not double-claim one closing fill across two tranches", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gt-outcomes-"));
+  const store = new TradeOutcomeStore(dir);
+  const sharedClose: TradeInfo = {
+    id: 300,
+    accountId: 1,
+    contractId: "CON.F.US.MNQ.U26",
+    creationTimestamp: "2026-08-07T11:03:46.235Z",
+    price: 29636.25,
+    profitAndLoss: 22.5,
+    fees: 0.36,
+    side: 1,
+    size: 1,
+    voided: false,
+    orderId: 3377043621,
+  };
+  const publisher = new TradeOutcomePublisher(
+    {
+      async searchTrades() {
+        return [{
+          id: 100,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T10:25:48.768Z",
+          price: 29609.5,
+          profitAndLoss: null,
+          fees: 0.36,
+          side: 0,
+          size: 1,
+          voided: false,
+          orderId: 3376991175,
+        }, {
+          id: 200,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-07T11:02:24.299Z",
+          price: 29625,
+          profitAndLoss: null,
+          fees: 0.36,
+          side: 0,
+          size: 1,
+          voided: false,
+          orderId: 3377043619,
+        }, sharedClose];
+      },
+    },
+    store,
+    instantPublisherOptions,
+  );
+
+  const published = await publisher.publishClosedTranches({
+    accountId: 1,
+    accountName: "PRAC",
+    contractId: "CON.F.US.MNQ.U26",
+    instrument: "MNQ",
+    tranches: [{
+      ...tranche,
+      intent_id: "d3f1e460-fed4-5ca2-8eee-6b6486860973",
+      entry_order_id: 3376991175,
+      created_utc: "2026-08-07T10:25:48.651Z",
+      filled_qty: 1,
+      protection: {
+        status: "pending",
+        reason: "target_missing",
+        stop: { provider_order_id: null, custom_tag: "sl", price: null },
+        target: { provider_order_id: null, custom_tag: "tp", price: null },
+      },
+    }, {
+      ...tranche,
+      intent_id: "3749b135-fad3-504a-b7d7-779b73707bd0",
+      entry_order_id: 3377043619,
+      created_utc: "2026-08-07T11:02:24.201Z",
+      filled_qty: 1,
+      protection: {
+        status: "pending",
+        reason: "target_missing",
+        stop: { provider_order_id: null, custom_tag: "sl", price: 29618.25 },
+        target: { provider_order_id: null, custom_tag: "tp", price: null },
+      },
+    }],
+    exitUtc: "2026-08-07T11:03:46.235Z",
+  });
+
+  assert.equal(published.length, 2);
+  const withClose = published.filter((row) => (row.evidence?.order_ids ?? []).includes(3377043621));
+  assert.equal(withClose.length, 1);
+  assert.equal(withClose[0]?.realized_pnl_usd, 22.5);
+  const withoutClose = published.find((row) => !(row.evidence?.order_ids ?? []).includes(3377043621));
+  assert.ok(withoutClose);
+  assert.equal(withoutClose?.realized_pnl_usd, 0);
+});

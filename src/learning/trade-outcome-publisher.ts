@@ -79,18 +79,33 @@ export class TradeOutcomePublisher {
   public async publishClosedTranches(input: PublishTradeOutcomeInput): Promise<TradeOutcomeV1[]> {
     await this.store.load();
     const published: TradeOutcomeV1[] = [];
+    const rebuilding = new Set(input.tranches.map((tranche) => tranche.intent_id));
+    // Prevent concurrent tranche flats — and retries — from claiming fills already owned
+    // by another completed outcome.
+    const claimedOrderIds = claimedOrderIdsFromStore(this.store, rebuilding);
     for (const tranche of input.tranches) {
       const existing = this.store.get(tranche.intent_id);
-      if (existing && !isIncompleteOutcome(existing)) {
+      if (
+        existing
+        && !isIncompleteOutcome(existing)
+        && !outcomeSharesForeignClosingFill(existing, this.store)
+      ) {
         continue;
       }
-      const outcome = await this.buildOutcome(input, tranche, existing);
+      const outcome = await this.buildOutcome(input, tranche, existing, claimedOrderIds);
       if (!outcome) {
         continue;
       }
+      for (const orderId of outcome.evidence?.order_ids ?? []) {
+        claimedOrderIds.add(orderId);
+      }
       if (existing) {
         if (!isRicherOutcome(outcome, existing) && outcome.learning_eligible === existing.learning_eligible) {
-          continue;
+          // Still replace when stripping a duplicated closing fill even if PnL drops.
+          if (!outcomeSharesForeignClosingFill(existing, this.store)
+            || outcomeSharesForeignClosingFill(outcome, this.store)) {
+            continue;
+          }
         }
         await this.store.replace(outcome);
       } else {
@@ -104,16 +119,33 @@ export class TradeOutcomePublisher {
   private async buildOutcome(
     input: PublishTradeOutcomeInput,
     tranche: TrancheView,
-    existing?: TradeOutcomeV1,
+    existing: TradeOutcomeV1 | undefined,
+    claimedOrderIds: Set<number>,
   ): Promise<TradeOutcomeV1 | null> {
     if (this.settleMs > 0) {
       await this.sleep(this.settleMs);
     }
 
-    let attributed = await this.searchAttributedTrades(input, tranche, input.exitUtc);
+    // Retry must keep the original flat clock; using "now" re-opens the search window
+    // and lets later unrelated closes contaminate an incomplete outcome.
+    const searchExitUtc = existing?.exit_utc && existing.exit_utc < input.exitUtc
+      ? existing.exit_utc
+      : input.exitUtc;
+
+    let attributed = await this.searchAttributedTrades(
+      input,
+      tranche,
+      searchExitUtc,
+      claimedOrderIds,
+    );
     if (!hasRealizedPnl(attributed) && this.retrySettleMs > 0) {
       await this.sleep(this.retrySettleMs);
-      attributed = await this.searchAttributedTrades(input, tranche, input.exitUtc);
+      attributed = await this.searchAttributedTrades(
+        input,
+        tranche,
+        searchExitUtc,
+        claimedOrderIds,
+      );
     }
 
     const realized = attributed.reduce(
@@ -232,6 +264,7 @@ export class TradeOutcomePublisher {
     input: PublishTradeOutcomeInput,
     tranche: TrancheView,
     exitUtc: string,
+    claimedOrderIds: ReadonlySet<number>,
   ): Promise<TradeInfo[]> {
     const searchEndUtc = addMs(exitUtc, this.searchTailMs);
     const trades = await this.api.searchTrades(
@@ -244,14 +277,43 @@ export class TradeOutcomePublisher {
       (trade) => trade.contractId === input.contractId
         && !trade.voided
         && trade.creationTimestamp >= tranche.created_utc
-        && trade.creationTimestamp <= searchEndUtc,
+        && trade.creationTimestamp <= searchEndUtc
+        && !claimedOrderIds.has(trade.orderId),
     );
-    return scoped.filter((trade) => {
-      if (orderIds.has(trade.orderId)) {
-        return true;
+    const owned = scoped.filter((trade) => orderIds.has(trade.orderId));
+    if (hasRealizedPnl(owned)) {
+      return owned;
+    }
+    // Manual/flatten closes often lack stop/target ids on the tranche at publish time.
+    // Allow only enough orphan PnL size to flatten this entry — never every PnL in the window.
+    const entryQty = Math.max(
+      1,
+      owned
+        .filter((trade) => trade.orderId === tranche.entry_order_id)
+        .reduce((sum, trade) => sum + trade.size, 0)
+        || tranche.filled_qty
+        || 1,
+    );
+    const exitEpoch = Date.parse(exitUtc);
+    const orphans = scoped
+      .filter((trade) => trade.profitAndLoss !== null && !orderIds.has(trade.orderId))
+      .sort((left, right) => {
+        const leftDistance = Math.abs(Date.parse(left.creationTimestamp) - exitEpoch);
+        const rightDistance = Math.abs(Date.parse(right.creationTimestamp) - exitEpoch);
+        return leftDistance - rightDistance
+          || left.creationTimestamp.localeCompare(right.creationTimestamp)
+          || left.id - right.id;
+      });
+    const selectedOrphans: TradeInfo[] = [];
+    let remaining = entryQty;
+    for (const orphan of orphans) {
+      if (remaining <= 0) {
+        break;
       }
-      return trade.profitAndLoss !== null;
-    });
+      selectedOrphans.push(orphan);
+      remaining -= orphan.size;
+    }
+    return [...owned, ...selectedOrphans];
   }
 }
 
@@ -271,16 +333,37 @@ export function isIncompleteOutcome(outcome: TradeOutcomeV1): boolean {
   if (tradeCount >= 2 && (outcome.fills?.length ?? 0) < 2) {
     return true;
   }
+  if (looksContaminatedOutcome(outcome)) {
+    return true;
+  }
   return false;
 }
 
 export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcomeV1): boolean {
   const candidateCount = candidate.attribution?.trade_count ?? 0;
   const existingCount = existing.attribution?.trade_count ?? 0;
-  if (candidateCount > existingCount) {
+  const candidateFills = candidate.fills?.length ?? 0;
+  const existingFills = existing.fills?.length ?? 0;
+
+  if (candidate.learning_eligible && !existing.learning_eligible) {
     return true;
   }
-  if ((candidate.fills?.length ?? 0) > (existing.fills?.length ?? 0)) {
+  if (candidate.protection_confirmed && !existing.protection_confirmed) {
+    return true;
+  }
+  // Prefer a cleaned attribution over a contaminated row with extra foreign closes.
+  if (
+    looksContaminatedOutcome(existing)
+    && !looksContaminatedOutcome(candidate)
+    && candidateCount >= 2
+    && Math.abs(candidate.realized_pnl_usd) > 0
+  ) {
+    return true;
+  }
+  if (candidateFills >= 2 && existingFills < 2) {
+    return true;
+  }
+  if (candidateCount >= 2 && existingCount < 2) {
     return true;
   }
   if (
@@ -292,18 +375,69 @@ export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcom
   }
   if (
     candidateCount === existingCount
-    && Math.abs(candidate.realized_pnl_usd) > Math.abs(existing.realized_pnl_usd)
-  ) {
-    return true;
-  }
-  if (
-    candidateCount === existingCount
+    && candidateCount >= 2
     && candidate.realized_pnl_usd === existing.realized_pnl_usd
     && candidate.fees_usd > existing.fees_usd
   ) {
     return true;
   }
   return false;
+}
+
+export function looksContaminatedOutcome(outcome: TradeOutcomeV1): boolean {
+  const fills = outcome.fills ?? [];
+  if (fills.length <= 2) {
+    return false;
+  }
+  const entryOrderId = outcome.attribution?.entry_order_id ?? null;
+  const closingOrders = new Set(
+    fills
+      .filter((fill) => fill.profit_and_loss !== null && fill.order_id !== entryOrderId)
+      .map((fill) => fill.order_id),
+  );
+  // One intent may legitimately scale out twice; three+ distinct closing orders is cross-talk.
+  return closingOrders.size >= 3;
+}
+
+export function outcomeSharesForeignClosingFill(
+  outcome: TradeOutcomeV1,
+  store: TradeOutcomeStore,
+): boolean {
+  const entryOrderId = outcome.attribution?.entry_order_id ?? null;
+  const closing = new Set(
+    (outcome.evidence?.order_ids ?? []).filter((orderId) => orderId !== entryOrderId),
+  );
+  if (closing.size === 0) {
+    return false;
+  }
+  for (const other of store.all()) {
+    if (other.intent_id === outcome.intent_id) {
+      continue;
+    }
+    const otherEntry = other.attribution?.entry_order_id ?? null;
+    for (const orderId of other.evidence?.order_ids ?? []) {
+      if (orderId !== otherEntry && closing.has(orderId)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function claimedOrderIdsFromStore(
+  store: TradeOutcomeStore,
+  rebuilding: ReadonlySet<string>,
+): Set<number> {
+  const claimed = new Set<number>();
+  for (const outcome of store.all()) {
+    if (rebuilding.has(outcome.intent_id)) {
+      continue;
+    }
+    for (const orderId of outcome.evidence?.order_ids ?? []) {
+      claimed.add(orderId);
+    }
+  }
+  return claimed;
 }
 
 function attributedOrderIds(tranche: TrancheView): Set<number> {
