@@ -4,8 +4,6 @@ export interface SnapshotDataQuality {
   stateComplete: boolean;
   /** Execution-blocking completeness / freshness failures. */
   issues: string[];
-  /** Advisory timing/evidence notes that must not veto new exposure by themselves. */
-  optionalIssues: string[];
   quoteAgeMs: number | null;
   stateAgeMs: number | null;
 }
@@ -20,7 +18,6 @@ export function evaluateSnapshotDataQuality(
   now: Date = new Date(),
 ): SnapshotDataQuality {
   const issues = new Set(snapshot.stateIssues);
-  const optionalIssues = new Set<string>();
   if (!snapshot.stateComplete && issues.size === 0) {
     issues.add("venue_state_incomplete");
   }
@@ -56,7 +53,6 @@ export function evaluateSnapshotDataQuality(
   return {
     stateComplete: issues.size === 0,
     issues: [...issues],
-    optionalIssues: [...optionalIssues],
     quoteAgeMs,
     stateAgeMs,
   };

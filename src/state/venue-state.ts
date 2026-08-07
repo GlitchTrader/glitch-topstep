@@ -3,12 +3,9 @@ import type {
   AccountInfo,
   AccountVenueSnapshot,
   ContractInfo,
-  MarketDepthInfo,
-  MarketTradeInfo,
   OrderInfo,
   PositionInfo,
   QuoteInfo,
-  TradeInfo,
   VenueOperationalStatus,
   VenueStreamKind,
   VenueStreamState,
@@ -117,9 +114,6 @@ export class VenueStateStore {
   private readonly positions = new Map<number, Timed<PositionInfo>>();
   private readonly orders = new Map<number, Timed<OrderInfo>>();
   private readonly quotes = new Map<string, Timed<QuoteInfo>>();
-  private readonly trades: Timed<TradeInfo>[] = [];
-  private readonly marketTrades: Timed<MarketTradeInfo>[] = [];
-  private readonly depth: Timed<MarketDepthInfo>[] = [];
   private accountSnapshotLoaded = false;
   private positionSnapshotLoaded = false;
   private orderSnapshotLoaded = false;
@@ -193,29 +187,8 @@ export class VenueStateStore {
     this.orders.set(order.id, { value: order, receivedAt });
   }
 
-  public applyTrade(trade: TradeInfo, receivedAt = nowUtc()): void {
-    this.trades.push({ value: trade, receivedAt });
-    if (this.trades.length > 2_000) {
-      this.trades.splice(0, this.trades.length - 2_000);
-    }
-  }
-
   public applyQuote(quote: QuoteInfo, receivedAt = nowUtc()): void {
     this.quotes.set(quote.contractId, { value: quote, receivedAt });
-  }
-
-  public applyMarketTrade(trade: MarketTradeInfo, receivedAt = nowUtc()): void {
-    this.marketTrades.push({ value: trade, receivedAt });
-    if (this.marketTrades.length > 5_000) {
-      this.marketTrades.splice(0, this.marketTrades.length - 5_000);
-    }
-  }
-
-  public applyDepth(depth: MarketDepthInfo, receivedAt = nowUtc()): void {
-    this.depth.push({ value: depth, receivedAt });
-    if (this.depth.length > 10_000) {
-      this.depth.splice(0, this.depth.length - 10_000);
-    }
   }
 
   public markStreamConnecting(kind: VenueStreamKind, at = nowUtc()): void {

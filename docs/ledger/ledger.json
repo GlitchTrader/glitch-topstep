@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-05",
+  "updated": "2026-08-07",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -38,7 +38,8 @@
     "TS-PM4-01",
     "TS-BRACKET-01",
     "TS-R3-03",
-    "TS-R4-07"
+    "TS-R4-07",
+    "TS-AUDIT-04"
   ],
   "items": [
     {
@@ -378,6 +379,35 @@
         "src/hermes/packet-builder.ts",
         "src/policy/session-calendar.ts",
         "glitch-topstep-hermes-profile:GTHP-017"
+      ]
+    },
+    {
+      "id": "TS-AUDIT-04",
+      "title": "Ponytail cleanup of market-data leftovers after DOM/skew fixes",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "depends_on": [],
+      "acceptance": [
+        "SnapshotDataQuality no longer carries a dead optionalIssues producer.",
+        "resolveGatewayMode and buildExecutionGates no longer take unused order-flow after quiet-tape doctrine.",
+        "VenueStateStore does not buffer write-only market trade/depth/user-trade arrays; evidence SQLite remains source of truth.",
+        "armedGateReasons does not keep a dead quote_stale else-branch.",
+        "Depth vs live-quote availability check remains packet evidence honesty, not an execution gate.",
+        "npm test paths for data-quality, gateway-mode, order-flow, and packet-order-flow stay green."
+      ],
+      "stop_line": "Do not reintroduce strategy-shaped depth/tape gates or packet-side DOM compensations on top of Best* semantics.",
+      "evidence": [
+        "docs/ledger/audits/2026-08-07-market-data-ponytail.md",
+        "src/state/data-quality.ts, src/execution/gateway-mode.ts, src/state/venue-state.ts, src/hermes/packet-builder.ts, src/projectx/realtime.ts"
+      ],
+      "sources": [
+        "docs/ledger/audits/2026-08-07-market-data-ponytail.md",
+        "src/state/data-quality.ts",
+        "src/execution/gateway-mode.ts",
+        "src/state/venue-state.ts",
+        "src/hermes/packet-builder.ts",
+        "src/projectx/realtime.ts"
       ]
     },
     {

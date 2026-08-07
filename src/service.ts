@@ -347,7 +347,6 @@ export class GlitchTopstepService {
           this.config.tradingMode,
           current,
           this.config.risk,
-          orderFlow,
           recordedAt,
         );
         return {
