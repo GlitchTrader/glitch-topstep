@@ -86,7 +86,6 @@ describe("armed runtime gate", () => {
       "armed",
       current,
       config("armed").risk,
-      orderFlowWithTrades(0),
       now,
     );
     assert.equal(resolved.effective, "armed");
@@ -239,7 +238,6 @@ describe("buildExecutionGates", () => {
     const gates = buildExecutionGates(
       current,
       appConfig.risk,
-      orderFlowWithTrades(2),
       healthyRecovery(),
       appConfig.tradingMode,
       appConfig.policy.maxContracts,
@@ -269,7 +267,6 @@ describe("buildExecutionGates", () => {
     const gates = buildExecutionGates(
       current,
       appConfig.risk,
-      orderFlowWithTrades(2),
       healthyRecovery(),
       appConfig.tradingMode,
       appConfig.policy.maxContracts,
@@ -311,7 +308,6 @@ describe("buildExecutionGates", () => {
     const gates = buildExecutionGates(
       current,
       appConfig.risk,
-      orderFlowWithTrades(2),
       healthyRecovery(),
       appConfig.tradingMode,
       appConfig.policy.maxContracts,
@@ -352,7 +348,6 @@ describe("buildExecutionGates", () => {
     const gates = buildExecutionGates(
       current,
       appConfig.risk,
-      orderFlowWithTrades(2),
       healthyRecovery(),
       appConfig.tradingMode,
       appConfig.policy.maxContracts,

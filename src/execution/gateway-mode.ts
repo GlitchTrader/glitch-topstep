@@ -1,5 +1,4 @@
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
-import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type { AccountVenueSnapshot, RiskSettings, TradingMode } from "../domain/models.js";
 import { validateScaleIn } from "../ownership/scale-in.js";
 import { isReconciliationCurrent } from "../state/venue-state.js";
@@ -26,7 +25,6 @@ export function resolveGatewayMode(
   configured: TradingMode,
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
-  _orderFlow: ProjectXOrderFlowState,
   now: Date = new Date(),
 ): ResolvedGatewayMode {
   if (configured === "disabled") {
@@ -59,14 +57,13 @@ export function gatewayModePermitsRiskReduction(mode: EffectiveGatewayMode): boo
 export function buildExecutionGates(
   snapshot: AccountVenueSnapshot,
   risk: RiskSettings,
-  orderFlow: ProjectXOrderFlowState,
   recovery: ExecutionRecoveryStatus,
   tradingMode: "disabled" | "shadow" | "armed",
   maxContracts: number,
   now: Date = new Date(),
 ): ExecutionGate[] {
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
-  const gatewayMode = resolveGatewayMode(tradingMode, snapshot, risk, orderFlow, now);
+  const gatewayMode = resolveGatewayMode(tradingMode, snapshot, risk, now);
   return [
     ...armedSafetyGates(snapshot, risk, quality),
     riskReductionGate(tradingMode, gatewayMode.effective, snapshot),
@@ -194,11 +191,6 @@ function armedGateReasons(
   const stateGate = gates.find((gate) => gate.id === "state_complete");
   if (stateGate && !stateGate.passed) {
     reasons.push(...(stateGate.detail?.split(",") ?? ["venue_state_incomplete"]));
-  } else {
-    const quoteGate = gates.find((gate) => gate.id === "quote_stale");
-    if (quoteGate && !quoteGate.passed) {
-      reasons.push("quote_stale");
-    }
   }
 
   for (const gate of gates) {

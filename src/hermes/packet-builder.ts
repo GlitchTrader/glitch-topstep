@@ -458,13 +458,11 @@ export function buildDecisionPacket(
     tradingMode,
     snapshot,
     risk,
-    publishedOrderFlow,
     now,
   );
   const executionGates = buildExecutionGates(
     snapshot,
     risk,
-    publishedOrderFlow,
     recovery,
     tradingMode,
     policy.maxContracts,
@@ -482,9 +480,9 @@ export function buildDecisionPacket(
     exitPermitted,
   );
   const sessionLevels = resolveSessionMarketLevels(quote);
-  // Required issues only — depth and mild quote clock skew are optional evidence notes.
+  // Required issues only — depth gaps stay optional evidence notes, not exposure gates.
   const requiredIssues = [...quality.issues];
-  const optionalIssues: string[] = [...quality.optionalIssues];
+  const optionalIssues: string[] = [];
   const depthObservation = publishedOrderFlow.observation?.depth;
   if (depthObservation?.available === false) {
     optionalIssues.push("order_flow_depth_unavailable");

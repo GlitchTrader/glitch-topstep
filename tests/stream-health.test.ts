@@ -45,7 +45,6 @@ test("buildStreamHealthPacket mirrors quote age, tape, and reconnect state", () 
     {
       stateComplete: true,
       issues: [],
-      optionalIssues: [],
       quoteAgeMs: 9_500,
       stateAgeMs: 1_000,
     },

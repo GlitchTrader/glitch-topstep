@@ -107,6 +107,5 @@ describe("snapshot data quality", () => {
     assert.equal(result.quoteAgeMs, 0);
     assert.equal(result.stateComplete, true);
     assert.equal(result.issues.length, 0);
-    assert.equal(result.optionalIssues.length, 0);
   });
 });

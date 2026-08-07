@@ -184,7 +184,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: String(value.id),
           providerTimestampUtc: value.creationTimestamp,
         }),
-        (value, receivedUtc) => this.state.applyTrade(value, receivedUtc),
+        () => undefined,
       );
     });
 
@@ -226,7 +226,7 @@ export class ProjectXRealtimeClient {
           providerEntityId: `${value.contractId}:${value.timestamp}`,
           providerTimestampUtc: value.timestamp,
         }),
-        (value, receivedUtc) => this.state.applyMarketTrade(value, receivedUtc),
+        () => undefined,
       );
     });
     this.marketConnection.on("GatewayDepth", (contractId: unknown, input: unknown) => {
@@ -256,7 +256,7 @@ export class ProjectXRealtimeClient {
             providerEntityId: `${value.contractId}:${value.timestamp}:${value.type}:${value.price}`,
             providerTimestampUtc: value.timestamp,
           }),
-          (value, receivedUtc) => this.state.applyDepth(value, receivedUtc),
+          () => undefined,
         );
       }
     });
