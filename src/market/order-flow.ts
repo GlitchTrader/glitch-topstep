@@ -139,6 +139,20 @@ export function buildProjectXOrderFlowObservation(
     }
   }
 
+  const depth = buildDepthObservation({
+    bidLevels,
+    askLevels,
+    tickSize: input.tickSize,
+    depthLevels,
+    latestResetSequence,
+    depthEventsApplied,
+    depthEventsIgnored,
+    depthEventsInvalid,
+  });
+  if (depth.unavailable_reason) {
+    issues.push(depth.unavailable_reason);
+  }
+
   return {
     schema_version: "glitch.projectx.order_flow.v1",
     generated_utc: generatedAt.toISOString(),
@@ -155,16 +169,7 @@ export function buildProjectXOrderFlowObservation(
       windowSeconds,
       generatedMs,
     )),
-    depth: buildDepthObservation({
-      bidLevels,
-      askLevels,
-      tickSize: input.tickSize,
-      depthLevels,
-      latestResetSequence,
-      depthEventsApplied,
-      depthEventsIgnored,
-      depthEventsInvalid,
-    }),
+    depth,
     issues,
     last_trade_utc: lastTradeUtc,
   };
@@ -250,11 +255,21 @@ function buildDepthObservation(input: {
   const bidVolume = bids.reduce((total, level) => total + level.current_volume, 0);
   const askVolume = asks.reduce((total, level) => total + level.current_volume, 0);
   const totalVolume = bidVolume + askVolume;
-  const available = bestBid !== null
+  const spreadTicks = bestBid === null || bestAsk === null
+    ? null
+    : (bestAsk - bestBid) / input.tickSize;
+  let available = bestBid !== null
     && bestAsk !== null
     && (bidVolume > 0 || askVolume > 0);
+  let unavailableReason: string | null = null;
+  // Crossed/locked reconstructed books are not usable imbalance evidence.
+  if (available && (bestBid! >= bestAsk! || (spreadTicks !== null && spreadTicks <= 0))) {
+    available = false;
+    unavailableReason = "invalid_depth_geometry";
+  }
   return {
     available,
+    unavailable_reason: unavailableReason,
     depth_levels_requested: input.depthLevels,
     reconstruction_basis: input.latestResetSequence === null
       ? "bounded_window_without_reset"
@@ -263,12 +278,12 @@ function buildDepthObservation(input: {
     latest_reset_sequence: input.latestResetSequence,
     best_bid: bestBid,
     best_ask: bestAsk,
-    spread_ticks: bestBid === null || bestAsk === null
-      ? null
-      : (bestAsk - bestBid) / input.tickSize,
+    spread_ticks: spreadTicks,
     bid_volume: bidVolume,
     ask_volume: askVolume,
-    imbalance_ratio: totalVolume <= EPSILON ? null : (bidVolume - askVolume) / totalVolume,
+    imbalance_ratio: !available || totalVolume <= EPSILON
+      ? null
+      : (bidVolume - askVolume) / totalVolume,
     bid_levels: bids,
     ask_levels: asks,
     depth_events_applied: input.depthEventsApplied,

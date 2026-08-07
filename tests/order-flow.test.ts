@@ -154,9 +154,30 @@ describe("ProjectX order flow", () => {
       ],
     });
     assert.equal(observation.depth.available, true);
+    assert.equal(observation.depth.unavailable_reason, null);
     assert.equal(observation.depth.best_bid, 100);
     assert.equal(observation.depth.best_ask, 100.25);
     assert.equal(observation.depth.bid_volume, 1);
     assert.equal(observation.depth.ask_volume, 8);
+  });
+
+  it("marks crossed reconstructed depth unavailable", () => {
+    const observation = buildProjectXOrderFlowObservation({
+      contractId: CONTRACT,
+      tickSize: 0.25,
+      generatedAt: GENERATED,
+      coverageStartUtc: "2026-07-21T11:59:00Z",
+      events: [
+        event(1, "depth", depth(2, 100.5, 10)),
+        event(2, "depth", depth(1, 100, 8)),
+      ],
+    });
+    assert.equal(observation.depth.available, false);
+    assert.equal(observation.depth.unavailable_reason, "invalid_depth_geometry");
+    assert.equal(observation.depth.best_bid, 100.5);
+    assert.equal(observation.depth.best_ask, 100);
+    assert.ok((observation.depth.spread_ticks ?? 0) < 0);
+    assert.equal(observation.depth.imbalance_ratio, null);
+    assert.ok(observation.issues.includes("invalid_depth_geometry"));
   });
 });

@@ -181,6 +181,46 @@ export function emptyOrderFlowState(): ProjectXOrderFlowState {
   };
 }
 
+/** Max |depth BBO − quote BBO| in ticks before reconstructed depth is treated as unusable. */
+const DEPTH_QUOTE_MAX_DIVERGENCE_TICKS = 8;
+
+/**
+ * Mark reconstructed depth unavailable when its BBO materially disagrees with the live quote.
+ * Crossed-book cases are already cleared in buildDepthObservation; this catches mixed-state books
+ * that still print a positive spread far from the tape.
+ */
+export function sanitizeOrderFlowDepthAgainstQuote(
+  orderFlow: ProjectXOrderFlowState,
+  quote: QuoteInfo | null | undefined,
+  tickSize: number,
+): ProjectXOrderFlowState {
+  const depth = orderFlow.observation?.depth;
+  if (!depth?.available || !quote || !Number.isFinite(tickSize) || tickSize <= 0) {
+    return orderFlow;
+  }
+  if (depth.best_bid === null || depth.best_ask === null) {
+    return orderFlow;
+  }
+  if (!Number.isFinite(quote.bestBid) || !Number.isFinite(quote.bestAsk)) {
+    return orderFlow;
+  }
+  const bidTicks = Math.abs(depth.best_bid - quote.bestBid) / tickSize;
+  const askTicks = Math.abs(depth.best_ask - quote.bestAsk) / tickSize;
+  if (bidTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS && askTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS) {
+    return orderFlow;
+  }
+  const next: ProjectXOrderFlowState = structuredClone(orderFlow);
+  const nextDepth = next.observation!.depth;
+  nextDepth.available = false;
+  nextDepth.unavailable_reason = "depth_bbo_diverges_from_quote";
+  nextDepth.imbalance_ratio = null;
+  const issues = next.observation!.issues;
+  if (!issues.includes("depth_bbo_diverges_from_quote")) {
+    issues.push("depth_bbo_diverges_from_quote");
+  }
+  return next;
+}
+
 export function canonicalDecisionState(
   snapshot: AccountVenueSnapshot,
   policy: TopstepPolicyState,
@@ -400,26 +440,31 @@ export function buildDecisionPacket(
   const remainingCapacity = Math.max(0, policy.maxContracts - snapshot.totalOpenContracts);
   const quote = snapshot.quote;
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
+  const publishedOrderFlow = sanitizeOrderFlowDepthAgainstQuote(
+    orderFlow,
+    quote,
+    snapshot.contract.tickSize,
+  );
   const snapshotHash = decisionStateHash(
     snapshot,
     policy,
     recovery,
     quality,
     marketObservation,
-    orderFlow,
+    publishedOrderFlow,
   );
   const defaultAction = snapshot.instrumentOpenContracts === 0 ? "NOTHING" : "HOLD";
   const gatewayMode = resolveGatewayMode(
     tradingMode,
     snapshot,
     risk,
-    orderFlow,
+    publishedOrderFlow,
     now,
   );
   const executionGates = buildExecutionGates(
     snapshot,
     risk,
-    orderFlow,
+    publishedOrderFlow,
     recovery,
     tradingMode,
     policy.maxContracts,
@@ -440,7 +485,7 @@ export function buildDecisionPacket(
   // Required issues only — depth is useful evidence, not an execution completeness gate.
   const requiredIssues = [...quality.issues];
   const optionalIssues: string[] = [];
-  const depthObservation = orderFlow.observation?.depth;
+  const depthObservation = publishedOrderFlow.observation?.depth;
   if (depthObservation?.available === false) {
     optionalIssues.push("order_flow_depth_unavailable");
   }
@@ -491,7 +536,7 @@ export function buildDecisionPacket(
       volume: quote?.volume ?? null,
     },
     market_observation: structuredClone(marketObservation),
-    order_flow: structuredClone(orderFlow),
+    order_flow: structuredClone(publishedOrderFlow),
     data_quality: {
       state_complete: requiredIssues.length === 0,
       issues: requiredIssues,

@@ -29,6 +29,8 @@ export interface DepthLevelObservation {
 
 export interface DepthBookObservation {
   available: boolean;
+  /** Present when available is false due to validation (crossed book, quote divergence, etc.). */
+  unavailable_reason: string | null;
   depth_levels_requested: number;
   reconstruction_basis: "since_latest_reset" | "bounded_window_without_reset";
   book_complete: false;
