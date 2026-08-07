@@ -59,6 +59,9 @@ describe("strategy-neutral market observation", () => {
     assert.equal(observation.timeframes[0]?.gaps[0]?.missing_bars, 1);
     assert.equal(observation.timeframes[0]?.latest_bar_partial, true);
     assert.equal(observation.timeframes[0]?.rejected_bars, 0);
+    assert.ok(
+      observation.timeframes[0]?.features?.progress_adjusted_volume_z_score_20 !== undefined,
+    );
   });
 
   it("emits descriptive features without a signal, score, or action", () => {

@@ -95,4 +95,17 @@ describe("snapshot data quality", () => {
     assert.ok(futureResult.issues.includes("quote_timestamp_future"));
     assert.ok(futureResult.issues.includes("account_state_timestamp_future"));
   });
+
+  it("clamps minor quote clock skew to zero and records an explicit issue", () => {
+    const skewed = snapshot();
+    skewed.quote = { ...skewed.quote!, timestamp: "2026-07-21T12:00:05.500Z" };
+    const result = evaluateSnapshotDataQuality(
+      skewed,
+      settings,
+      new Date("2026-07-21T12:00:05Z"),
+    );
+    assert.equal(result.quoteAgeMs, 0);
+    assert.ok(result.issues.includes("quote_clock_skew"));
+    assert.ok(!result.issues.includes("quote_timestamp_future"));
+  });
 });

@@ -39,6 +39,7 @@ export interface DescriptiveMarketFeatures {
   upper_wick_fraction: number | null;
   lower_wick_fraction: number | null;
   volume_z_score_20: number | null;
+  progress_adjusted_volume_z_score_20: number | null;
 }
 
 export interface TimeframeMarketObservation {

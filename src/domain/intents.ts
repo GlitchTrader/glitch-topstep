@@ -40,6 +40,20 @@ const AUDIT_FIELDS = new Set([
   "final_choice",
 ]);
 
+export class IntentParseError extends Error {
+  public readonly errorCode: string;
+  public readonly field?: string;
+  public readonly path?: string;
+
+  public constructor(errorCode: string, field?: string, path?: string) {
+    super(errorCode);
+    this.name = "IntentParseError";
+    this.errorCode = errorCode;
+    this.field = field;
+    this.path = path;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -47,7 +61,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function stringField(value: Record<string, unknown>, key: string, maxLength = 1000): string {
   const field = value[key];
   if (typeof field !== "string" || field.trim().length === 0 || field.length > maxLength) {
-    throw new Error(`invalid_string_field:${key}`);
+    throw new IntentParseError("invalid_string_field", key);
   }
   return field;
 }
@@ -58,33 +72,33 @@ function optionalNumber(value: Record<string, unknown>, key: string): number | u
     return undefined;
   }
   if (typeof field !== "number" || !Number.isFinite(field)) {
-    throw new Error(`invalid_number_field:${key}`);
+    throw new IntentParseError("invalid_number_field", key);
   }
   return field;
 }
 
 function parseAction(value: unknown): TradeAction {
   if (typeof value !== "string" || !TradeActions.includes(value as TradeAction)) {
-    throw new Error("invalid_action");
+    throw new IntentParseError("invalid_action", "action");
   }
   return value as TradeAction;
 }
 
 function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit {
   if (!isRecord(value)) {
-    throw new Error("decision_audit_invalid");
+    throw new IntentParseError("decision_audit_invalid", "decision_audit");
   }
   for (const key of Object.keys(value)) {
     if (!AUDIT_FIELDS.has(key)) {
-      throw new Error(`decision_audit_unknown_field:${key}`);
+      throw new IntentParseError("decision_audit_unknown_field", `decision_audit.${key}`, `decision_audit.${key}`);
     }
   }
   if (Object.keys(value).length !== AUDIT_FIELDS.size) {
-    throw new Error("decision_audit_incomplete");
+    throw new IntentParseError("decision_audit_incomplete", "decision_audit");
   }
   const finalChoice = parseAction(value.final_choice);
   if (finalChoice !== action) {
-    throw new Error("final_choice must equal action");
+    throw new IntentParseError("final_choice_must_equal_action", "decision_audit.final_choice", "decision_audit.final_choice");
   }
   return {
     bullCase: stringField(value, "bull_case", 500),
@@ -101,37 +115,37 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit 
 
 export function parseTradeIntent(input: unknown): TradeIntent {
   if (!isRecord(input)) {
-    throw new Error("intent_must_be_object");
+    throw new IntentParseError("intent_must_be_object");
   }
   for (const key of Object.keys(input)) {
     if (!CORE_FIELDS.has(key)) {
-      throw new Error(`unknown_intent_field:${key}`);
+      throw new IntentParseError("unknown_intent_field", key);
     }
   }
   if (input.schema_version !== "glitch.intent.v2") {
-    throw new Error("schema_version_invalid");
+    throw new IntentParseError("schema_version_invalid", "schema_version");
   }
 
   const intentId = stringField(input, "intent_id", 64);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(intentId)) {
-    throw new Error("intent_id_must_be_uuid");
+    throw new IntentParseError("intent_id_must_be_uuid", "intent_id");
   }
   const createdUtc = stringField(input, "created_utc", 64);
   if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(createdUtc) || !Number.isFinite(Date.parse(createdUtc))) {
-    throw new Error("created_utc_invalid");
+    throw new IntentParseError("created_utc_invalid", "created_utc");
   }
   const operatorProfile = stringField(input, "operator_profile", 128);
   if (operatorProfile !== GLITCH_TOPSTEP_OPERATOR_PROFILE) {
-    throw new Error("operator_profile_mismatch");
+    throw new IntentParseError("operator_profile_mismatch", "operator_profile");
   }
   const promptVersion = stringField(input, "prompt_version", 128);
   if (promptVersion !== GLITCH_TOPSTEP_PROMPT_VERSION) {
-    throw new Error("prompt_version_mismatch");
+    throw new IntentParseError("prompt_version_mismatch", "prompt_version");
   }
   const action = parseAction(input.action);
   const confidence = input.confidence;
   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
-    throw new Error("confidence_invalid");
+    throw new IntentParseError("confidence_invalid", "confidence");
   }
 
   const quantity = optionalNumber(input, "quantity");
@@ -143,34 +157,34 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   const targetIntentIdRaw = input.target_intent_id;
   const orderType = input.order_type;
   if (orderType !== undefined && orderType !== "MARKET") {
-    throw new Error("order_type_invalid");
+    throw new IntentParseError("order_type_invalid", "order_type");
   }
 
   let targetIntentId: string | undefined;
   if (targetIntentIdRaw !== undefined) {
     if (action !== "EXIT" && action !== "MOVE_STOP" && action !== "MOVE_TP") {
-      throw new Error("target_intent_id_only_allowed_on_exit_or_amendment");
+      throw new IntentParseError("target_intent_id_only_allowed_on_exit_or_amendment", "target_intent_id");
     }
     if (typeof targetIntentIdRaw !== "string") {
-      throw new Error("target_intent_id_invalid");
+      throw new IntentParseError("target_intent_id_invalid", "target_intent_id");
     }
     targetIntentId = stringField({ target_intent_id: targetIntentIdRaw }, "target_intent_id", 64);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetIntentId)) {
-      throw new Error("target_intent_id_must_be_uuid");
+      throw new IntentParseError("target_intent_id_must_be_uuid", "target_intent_id");
     }
   }
 
   const entry = action === "ENTER_LONG" || action === "ENTER_SHORT";
   if (entry) {
     if (!Number.isInteger(quantity) || (quantity ?? 0) < 1 || orderType !== "MARKET") {
-      throw new Error("entries require quantity, MARKET order_type, stop_loss, and take_profit_1");
+      throw new IntentParseError("entry_fields_invalid", "quantity");
     }
     if (stopLoss === undefined || stopLoss <= 0 || takeProfit1 === undefined || takeProfit1 <= 0) {
-      throw new Error("entries require quantity, MARKET order_type, stop_loss, and take_profit_1");
+      throw new IntentParseError("entry_fields_invalid", "stop_loss");
     }
   } else if (action === "MOVE_STOP") {
     if (newStopPrice === undefined || newStopPrice <= 0) {
-      throw new Error("MOVE_STOP requires new_stop_price");
+      throw new IntentParseError("move_stop_requires_new_stop_price", "new_stop_price");
     }
     if (
       quantity !== undefined
@@ -180,12 +194,12 @@ export function parseTradeIntent(input: unknown): TradeIntent {
       || newTakeProfit !== undefined
       || exitFraction !== undefined
     ) {
-      throw new Error("MOVE_STOP cannot carry unrelated entry or exit fields");
+      throw new IntentParseError("move_stop_extra_fields");
     }
   } else if (action === "MOVE_TP") {
     const targetPrice = newTakeProfit ?? takeProfit1;
     if (targetPrice === undefined || targetPrice <= 0) {
-      throw new Error("MOVE_TP requires new_take_profit or take_profit_1");
+      throw new IntentParseError("move_tp_requires_target_price", "new_take_profit");
     }
     if (
       quantity !== undefined
@@ -194,23 +208,23 @@ export function parseTradeIntent(input: unknown): TradeIntent {
       || newStopPrice !== undefined
       || exitFraction !== undefined
     ) {
-      throw new Error("MOVE_TP cannot carry unrelated entry or exit fields");
+      throw new IntentParseError("move_tp_extra_fields");
     }
   } else if (action === "EXIT") {
     if (orderType !== undefined || stopLoss !== undefined || takeProfit1 !== undefined) {
-      throw new Error("EXIT cannot carry entry fields");
+      throw new IntentParseError("exit_entry_fields_forbidden");
     }
     if (newStopPrice !== undefined || newTakeProfit !== undefined) {
-      throw new Error("EXIT cannot carry amendment fields");
+      throw new IntentParseError("exit_amendment_fields_forbidden");
     }
     if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) {
-      throw new Error("EXIT quantity must be a positive integer");
+      throw new IntentParseError("exit_quantity_invalid", "quantity");
     }
     if (exitFraction !== undefined && (exitFraction <= 0 || exitFraction > 1)) {
-      throw new Error("EXIT exit_fraction must be in (0, 1]");
+      throw new IntentParseError("exit_fraction_invalid", "exit_fraction");
     }
     if (quantity !== undefined && exitFraction !== undefined) {
-      throw new Error("EXIT cannot specify both quantity and exit_fraction");
+      throw new IntentParseError("exit_quantity_and_fraction_conflict");
     }
   } else if (
     quantity !== undefined
@@ -221,7 +235,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     || newTakeProfit !== undefined
     || exitFraction !== undefined
   ) {
-    throw new Error("non-entry actions cannot carry entry fields in the initial direct gateway");
+    throw new IntentParseError("non_entry_fields_forbidden");
   }
 
   const resolvedTakeProfit = action === "MOVE_TP"

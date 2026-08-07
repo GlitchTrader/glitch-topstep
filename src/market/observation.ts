@@ -81,6 +81,11 @@ export function findMarketBarGaps(
 
 export function calculateDescriptiveMarketFeatures(
   bars: AcceptedBar[],
+  partialContext?: {
+    latestBarPartial: boolean;
+    timeframeMinutes: MarketObservationTimeframeMinutes;
+    nowMs: number;
+  },
 ): DescriptiveMarketFeatures {
   const latest = bars.at(-1)!;
   const previous = bars.at(-2) ?? null;
@@ -132,7 +137,31 @@ export function calculateDescriptiveMarketFeatures(
       ? null
       : (Math.min(latest.open, latest.close) - latest.low) / range,
     volume_z_score_20: zScore(bars.map((bar) => bar.volume), 20),
+    progress_adjusted_volume_z_score_20: partialContext?.latestBarPartial
+      ? progressAdjustedVolumeZScore(
+          bars,
+          partialContext.timeframeMinutes,
+          partialContext.nowMs,
+        )
+      : null,
   };
+}
+
+function progressAdjustedVolumeZScore(
+  bars: AcceptedBar[],
+  timeframeMinutes: MarketObservationTimeframeMinutes,
+  nowMs: number,
+): number | null {
+  const latest = bars.at(-1);
+  if (!latest) {
+    return null;
+  }
+  const barMs = timeframeMinutes * MINUTE_MS;
+  const progress = Math.max((nowMs - latest.epochMs) / barMs, 0.05);
+  const adjustedVolumes = bars.map((bar, index) => (
+    index === bars.length - 1 ? bar.volume / progress : bar.volume
+  ));
+  return zScore(adjustedVolumes, 20);
 }
 
 function observeTimeframe(
@@ -142,17 +171,25 @@ function observeTimeframe(
 ): TimeframeMarketObservation {
   const accepted = normalizeMarketBars(input);
   const latest = accepted.at(-1) ?? null;
+  const latestBarPartial = latest === null
+    ? false
+    : latest.epochMs + timeframeMinutes * MINUTE_MS > nowMs;
+  const features = latest === null
+    ? null
+    : calculateDescriptiveMarketFeatures(accepted, {
+        latestBarPartial,
+        timeframeMinutes,
+        nowMs,
+      });
   return {
     timeframe_minutes: timeframeMinutes,
     bars_received: input.length,
     bars_accepted: accepted.length,
     rejected_bars: input.length - accepted.length,
     latest_bar_utc: latest?.timestamp ?? null,
-    latest_bar_partial: latest === null
-      ? false
-      : latest.epochMs + timeframeMinutes * MINUTE_MS > nowMs,
+    latest_bar_partial: latestBarPartial,
     gaps: findMarketBarGaps(accepted, timeframeMinutes),
-    features: latest === null ? null : calculateDescriptiveMarketFeatures(accepted),
+    features,
   };
 }
 

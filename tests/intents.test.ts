@@ -61,7 +61,17 @@ describe("Glitch intent contract", () => {
     );
     const mismatch = baseIntent();
     mismatch.decision_audit.final_choice = "HOLD";
-    assert.throws(() => parseTradeIntent(mismatch), /final_choice must equal action/);
+    assert.throws(() => parseTradeIntent(mismatch), /final_choice_must_equal_action/);
+  });
+
+  it("exposes structured field metadata on parse errors", () => {
+    try {
+      parseTradeIntent({ ...baseIntent(), prompt_version: "glitch-topstep-v1" });
+      assert.fail("expected prompt_version_mismatch");
+    } catch (error) {
+      assert.equal((error as { errorCode?: string }).errorCode, "prompt_version_mismatch");
+      assert.equal((error as { field?: string }).field, "prompt_version");
+    }
   });
 
   it("rejects unprotected entries", () => {
@@ -70,7 +80,7 @@ describe("Glitch intent contract", () => {
       ...input,
       action: "ENTER_LONG",
       decision_audit: { ...input.decision_audit, final_choice: "ENTER_LONG" },
-    }), /entries require/);
+    }), /entry_fields_invalid/);
   });
 
   it("accepts MOVE_STOP and MOVE_TP amendment intents", () => {

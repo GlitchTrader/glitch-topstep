@@ -4,6 +4,7 @@ import type { MarketObservationState } from "../domain/market-observation.js";
 import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type {
   AccountVenueSnapshot,
+  QuoteInfo,
   RiskSettings,
   TopstepPolicyState,
   TradeAction,
@@ -87,6 +88,8 @@ export interface DirectDecisionPacket {
     session_open: number | null;
     session_high: number | null;
     session_low: number | null;
+    session_levels_reliable: boolean;
+    session_levels_note?: string;
     volume: number | null;
   };
   market_observation: MarketObservationState;
@@ -429,6 +432,12 @@ export function buildDecisionPacket(
     remainingCapacity,
     exitPermitted,
   );
+  const sessionLevels = resolveSessionMarketLevels(quote);
+  const packetIssues = [...quality.issues];
+  const depthObservation = orderFlow.observation?.depth;
+  if (depthObservation?.available === false && !packetIssues.includes("order_flow_depth_unavailable")) {
+    packetIssues.push("order_flow_depth_unavailable");
+  }
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -468,16 +477,18 @@ export function buildDecisionPacket(
       spread_ticks: quote
         ? (quote.bestAsk - quote.bestBid) / snapshot.contract.tickSize
         : null,
-      session_open: quote?.open ?? null,
-      session_high: quote?.high ?? null,
-      session_low: quote?.low ?? null,
+      session_open: sessionLevels.session_open,
+      session_high: sessionLevels.session_high,
+      session_low: sessionLevels.session_low,
+      session_levels_reliable: sessionLevels.reliable,
+      ...(sessionLevels.note === undefined ? {} : { session_levels_note: sessionLevels.note }),
       volume: quote?.volume ?? null,
     },
     market_observation: structuredClone(marketObservation),
     order_flow: structuredClone(orderFlow),
     data_quality: {
-      state_complete: quality.stateComplete,
-      issues: [...quality.issues],
+      state_complete: packetIssues.length === 0,
+      issues: packetIssues,
       quote_age_ms: quality.quoteAgeMs,
       state_age_ms: quality.stateAgeMs,
       generation: snapshot.operational.generation,
@@ -552,5 +563,43 @@ export function buildDecisionPacket(
         final_choice: defaultAction,
       },
     },
+  };
+}
+
+function resolveSessionMarketLevels(quote: QuoteInfo | null): {
+  session_open: number | null;
+  session_high: number | null;
+  session_low: number | null;
+  reliable: boolean;
+  note?: string;
+} {
+  if (!quote) {
+    return {
+      session_open: null,
+      session_high: null,
+      session_low: null,
+      reliable: false,
+    };
+  }
+  const last = quote.lastPrice;
+  const open = quote.open;
+  const high = quote.high;
+  const low = quote.low;
+  let reliable = true;
+  if (high === low && high === last) {
+    reliable = false;
+  } else if (high === low && high === open && open === last) {
+    reliable = false;
+  }
+  return {
+    session_open: open,
+    session_high: reliable ? high : null,
+    session_low: reliable ? low : null,
+    reliable,
+    ...(reliable
+      ? {}
+      : {
+          note: "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features",
+        }),
   };
 }

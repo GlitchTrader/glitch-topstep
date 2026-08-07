@@ -250,7 +250,11 @@ function buildDepthObservation(input: {
   const bidVolume = bids.reduce((total, level) => total + level.current_volume, 0);
   const askVolume = asks.reduce((total, level) => total + level.current_volume, 0);
   const totalVolume = bidVolume + askVolume;
+  const available = bestBid !== null
+    && bestAsk !== null
+    && (bidVolume > 0 || askVolume > 0);
   return {
+    available,
     depth_levels_requested: input.depthLevels,
     reconstruction_basis: input.latestResetSequence === null
       ? "bounded_window_without_reset"

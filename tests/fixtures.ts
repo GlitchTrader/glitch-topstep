@@ -51,6 +51,7 @@ export function orderFlowWithTrades(tradeCount: number): ProjectXOrderFlowState 
       ],
       depth: {
         depth_levels_requested: 10,
+        available: true,
         reconstruction_basis: "bounded_window_without_reset",
         book_complete: false,
         latest_reset_sequence: null,
