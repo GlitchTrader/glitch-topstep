@@ -1,7 +1,9 @@
 # Inicia o gateway Glitch Topstep (shadow por defeito).
 # Por defeito: processo node oculto com logs em data/. Use -Foreground para ver output nesta consola.
+# -SkipBuild: usado no logon (task GlitchTopstep_Gateway); exige dist/ já compilado.
 param(
-    [switch]$Foreground
+    [switch]$Foreground,
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,7 +26,13 @@ if (-not (Test-Path "node_modules")) {
     npm install
 }
 
-npm run build
+if ($SkipBuild) {
+    if (-not (Test-Path "dist\src\index.js")) {
+        Write-Error "dist/src/index.js missing; run without -SkipBuild once to compile."
+    }
+} else {
+    npm run build
+}
 
 $nodeArgs = @("--enable-source-maps", "dist/src/index.js")
 $port = if ($env:GLITCH_LOCAL_PORT) { [int]$env:GLITCH_LOCAL_PORT } else { 8790 }
