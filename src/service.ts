@@ -24,7 +24,7 @@ import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-owners
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
 import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
-import { TradeOutcomePublisher, isIncompleteOutcome } from "./learning/trade-outcome-publisher.js";
+import { TradeOutcomePublisher, isIncompleteOutcome, outcomeSharesForeignClosingFill } from "./learning/trade-outcome-publisher.js";
 import {
   latchProvenProtectionFromReceipt,
   preferRicherClosedTranches,
@@ -739,7 +739,11 @@ export class GlitchTopstepService {
       .filter((tranche) => tranche.filled_qty > 0);
     const incomplete = filled.filter((tranche) => {
       const existing = this.tradeOutcomeStore.get(tranche.intent_id);
-      return existing !== undefined && isIncompleteOutcome(existing);
+      if (existing === undefined) {
+        return false;
+      }
+      return isIncompleteOutcome(existing)
+        || outcomeSharesForeignClosingFill(existing, this.tradeOutcomeStore);
     });
     if (incomplete.length === 0) {
       return;

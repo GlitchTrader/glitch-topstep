@@ -61,7 +61,7 @@ export interface TradeOutcomeV1 {
   };
 }
 
-export const TRADE_OUTCOME_PUBLISHER_VERSION = "0.1.3-r3-03c";
+export const TRADE_OUTCOME_PUBLISHER_VERSION = "0.1.3-r3-03d";
 
 export function tradeOutcomeId(intentId: string): string {
   return `outcome:${intentId}`;
