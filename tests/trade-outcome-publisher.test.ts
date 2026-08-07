@@ -78,6 +78,10 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
     tickValue: 0.5,
     maeUsd: 8,
     mfeUsd: 50,
+    decisionLinks: new Map([[
+      "774b92f8-61a2-5c3a-b68e-e7f722bf1cf0",
+      { packet_id: "packet-1", snapshot_hash: "snap-1" },
+    ]]),
   });
 
   assert.equal(published.length, 1);
@@ -92,6 +96,8 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
   assert.equal(published[0]?.side, "long");
   assert.ok((published[0]?.initial_risk_usd ?? 0) > 0);
   assert.ok(published[0]?.r_multiple !== null && published[0]?.r_multiple !== undefined);
+  assert.equal(published[0]?.packet_id, "packet-1");
+  assert.equal(published[0]?.snapshot_hash, "snap-1");
 
   const file = await readFile(join(dir, "trade-outcomes.jsonl"), "utf8");
   assert.match(file, /774b92f8-61a2-5c3a-b68e-e7f722bf1cf0/);

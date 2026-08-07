@@ -167,6 +167,30 @@ export class SqliteExecutionStore {
     return row ? this.parseJson<T>(row.payload_json, "execution_receipt") : null;
   }
 
+  public decisionLinkForIntent(intentId: string): {
+    snapshot_hash: string;
+    packet_id: string | null;
+  } | null {
+    const intent = this.database.prepare(`
+      SELECT snapshot_hash
+      FROM intents
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    if (!intent) {
+      return null;
+    }
+    const snapshotHash = String(intent.snapshot_hash);
+    const packet = this.database.prepare(`
+      SELECT packet_id
+      FROM issued_packets
+      WHERE snapshot_hash = ?
+    `).get(snapshotHash) as SqlRow | undefined;
+    return {
+      snapshot_hash: snapshotHash,
+      packet_id: packet ? String(packet.packet_id) : null,
+    };
+  }
+
   public pendingReceiptIntentIds(): string[] {
     const rows = this.database.prepare(`
       SELECT intent_id

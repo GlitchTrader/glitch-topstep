@@ -26,6 +26,8 @@ import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { TradeOutcomePublisher, isIncompleteOutcome } from "./learning/trade-outcome-publisher.js";
 import {
+  latchProvenProtectionFromReceipt,
+  preferRicherClosedTranches,
   projectedInstrumentOpenContracts,
   shouldPublishTradeOutcomesOnFlat,
   tranchesForClosedPosition,
@@ -626,6 +628,11 @@ export class GlitchTopstepService {
           payload: event,
         });
       }
+      if (afterOpen > 0) {
+        // Bracket confirmation updates ownership; refresh cache after receipts so stream-flat
+        // can keep proven SL/TP ids when Auto OCO removes working brackets on exit.
+        this.refreshCachedOpenTranches(afterOpen);
+      }
       const liveSnapshot = this.state.buildSnapshot(
         this.config.scope.accountId,
         this.config.scope.contractId,
@@ -688,16 +695,15 @@ export class GlitchTopstepService {
   }
 
   private resolveClosedTranchesForFlat(beforeOpen: number): TrancheView[] {
-    if (beforeOpen > 0 && this.ownershipService) {
-      return tranchesForClosedPosition(this.ownershipService.current(beforeOpen).tranches);
-    }
-    if (this.cachedOpenTranches.length > 0) {
-      return tranchesForClosedPosition(this.cachedOpenTranches);
-    }
-    if (this.ownershipService) {
-      return tranchesForClosedPosition(this.ownershipService.current(0).tranches);
-    }
-    return [];
+    const live = this.ownershipService
+      ? tranchesForClosedPosition(
+        this.ownershipService.current(beforeOpen > 0 ? beforeOpen : 0).tranches,
+      )
+      : [];
+    const cached = this.cachedOpenTranches.length > 0
+      ? tranchesForClosedPosition(this.cachedOpenTranches)
+      : [];
+    return preferRicherClosedTranches(live, cached);
   }
 
   private refreshCachedOpenTranches(openContracts: number): void {
@@ -705,10 +711,23 @@ export class GlitchTopstepService {
       return;
     }
     const active = this.ownershipService.current(openContracts).tranches
-      .filter((tranche) => tranche.remaining_qty > 0);
+      .filter((tranche) => tranche.remaining_qty > 0)
+      .map((tranche) => this.enrichClosedTrancheForOutcome(tranche));
     if (active.length > 0) {
-      this.cachedOpenTranches = [...active];
+      this.cachedOpenTranches = preferRicherClosedTranches(active, this.cachedOpenTranches);
     }
+  }
+
+  private enrichClosedTrancheForOutcome(tranche: TrancheView): TrancheView {
+    const receipt = this.executionStore.receiptForIntent<{
+      code?: string;
+      detail?: string | null;
+    }>(tranche.intent_id);
+    const intent = this.executionStore.registeredIntentPayload(tranche.intent_id);
+    return latchProvenProtectionFromReceipt(tranche, receipt, {
+      stop: intent?.stopLoss ?? null,
+      target: intent?.takeProfit1 ?? null,
+    });
   }
 
   private async retryIncompleteTradeOutcomes(exitUtc: string): Promise<void> {
@@ -743,18 +762,27 @@ export class GlitchTopstepService {
         this.config.scope.contractId,
       );
       const excursion = this.tradeExcursion.excursionUsd();
+      const enriched = tranches.map((tranche) => this.enrichClosedTrancheForOutcome(tranche));
+      const decisionLinks = new Map<string, { packet_id: string | null; snapshot_hash: string | null }>();
+      for (const tranche of enriched) {
+        const link = this.executionStore.decisionLinkForIntent(tranche.intent_id);
+        if (link) {
+          decisionLinks.set(tranche.intent_id, link);
+        }
+      }
       const published = await this.tradeOutcomePublisher.publishClosedTranches({
         accountId: this.config.scope.accountId,
         accountName: this.config.scope.accountName,
         contractId: this.config.scope.contractId,
         instrument: this.config.scope.instrument,
-        tranches: [...tranches],
+        tranches: enriched,
         exitUtc,
         trigger,
         tickSize: snapshot.contract.tickSize,
         tickValue: snapshot.contract.tickValue,
         maeUsd: excursion?.mae_usd ?? null,
         mfeUsd: excursion?.mfe_usd ?? null,
+        decisionLinks,
       });
       if (published.length > 0) {
         await this.ledger.append({
