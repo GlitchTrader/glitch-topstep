@@ -18,7 +18,7 @@ import {
 } from "./provider-event-recorder.js";
 import {
   parseAccount,
-  parseDepth,
+  parseDepthBatch,
   parseMarketTrade,
   parseOrder,
   parsePosition,
@@ -237,19 +237,28 @@ export class ProjectXRealtimeClient {
         this.payloadFault("market", error);
         return;
       }
-      this.recordAndApply(
-        "market",
-        "depth",
-        { contractId: resolved.contractId, payload: resolved.payload },
-        () => parseDepth(resolved.contractId, resolved.payload),
-        (value) => ({
-          accountId: null,
-          contractId: value.contractId,
-          providerEntityId: `${value.contractId}:${value.timestamp}:${value.type}:${value.price}`,
-          providerTimestampUtc: value.timestamp,
-        }),
-        (value, receivedUtc) => this.state.applyDepth(value, receivedUtc),
-      );
+      let depths: ReturnType<typeof parseDepthBatch>;
+      try {
+        depths = parseDepthBatch(resolved.contractId, resolved.payload);
+      } catch (error) {
+        this.payloadFault("market", error);
+        return;
+      }
+      for (const depth of depths) {
+        this.recordAndApply(
+          "market",
+          "depth",
+          { contractId: resolved.contractId, payload: depth },
+          () => depth,
+          (value) => ({
+            accountId: null,
+            contractId: value.contractId,
+            providerEntityId: `${value.contractId}:${value.timestamp}:${value.type}:${value.price}`,
+            providerTimestampUtc: value.timestamp,
+          }),
+          (value, receivedUtc) => this.state.applyDepth(value, receivedUtc),
+        );
+      }
     });
   }
 

@@ -95,8 +95,12 @@ export interface DirectDecisionPacket {
   market_observation: MarketObservationState;
   order_flow: ProjectXOrderFlowState;
   data_quality: {
+    /** Venue/execution-critical completeness (streams, quote/state age). Matches execution gate state_complete. */
     state_complete: boolean;
+    /** Required-quality defects that make state_complete false. */
     issues: string[];
+    /** Non-blocking evidence gaps (e.g. DOM depth). Must not flip state_complete. */
+    optional_issues: string[];
     quote_age_ms: number | null;
     state_age_ms: number | null;
     generation: number;
@@ -433,10 +437,12 @@ export function buildDecisionPacket(
     exitPermitted,
   );
   const sessionLevels = resolveSessionMarketLevels(quote);
-  const packetIssues = [...quality.issues];
+  // Required issues only — depth is useful evidence, not an execution completeness gate.
+  const requiredIssues = [...quality.issues];
+  const optionalIssues: string[] = [];
   const depthObservation = orderFlow.observation?.depth;
-  if (depthObservation?.available === false && !packetIssues.includes("order_flow_depth_unavailable")) {
-    packetIssues.push("order_flow_depth_unavailable");
+  if (depthObservation?.available === false) {
+    optionalIssues.push("order_flow_depth_unavailable");
   }
 
   return {
@@ -487,8 +493,9 @@ export function buildDecisionPacket(
     market_observation: structuredClone(marketObservation),
     order_flow: structuredClone(orderFlow),
     data_quality: {
-      state_complete: packetIssues.length === 0,
-      issues: packetIssues,
+      state_complete: requiredIssues.length === 0,
+      issues: requiredIssues,
+      optional_issues: optionalIssues,
       quote_age_ms: quality.quoteAgeMs,
       state_age_ms: quality.stateAgeMs,
       generation: snapshot.operational.generation,

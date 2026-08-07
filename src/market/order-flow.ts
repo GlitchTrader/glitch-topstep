@@ -100,12 +100,12 @@ export function buildProjectXOrderFlowObservation(
       continue;
     }
     if (DOM_ASK_TYPES.has(depth.type)) {
-      applyDepthLevel(askLevels, depth.price, depth.currentVolume);
+      applyDepthLevel(askLevels, depth.price, restingDepthSize(depth));
       depthEventsApplied += 1;
       continue;
     }
     if (DOM_BID_TYPES.has(depth.type)) {
-      applyDepthLevel(bidLevels, depth.price, depth.currentVolume);
+      applyDepthLevel(bidLevels, depth.price, restingDepthSize(depth));
       depthEventsApplied += 1;
       continue;
     }
@@ -283,6 +283,20 @@ function applyDepthLevel(levels: Map<number, number>, price: number, currentVolu
   } else {
     levels.set(price, currentVolume);
   }
+}
+
+/**
+ * Live BestBid/BestAsk updates often arrive with currentVolume=0 and the resting size in volume.
+ * Prefer currentVolume when positive; otherwise fall back to volume before treating as a delete.
+ */
+function restingDepthSize(depth: MarketDepthInfo): number {
+  if (depth.currentVolume > 0) {
+    return depth.currentVolume;
+  }
+  if (depth.volume > 0) {
+    return depth.volume;
+  }
+  return 0;
 }
 
 function marketTradeFromEvidence(value: unknown): MarketTradeInfo | null {

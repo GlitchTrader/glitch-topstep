@@ -412,6 +412,18 @@ export function parseMarketTrade(contractId: string, input: unknown): MarketTrad
 
 export function parseDepth(contractId: string, input: unknown): MarketDepthInfo {
   const normalized = normalizeMarketPayload(contractId, input, "depth");
+  return parseDepthRecord(normalized);
+}
+
+/**
+ * ProjectX often batches several DomType updates in one GatewayDepth push.
+ * Collapsing to the first record drops sibling BestBid/BestAsk and empties the book.
+ */
+export function parseDepthBatch(contractId: string, input: unknown): MarketDepthInfo[] {
+  return expandDepthPayloadRecords(contractId, input).map((record) => parseDepthRecord(record));
+}
+
+function parseDepthRecord(normalized: Record<string, unknown>): MarketDepthInfo {
   return {
     contractId: requiredString(normalized, "contractId"),
     timestamp: requiredString(normalized, "timestamp"),
@@ -420,6 +432,54 @@ export function parseDepth(contractId: string, input: unknown): MarketDepthInfo 
     volume: coercedNumber(normalized, "volume"),
     currentVolume: coercedNumber(normalized, "currentVolume"),
   };
+}
+
+export function expandDepthPayloadRecords(
+  contractId: string,
+  payload: unknown,
+): Record<string, unknown>[] {
+  let value = payload;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value) as unknown;
+    } catch {
+      throw new Error("depth_not_object");
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length >= 2 && typeof value[0] === "string" && isRecord(value[1])) {
+      return expandDepthPayloadRecords(value[0], value[1]);
+    }
+    const records = value.filter((entry): entry is Record<string, unknown> => isRecord(entry));
+    if (records.length > 0) {
+      return records.map((record) => ({ contractId, ...record }));
+    }
+    const mapped = mapPrimitiveMarketArray(value, "depth");
+    if (mapped) {
+      return [{ contractId, ...mapped }];
+    }
+    throw new Error("depth_not_object");
+  }
+
+  if (!isRecord(value)) {
+    throw new Error("depth_not_object");
+  }
+
+  const nested = value.data ?? value.payload;
+  if (Array.isArray(nested)) {
+    const records = nested.filter((entry): entry is Record<string, unknown> => isRecord(entry));
+    if (records.length > 0) {
+      const baseContract = typeof value.contractId === "string" ? value.contractId : contractId;
+      return records.map((record) => ({ contractId: baseContract, ...record }));
+    }
+  }
+  if (isRecord(nested)) {
+    const baseContract = typeof value.contractId === "string" ? value.contractId : contractId;
+    return [{ contractId: baseContract, ...nested }];
+  }
+
+  return [{ contractId, ...stripEnvelopeKeys(value) }];
 }
 
 export function parseBar(input: unknown): BarInfo {

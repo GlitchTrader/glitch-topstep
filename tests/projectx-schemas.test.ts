@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   parseDepth,
+  parseDepthBatch,
   parseMarketTrade,
   parseOrder,
   parsePosition,
@@ -137,6 +138,27 @@ describe("market stream payload normalization", () => {
       },
     ]);
     assert.equal(sparseBatch.price, 28010);
+
+    const expanded = parseDepthBatch(CONTRACT, {
+      contractId: CONTRACT,
+      payload: [{
+        timestamp: "2026-07-31T19:18:30.3489591+00:00",
+        type: 4,
+        price: 28464.25,
+        volume: 1,
+        currentVolume: 0,
+      }, {
+        timestamp: "2026-07-31T19:18:30.3489849+00:00",
+        type: 3,
+        price: 28464.75,
+        volume: 8,
+        currentVolume: 0,
+      }],
+    });
+    assert.equal(expanded.length, 2);
+    assert.equal(expanded[0]?.type, 4);
+    assert.equal(expanded[1]?.type, 3);
+    assert.equal(expanded[1]?.volume, 8);
   });
 });
 
