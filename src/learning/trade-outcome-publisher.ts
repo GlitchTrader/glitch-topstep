@@ -42,6 +42,7 @@ export interface PublishTradeOutcomeInput {
   mfeUsd?: number | null;
   hadExitIntentByTranche?: ReadonlyMap<string, boolean>;
   bufferImpactUsd?: number | null;
+  decisionLinks?: ReadonlyMap<string, { packet_id: string | null; snapshot_hash: string | null }>;
 }
 
 export interface TradeOutcomePublisherOptions {
@@ -213,8 +214,12 @@ export class TradeOutcomePublisher {
       r_multiple: rMultiple(realized, initialRisk),
       buffer_impact_usd: input.bufferImpactUsd ?? null,
       protection_confirmed: protectionConfirmed,
-      packet_id: existing?.packet_id ?? null,
-      snapshot_hash: existing?.snapshot_hash ?? null,
+      packet_id: input.decisionLinks?.get(tranche.intent_id)?.packet_id
+        ?? existing?.packet_id
+        ?? null,
+      snapshot_hash: input.decisionLinks?.get(tranche.intent_id)?.snapshot_hash
+        ?? existing?.snapshot_hash
+        ?? null,
       evidence: {
         publisher_version: TRADE_OUTCOME_PUBLISHER_VERSION,
         trade_ids: attributed.map((trade) => trade.id),
