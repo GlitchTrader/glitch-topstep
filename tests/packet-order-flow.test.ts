@@ -108,6 +108,7 @@ it("changes packet identity with order flow but never turns flow into an executi
         windows: [],
         depth: {
           depth_levels_requested: 10,
+          available: true,
           reconstruction_basis: "bounded_window_without_reset",
           book_complete: false,
           latest_reset_sequence: null,

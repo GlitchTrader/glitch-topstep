@@ -436,4 +436,32 @@ describe("execution coordinator serialization", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("returns structured field and error metadata for schema-invalid intents", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-invalid-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        { placeOrder: async () => 9001, closePosition: async () => undefined } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => snapshot(),
+        () => null,
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        ...intent("00000000-0000-4000-8000-000000000701", "snapshot", new Date().toISOString()),
+        prompt_version: "glitch-topstep-v1",
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "intent_schema_invalid");
+      assert.equal(receipt.field, "prompt_version");
+      assert.equal(receipt.error, "prompt_version_mismatch");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

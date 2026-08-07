@@ -28,6 +28,7 @@ export interface DepthLevelObservation {
 }
 
 export interface DepthBookObservation {
+  available: boolean;
   depth_levels_requested: number;
   reconstruction_basis: "since_latest_reset" | "bounded_window_without_reset";
   book_complete: false;

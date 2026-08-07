@@ -104,6 +104,7 @@ describe("ProjectX order flow", () => {
     });
 
     assert.equal(observation.depth.reconstruction_basis, "since_latest_reset");
+    assert.equal(observation.depth.available, true);
     assert.equal(observation.depth.book_complete, false);
     assert.equal(observation.depth.latest_reset_sequence, 2);
     assert.deepEqual(observation.depth.bid_levels, [
@@ -138,5 +139,6 @@ describe("ProjectX order flow", () => {
     assert.ok(observation.issues.includes("input_not_strictly_sequence_ordered"));
     assert.ok(observation.issues.includes("market_evidence_does_not_cover_full_lookback"));
     assert.ok(observation.issues.includes("market_evidence_query_truncated"));
+    assert.equal(observation.depth.available, false);
   });
 });

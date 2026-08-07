@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../config.js";
-import { parseTradeIntent } from "../domain/intents.js";
+import { parseTradeIntent, IntentParseError } from "../domain/intents.js";
 import type { AccountVenueSnapshot, TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
@@ -44,6 +44,9 @@ export interface ExecutionReceipt {
   code: string;
   order_id?: number;
   detail?: string;
+  field?: string;
+  error?: string;
+  path?: string;
   /** ISO timestamp when an open position was first observed for this entry. */
   fill_observed_utc?: string;
 }
@@ -82,6 +85,17 @@ export class ExecutionCoordinator {
     try {
       intent = parseTradeIntent(input);
     } catch (error) {
+      if (error instanceof IntentParseError) {
+        return this.record({
+          intentId: null,
+          status: "rejected",
+          code: "intent_schema_invalid",
+          detail: error.message,
+          field: error.field,
+          error: error.errorCode,
+          path: error.path,
+        });
+      }
       return this.record({
         intentId: null,
         status: "rejected",
@@ -1085,6 +1099,9 @@ export class ExecutionCoordinator {
     status: ExecutionReceipt["status"];
     code: string;
     detail?: string;
+    field?: string;
+    error?: string;
+    path?: string;
   }): ExecutionReceipt {
     return {
       schema_version: "glitch.direct.execution_receipt.v1",
@@ -1095,6 +1112,9 @@ export class ExecutionCoordinator {
       status: input.status,
       code: input.code,
       ...(input.detail === undefined ? {} : { detail: input.detail }),
+      ...(input.field === undefined ? {} : { field: input.field }),
+      ...(input.error === undefined ? {} : { error: input.error }),
+      ...(input.path === undefined ? {} : { path: input.path }),
     };
   }
 
@@ -1104,6 +1124,9 @@ export class ExecutionCoordinator {
     code: string;
     orderId?: number;
     detail?: string;
+    field?: string;
+    error?: string;
+    path?: string;
   }): Promise<ExecutionReceipt> {
     const receipt: ExecutionReceipt = {
       schema_version: "glitch.direct.execution_receipt.v1",
@@ -1115,6 +1138,9 @@ export class ExecutionCoordinator {
       code: input.code,
       ...(input.orderId === undefined ? {} : { order_id: input.orderId }),
       ...(input.detail === undefined ? {} : { detail: input.detail }),
+      ...(input.field === undefined ? {} : { field: input.field }),
+      ...(input.error === undefined ? {} : { error: input.error }),
+      ...(input.path === undefined ? {} : { path: input.path }),
     };
     this.store.recordReceipt({ ...receipt });
     maybeKill("after_receipt_before_jsonl");

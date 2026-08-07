@@ -21,7 +21,7 @@ export function evaluateSnapshotDataQuality(
     issues.add("venue_state_incomplete");
   }
 
-  const quoteAgeMs = snapshot.quote
+  let quoteAgeMs = snapshot.quote
     ? ageMilliseconds(snapshot.quote.timestamp, now)
     : null;
   const stateAgeMs = ageMilliseconds(snapshot.capturedAt, now);
@@ -31,6 +31,10 @@ export function evaluateSnapshotDataQuality(
       issues.add("quote_timestamp_invalid");
     } else if (quoteAgeMs < -FUTURE_TOLERANCE_MS) {
       issues.add("quote_timestamp_future");
+      quoteAgeMs = 0;
+    } else if (quoteAgeMs < 0) {
+      issues.add("quote_clock_skew");
+      quoteAgeMs = 0;
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
     }
