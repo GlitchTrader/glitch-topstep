@@ -95,9 +95,9 @@ describe("ProjectX order flow", () => {
         event(1, "depth", depth(2, 100, 20)),
         event(2, "depth", depth(6, 0, 0)),
         event(3, "depth", depth(2, 100, 10)),
-        event(4, "depth", depth(4, 99.75, 5)),
+        event(4, "depth", depth(2, 99.75, 5)),
         event(5, "depth", depth(1, 100.25, 8)),
-        event(6, "depth", depth(3, 100.5, 4)),
+        event(6, "depth", depth(1, 100.5, 4)),
         event(7, "depth", depth(2, 99.75, 0)),
         event(8, "depth", depth(5, 100.25, 1)),
       ],
@@ -168,16 +168,36 @@ describe("ProjectX order flow", () => {
       generatedAt: GENERATED,
       coverageStartUtc: "2026-07-21T11:59:00Z",
       events: [
+        // Plain Bid/Ask levels planted on the wrong sides (not Best* pointers).
         event(1, "depth", depth(2, 100.5, 10)),
         event(2, "depth", depth(1, 100, 8)),
       ],
     });
+    // Bid@100.5 then Ask@100: pruneCrossedLevels clears the locked/crossed side.
     assert.equal(observation.depth.available, false);
-    assert.equal(observation.depth.unavailable_reason, "invalid_depth_geometry");
-    assert.equal(observation.depth.best_bid, 100.5);
-    assert.equal(observation.depth.best_ask, 100);
-    assert.ok((observation.depth.spread_ticks ?? 0) < 0);
-    assert.equal(observation.depth.imbalance_ratio, null);
-    assert.ok(observation.issues.includes("invalid_depth_geometry"));
+    assert.equal(observation.depth.best_bid, null);
+    assert.equal(observation.depth.best_ask, null);
+  });
+
+  it("prunes stale BestBid/BestAsk trail so the book does not cross as price moves", () => {
+    const observation = buildProjectXOrderFlowObservation({
+      contractId: CONTRACT,
+      tickSize: 0.25,
+      generatedAt: GENERATED,
+      coverageStartUtc: "2026-07-21T11:59:00Z",
+      events: [
+        event(1, "depth", depth(4, 100.5, 0, 5)), // BestBid
+        event(2, "depth", depth(3, 100.75, 0, 4)), // BestAsk
+        event(3, "depth", depth(4, 100.25, 0, 6)), // BestBid moves down
+        event(4, "depth", depth(3, 100.5, 0, 3)), // BestAsk moves down with bid
+      ],
+    });
+    assert.equal(observation.depth.available, true);
+    assert.equal(observation.depth.unavailable_reason, null);
+    assert.equal(observation.depth.best_bid, 100.25);
+    assert.equal(observation.depth.best_ask, 100.5);
+    assert.equal(observation.depth.spread_ticks, 1);
+    assert.ok(!observation.depth.bid_levels.some((level) => level.price > 100.25));
+    assert.ok(!observation.depth.ask_levels.some((level) => level.price < 100.5));
   });
 });
