@@ -59,6 +59,7 @@ const config: AppConfig = {
   dataDir: "./data",
   reconcileIntervalMs: 3_000,
   packetLeaseMs: 300_000,
+  entrySubmissionLatchStaleMs: 300_000,
 };
 
 const recovery: ExecutionRecoveryStatus = {

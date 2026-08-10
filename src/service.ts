@@ -4,6 +4,7 @@ import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
 import type { OrderInfo, PositionInfo } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
+import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { reconcilePendingReceipts } from "./execution/receipt-reconciliation.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
@@ -210,7 +211,7 @@ export class GlitchTopstepService {
       },
     );
     await this.persistRecoveryResolutions(initialRecovery.resolutions);
-    this.reconcileEntrySubmissionLatch(positions, orders);
+    this.reconcileEntrySubmissionLatch(positions, orders, new Date().toISOString());
 
     const ownershipConfig = this.config.localGateway.ownership;
     if (ownershipConfig) {
@@ -577,7 +578,7 @@ export class GlitchTopstepService {
         await this.retryIncompleteTradeOutcomes(receivedAt);
       }
 
-      const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders);
+      const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders, receivedAt);
       const positionOpen = positions.some(
         (position) => position.accountId === this.config.scope.accountId
           && position.contractId === this.config.scope.contractId
@@ -828,14 +829,16 @@ export class GlitchTopstepService {
   private reconcileEntrySubmissionLatch(
     positions: PositionInfo[],
     orders: OrderInfo[],
+    atUtc?: string,
   ): boolean {
     const intentId = this.executionStore.entrySubmissionIntentId();
     if (!intentId) {
       return false;
     }
     const mutation = this.executionStore.mutationForIntent(intentId);
+    const venueFlat = this.isVenueFlatForLatch(positions);
     if (!mutation || mutation.operation !== "place_order") {
-      return false;
+      return venueFlat ? this.executionStore.clearEntrySubmissionLatch(intentId) : false;
     }
 
     const positionObserved = positions.some(
@@ -849,9 +852,31 @@ export class GlitchTopstepService {
         && order.contractId === this.config.scope.contractId
         && order.customTag === mutation.customTag,
     );
-    return positionObserved || orderObserved
-      ? this.executionStore.clearEntrySubmissionLatch(intentId)
-      : false;
+    if (positionObserved || orderObserved) {
+      return this.executionStore.clearEntrySubmissionLatch(intentId);
+    }
+
+    const nowUtc = atUtc ?? new Date().toISOString();
+    if (shouldClearStaleEntrySubmissionLatch(
+      mutation,
+      nowUtc,
+      this.config.entrySubmissionLatchStaleMs,
+      venueFlat,
+      positionObserved,
+      orderObserved,
+    )) {
+      return this.executionStore.clearEntrySubmissionLatch(intentId);
+    }
+    return false;
+  }
+
+  private isVenueFlatForLatch(positions: PositionInfo[]): boolean {
+    return !positions.some(
+      (position) => position.accountId === this.config.scope.accountId
+        && position.contractId === this.config.scope.contractId
+        && position.type !== 0
+        && Math.abs(position.size) > 0,
+    );
   }
 
   private async persistRecoveryResolutions(

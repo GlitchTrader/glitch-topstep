@@ -60,6 +60,7 @@ export interface AppConfig {
   outcomesExportPath?: string;
   reconcileIntervalMs: number;
   packetLeaseMs: number;
+  entrySubmissionLatchStaleMs: number;
 }
 
 const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
@@ -389,5 +390,11 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     outcomesExportPath: optional(environment, "GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH", "").trim() || undefined,
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
     packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 300_000, (value) => Number.isInteger(value) && value >= 1_000),
+    entrySubmissionLatchStaleMs: numberValue(
+      environment,
+      "GLITCH_ENTRY_SUBMISSION_LATCH_STALE_MS",
+      300_000,
+      (value) => Number.isInteger(value) && value >= 60_000,
+    ),
   };
 }
