@@ -774,6 +774,11 @@ export class GlitchTopstepService {
           decisionLinks.set(tranche.intent_id, link);
         }
       }
+      // Only entry intents named by a submitted EXIT receipt qualify as manual_exit.
+      const exitTargets = this.executionStore.submittedExitTargetIntentIds();
+      const hadExitIntentByTranche = new Map(
+        enriched.map((tranche) => [tranche.intent_id, exitTargets.has(tranche.intent_id)]),
+      );
       const published = await this.tradeOutcomePublisher.publishClosedTranches({
         accountId: this.config.scope.accountId,
         accountName: this.config.scope.accountName,
@@ -787,6 +792,7 @@ export class GlitchTopstepService {
         maeUsd: excursion?.mae_usd ?? null,
         mfeUsd: excursion?.mfe_usd ?? null,
         decisionLinks,
+        hadExitIntentByTranche,
       });
       if (published.length > 0) {
         await this.ledger.append({

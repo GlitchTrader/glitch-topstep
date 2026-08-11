@@ -34,6 +34,9 @@ export interface TradeOutcomeV1 {
     entry_order_id: number | null;
     trade_count: number;
     protection_status: string;
+    closing_order_id?: number | null;
+    stop_order_id?: number | null;
+    target_order_id?: number | null;
   };
   // v1.1 optional enrichment (required for learning_eligible when publisher version supports it)
   fills?: TradeOutcomeFill[];
@@ -61,7 +64,7 @@ export interface TradeOutcomeV1 {
   };
 }
 
-export const TRADE_OUTCOME_PUBLISHER_VERSION = "0.1.3-r3-03d";
+export const TRADE_OUTCOME_PUBLISHER_VERSION = "0.1.4-outcome-attribution";
 
 export function tradeOutcomeId(intentId: string): string {
   return `outcome:${intentId}`;

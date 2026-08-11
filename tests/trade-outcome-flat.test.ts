@@ -120,3 +120,25 @@ test("latchProvenProtectionFromReceipt restores SL/TP ids after Auto OCO flat", 
   assert.equal(latched.protection.target.provider_order_id, 3375341460);
   assert.equal(latched.protection.target.price, 29594.5);
 });
+
+test("latchProvenProtectionFromReceipt restores missing ids on already-proven tranche", () => {
+  const provenWithoutIds: TrancheView = {
+    ...tranche(0),
+    protection: {
+      status: "proven",
+      reason: "ok",
+      stop: { provider_order_id: null, custom_tag: "stop", price: 29576.25 },
+      target: { provider_order_id: null, custom_tag: "target", price: 29594.5 },
+    },
+  };
+  const latched = latchProvenProtectionFromReceipt(
+    provenWithoutIds,
+    {
+      code: "entry_open_with_proven_protection",
+      detail: "stop_order_id=3375341459;target_order_id=3375341460",
+    },
+  );
+  assert.equal(latched.protection.status, "proven");
+  assert.equal(latched.protection.stop.provider_order_id, 3375341459);
+  assert.equal(latched.protection.target.provider_order_id, 3375341460);
+});

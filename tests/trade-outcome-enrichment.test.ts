@@ -57,6 +57,17 @@ test("enrichment maps fills, side, prices, and stop exit reason", () => {
   }), "stop_loss");
 });
 
+test("inferExitReason uses submitted EXIT intent as manual_exit", () => {
+  assert.equal(inferExitReason({
+    closingOrderId: 999,
+    stopOrderId: 200,
+    targetOrderId: 300,
+    entryOrderId: 100,
+    trigger: "stream",
+    hadExitIntent: true,
+  }), "manual_exit");
+});
+
 test("structural risk and R-multiple for long MNQ geometry", () => {
   // 29927.25 - 29908.5 = 18.75 points; MNQ $2/point → $37.50 risk
   const risk = structuralRiskUsd({
