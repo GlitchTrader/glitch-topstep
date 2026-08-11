@@ -101,6 +101,7 @@ function config(dataDir: string): AppConfig {
     dataDir,
     reconcileIntervalMs: 3_000,
     packetLeaseMs: 300_000,
+    entrySubmissionLatchStaleMs: 300_000,
   };
 }
 

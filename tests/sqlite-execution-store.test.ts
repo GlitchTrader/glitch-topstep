@@ -8,6 +8,7 @@ import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import type { TopstepPolicyState, TradeIntent } from "../src/domain/models.js";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
+import { shouldClearStaleEntrySubmissionLatch } from "../src/execution/entry-submission-latch.js";
 import { snapshot } from "./fixtures.js";
 
 const policy: TopstepPolicyState = {
@@ -232,5 +233,57 @@ describe("SQLite execution store", () => {
     assert.equal(reopened.recoveryStatus().blockingNewExposure, true);
     reopened.close();
     unlinkSync(path);
+  });
+
+  it("simulates stale submitted latch unblock after flat venue TTL", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const first = intent();
+    store.registerIntent(first, "2026-08-07T19:06:50.000Z");
+    store.prepareMutation(
+      first.intentId,
+      "place_order",
+      {
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        type: 2,
+        side: 0,
+        size: 1,
+        stopLossBracket: { ticks: -10, type: 4 },
+        takeProfitBracket: { ticks: 10, type: 1 },
+      },
+      "glt-first",
+      "2026-08-07T19:06:50.274Z",
+    );
+    store.markMutationSubmitting(first.intentId, "2026-08-07T19:06:50.400Z");
+    store.markMutationSubmitted(first.intentId, 42, "2026-08-07T19:06:50.492Z");
+    assert.equal(store.recoveryStatus().entrySubmissionPending, true);
+
+    const mutation = store.mutationForIntent(first.intentId)!;
+    assert.equal(
+      shouldClearStaleEntrySubmissionLatch(
+        mutation,
+        "2026-08-07T19:08:00.000Z",
+        300_000,
+        true,
+        false,
+        false,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldClearStaleEntrySubmissionLatch(
+        mutation,
+        "2026-08-07T19:12:00.000Z",
+        300_000,
+        true,
+        false,
+        false,
+      ),
+      true,
+    );
+    store.clearEntrySubmissionLatch(first.intentId);
+    assert.equal(store.recoveryStatus().entrySubmissionPending, false);
+    assert.equal(store.recoveryStatus().blockingNewExposure, false);
+    store.close();
   });
 });
