@@ -81,7 +81,10 @@ export function latchProvenProtectionFromReceipt(
   receipt: { code?: string; detail?: string | null } | null,
   planned: { stop: number | null; target: number | null } = { stop: null, target: null },
 ): TrancheView {
-  if (tranche.protection.status === "proven") {
+  const missingStopId = tranche.protection.stop.provider_order_id === null;
+  const missingTargetId = tranche.protection.target.provider_order_id === null;
+  // Already proven with both bracket ids — nothing to restore.
+  if (tranche.protection.status === "proven" && !missingStopId && !missingTargetId) {
     return tranche;
   }
   if (receipt?.code !== "entry_open_with_proven_protection") {
@@ -93,7 +96,9 @@ export function latchProvenProtectionFromReceipt(
     ...tranche,
     protection: {
       status: "proven",
-      reason: "latched_from_open_protected_receipt",
+      reason: tranche.protection.status === "proven"
+        ? tranche.protection.reason
+        : "latched_from_open_protected_receipt",
       stop: {
         provider_order_id: stopOrderId ?? tranche.protection.stop.provider_order_id,
         custom_tag: tranche.protection.stop.custom_tag,

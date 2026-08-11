@@ -90,6 +90,9 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
   assert.equal(published[0]?.realized_pnl_usd, 42.5);
   assert.equal(published[0]?.fees_usd, 2.1);
   assert.equal(published[0]?.exit_reason, "take_profit");
+  assert.equal(published[0]?.attribution?.closing_order_id, 2);
+  assert.equal(published[0]?.attribution?.stop_order_id, 1);
+  assert.equal(published[0]?.attribution?.target_order_id, 2);
   assert.equal(published[0]?.fills?.length, 2);
   assert.equal(published[0]?.mae_usd, 8);
   assert.equal(published[0]?.mfe_usd, 50);
@@ -113,6 +116,62 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
     mfeUsd: 50,
   });
   assert.equal(second.length, 0);
+});
+
+test("TradeOutcomePublisher marks manual_exit when EXIT targeted the tranche", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "gt-outcomes-"));
+  const store = new TradeOutcomeStore(dir);
+  const publisher = new TradeOutcomePublisher(
+    {
+      async searchTrades() {
+        return [{
+          id: 99,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-03T13:59:50.000Z",
+          price: 28580,
+          profitAndLoss: null,
+          fees: 1.0,
+          side: 0,
+          size: 1,
+          voided: false,
+          orderId: 3353603011,
+        }, {
+          id: 100,
+          accountId: 1,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-08-03T14:00:00.500Z",
+          price: 28590,
+          profitAndLoss: 20,
+          fees: 1.1,
+          side: 1,
+          size: 1,
+          voided: false,
+          orderId: 999,
+        }];
+      },
+    },
+    store,
+    instantPublisherOptions,
+  );
+
+  const published = await publisher.publishClosedTranches({
+    accountId: 1,
+    accountName: "PRAC-V2-645601-15979101",
+    contractId: "CON.F.US.MNQ.U26",
+    instrument: "MNQ",
+    tranches: [tranche],
+    exitUtc: "2026-08-03T14:00:00.000Z",
+    tickSize: 0.25,
+    tickValue: 0.5,
+    maeUsd: 8,
+    mfeUsd: 50,
+    hadExitIntentByTranche: new Map([[tranche.intent_id, true]]),
+  });
+
+  assert.equal(published.length, 1);
+  assert.equal(published[0]?.exit_reason, "manual_exit");
+  assert.equal(published[0]?.attribution?.closing_order_id, 999);
 });
 
 test("TradeOutcomePublisher marks learning ineligible without proven protection", async () => {
