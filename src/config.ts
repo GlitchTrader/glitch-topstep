@@ -61,6 +61,7 @@ export interface AppConfig {
   reconcileIntervalMs: number;
   packetLeaseMs: number;
   entrySubmissionLatchStaleMs: number;
+  streamLivenessMs?: number;
 }
 
 const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
@@ -395,6 +396,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       "GLITCH_ENTRY_SUBMISSION_LATCH_STALE_MS",
       300_000,
       (value) => Number.isInteger(value) && value >= 60_000,
+    ),
+    streamLivenessMs: numberValue(
+      environment,
+      "GLITCH_STREAM_LIVENESS_MS",
+      15_000,
+      (value) => Number.isInteger(value) && value >= 5_000,
     ),
   };
 }
