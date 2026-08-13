@@ -191,6 +191,10 @@ export class VenueStateStore {
     this.quotes.set(quote.contractId, { value: quote, receivedAt });
   }
 
+  public lastQuoteReceivedAt(contractId: string): string | null {
+    return this.quotes.get(contractId)?.receivedAt ?? null;
+  }
+
   public markStreamConnecting(kind: VenueStreamKind, at = nowUtc()): void {
     this.setStream(kind, "connecting", null, at, false);
   }
