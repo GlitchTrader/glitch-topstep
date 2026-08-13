@@ -354,7 +354,7 @@ export class ProjectXRealtimeClient {
       stopped: this.stopped,
       expectedLive: this.options.isMarketExpectedLive?.() ?? true,
       streamState: market.state,
-      lastEventAt: market.lastEventAt,
+      lastEventAt: this.state.lastQuoteReceivedAt(this.options.contractId) ?? market.lastEventAt,
       connectedSinceUtc: market.lastChangedAt,
       nowMs: (this.options.now ?? Date.now)(),
       livenessMs: this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS,
