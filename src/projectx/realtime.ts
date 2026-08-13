@@ -28,6 +28,12 @@ import {
   unwrapUserStreamPayload,
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
+import {
+  DEFAULT_STREAM_LIVENESS_MS,
+  nextSignalRReconnectDelayMs,
+  shouldForceMarketLivenessRestart,
+  shouldScheduleHubRestart,
+} from "./stream-supervisor.js";
 
 export interface ProjectXRealtimeOptions {
   userHubUrl: string;
@@ -40,6 +46,10 @@ export interface ProjectXRealtimeOptions {
   onReconnected?: () => void | Promise<void>;
   onStateInvalidated?: () => void | Promise<void>;
   onBeforePositionApply?: (position: PositionInfo, receivedUtc: string) => void | Promise<void>;
+  livenessMs?: number;
+  isMarketExpectedLive?: () => boolean;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 interface SignalRConnection {
@@ -64,6 +74,16 @@ type RealtimeValue =
 export class ProjectXRealtimeClient {
   private readonly userConnection: SignalRConnection;
   private readonly marketConnection: SignalRConnection;
+  private stopped = false;
+  private livenessTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly restartInFlight: Record<VenueStreamKind, boolean> = {
+    user: false,
+    market: false,
+  };
+  private readonly restartAttempts: Record<VenueStreamKind, number> = {
+    user: 0,
+    market: 0,
+  };
 
   public constructor(
     private readonly options: ProjectXRealtimeOptions,
@@ -74,15 +94,19 @@ export class ProjectXRealtimeClient {
       skipNegotiation: true,
       transport: HttpTransportType.WebSockets,
     };
+    const reconnectPolicy = {
+      nextRetryDelayInMilliseconds: (context: { previousRetryCount: number }) =>
+        nextSignalRReconnectDelayMs(context.previousRetryCount),
+    };
     this.userConnection = new HubConnectionBuilder()
       .withUrl(options.userHubUrl, signalROptions)
       .configureLogging(options.logLevel ?? LogLevel.Warning)
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(reconnectPolicy)
       .build();
     this.marketConnection = new HubConnectionBuilder()
       .withUrl(options.marketHubUrl, signalROptions)
       .configureLogging(options.logLevel ?? LogLevel.Warning)
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(reconnectPolicy)
       .build();
 
     this.registerHandlers();
@@ -91,6 +115,7 @@ export class ProjectXRealtimeClient {
   }
 
   public async start(): Promise<void> {
+    this.stopped = false;
     this.recordLifecycle("user", "connecting");
     this.recordLifecycle("market", "connecting");
     this.state.markStreamConnecting("user");
@@ -102,6 +127,7 @@ export class ProjectXRealtimeClient {
       this.recordLifecycle("market", "connected_and_subscribed");
       this.state.markStreamConnected("user");
       this.state.markStreamConnected("market");
+      this.startLivenessWatch();
     } catch (error) {
       this.recordLifecycleSafely("user", "connect_failed", error);
       this.recordLifecycleSafely("market", "connect_failed", error);
@@ -112,6 +138,11 @@ export class ProjectXRealtimeClient {
   }
 
   public async stop(): Promise<void> {
+    this.stopped = true;
+    if (this.livenessTimer) {
+      clearInterval(this.livenessTimer);
+      this.livenessTimer = null;
+    }
     this.recordLifecycleSafely("user", "stopping");
     this.recordLifecycleSafely("market", "stopping");
     await Promise.allSettled([this.userConnection.stop(), this.marketConnection.stop()]);
@@ -297,8 +328,86 @@ export class ProjectXRealtimeClient {
       } catch (recordError) {
         this.payloadFault(kind, recordError);
       }
-      void this.options.onStateInvalidated?.();
+      if (this.stopped) {
+        void this.options.onStateInvalidated?.();
+        return;
+      }
+      // Automatic reconnect exhausted or close skipped the retry loop — start the hub again.
+      void this.restartHub(kind);
     });
+  }
+
+  private startLivenessWatch(): void {
+    if (this.livenessTimer) {
+      return;
+    }
+    const livenessMs = this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS;
+    this.livenessTimer = setInterval(() => {
+      this.checkMarketLiveness();
+    }, Math.min(5_000, livenessMs));
+    this.livenessTimer.unref();
+  }
+
+  private checkMarketLiveness(): void {
+    const market = this.state.operationalStatus().marketStream;
+    if (!shouldForceMarketLivenessRestart({
+      stopped: this.stopped,
+      expectedLive: this.options.isMarketExpectedLive?.() ?? true,
+      streamState: market.state,
+      lastEventAt: market.lastEventAt,
+      connectedSinceUtc: market.lastChangedAt,
+      nowMs: (this.options.now ?? Date.now)(),
+      livenessMs: this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS,
+    })) {
+      return;
+    }
+    this.recordLifecycleSafely("market", "liveness_restart");
+    void this.restartHub("market");
+  }
+
+  private async restartHub(kind: VenueStreamKind): Promise<void> {
+    if (!shouldScheduleHubRestart({
+      stopped: this.stopped,
+      restartInFlight: this.restartInFlight[kind],
+    })) {
+      return;
+    }
+    this.restartInFlight[kind] = true;
+    let retry = false;
+    const connection = kind === "user" ? this.userConnection : this.marketConnection;
+    const subscribe = kind === "user"
+      ? () => this.subscribeUser()
+      : () => this.subscribeMarket();
+    const sleep = this.options.sleep ?? ((ms: number) => new Promise<void>((resolve) => {
+      setTimeout(resolve, ms);
+    }));
+    try {
+      const delay = nextSignalRReconnectDelayMs(this.restartAttempts[kind]);
+      this.restartAttempts[kind] += 1;
+      if (delay > 0) {
+        await sleep(delay);
+      }
+      if (this.stopped) {
+        return;
+      }
+      this.state.markStreamConnecting(kind);
+      await connection.stop().catch(() => undefined);
+      await connection.start();
+      await subscribe();
+      this.recordLifecycle(kind, "reconnected_and_subscribed");
+      this.state.markStreamConnected(kind);
+      this.restartAttempts[kind] = 0;
+      await this.options.onReconnected?.();
+    } catch (error) {
+      this.recordLifecycleSafely(kind, "restart_failed", error);
+      this.state.markStreamDisconnected(kind, error);
+      retry = !this.stopped;
+    } finally {
+      this.restartInFlight[kind] = false;
+    }
+    if (retry) {
+      void this.restartHub(kind);
+    }
   }
 
   private recordAndApply<T extends RealtimeValue>(

@@ -14,6 +14,7 @@ import { ProjectXApiClient, ProjectXApiError } from "./projectx/client.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
+import { resolveTopstepSession } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -281,6 +282,8 @@ export class GlitchTopstepService {
         onBeforePositionApply: (position, receivedUtc) => {
           this.handleStreamPositionBeforeApply(position, receivedUtc);
         },
+        livenessMs: this.config.streamLivenessMs,
+        isMarketExpectedLive: () => resolveTopstepSession(this.config.session).phase !== "maintenance",
       },
       this.state,
     );
