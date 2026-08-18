@@ -46,7 +46,7 @@ export function evaluateSnapshotDataQuality(
     issues.add("account_state_timestamp_invalid");
   } else if (stateAgeMs < -FUTURE_TOLERANCE_MS) {
     issues.add("account_state_timestamp_future");
-  } else if (stateAgeMs > settings.maxStateAgeMs && !reconciliationInFlightGrace(snapshot, now)) {
+  } else if (stateAgeMs > settings.maxStateAgeMs && !reconciliationGrace(snapshot, now)) {
     issues.add("account_state_stale");
   }
 
@@ -63,13 +63,23 @@ function ageMilliseconds(timestamp: string, now: Date): number | null {
   return Number.isFinite(epochMs) ? now.getTime() - epochMs : null;
 }
 
-function reconciliationInFlightGrace(snapshot: AccountVenueSnapshot, now: Date): boolean {
+function reconciliationGrace(snapshot: AccountVenueSnapshot, now: Date): boolean {
   const reconciliation = snapshot.operational?.reconciliation;
-  if (reconciliation?.state !== "running" || !reconciliation.lastStartedAt) {
+  if (
+    !reconciliation
+    || reconciliation.generation !== snapshot.operational.generation
+  ) {
     return false;
   }
-  const startedAgeMs = ageMilliseconds(reconciliation.lastStartedAt, now);
-  return startedAgeMs !== null
-    && startedAgeMs >= 0
-    && startedAgeMs <= RECONCILIATION_STALE_GRACE_MS;
+  const timestamp = reconciliation.state === "running"
+    ? reconciliation.lastStartedAt
+    : reconciliation.state === "succeeded"
+      ? reconciliation.lastSucceededAt
+      : null;
+  if (!timestamp) {
+    return false;
+  }
+  const ageMs = ageMilliseconds(timestamp, now);
+  return ageMs !== null && ageMs >= 0 && ageMs <= RECONCILIATION_STALE_GRACE_MS;
 }
+
