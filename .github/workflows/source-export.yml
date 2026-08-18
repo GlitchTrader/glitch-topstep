@@ -1,0 +1,23 @@
+name: source-export
+
+on:
+  push:
+    branches:
+      - agent/topstep-capital-preservation
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package source
+        run: tar --exclude=.git -czf source.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.sha }}
+          path: source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
