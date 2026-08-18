@@ -14,11 +14,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Package source
-        run: tar --exclude=.git -C "$GITHUB_WORKSPACE" -czf "$RUNNER_TEMP/source.tar.gz" .
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Package dependencies
+        run: tar -C "$GITHUB_WORKSPACE" -czf "$RUNNER_TEMP/node_modules.tar.gz" node_modules
       - uses: actions/upload-artifact@v4
         with:
-          name: source-${{ github.sha }}
-          path: ${{ runner.temp }}/source.tar.gz
+          name: node-modules-${{ github.sha }}
+          path: ${{ runner.temp }}/node_modules.tar.gz
           if-no-files-found: error
           retention-days: 1
