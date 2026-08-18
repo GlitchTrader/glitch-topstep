@@ -26,8 +26,10 @@ describe("snapshot data quality", () => {
   });
 
   it("reports stale quote and account state without changing source state", () => {
+    const current = snapshot();
+    current.operational.reconciliation.lastSucceededAt = "2026-07-21T11:59:00Z";
     const result = evaluateSnapshotDataQuality(
-      snapshot(),
+      current,
       settings,
       new Date("2026-07-21T12:00:10Z"),
     );
@@ -53,6 +55,24 @@ describe("snapshot data quality", () => {
     assert.equal(result.stateAgeMs, 6_000);
     assert.ok(!result.issues.includes("account_state_stale"));
     assert.ok(result.issues.includes("quote_stale"));
+  });
+
+  it("accepts a recent successful reconciliation during the freshness grace", () => {
+    const current = snapshot();
+    current.operational.reconciliation = {
+      state: "succeeded",
+      generation: 1,
+      lastStartedAt: "2026-07-21T12:00:08Z",
+      lastSucceededAt: "2026-07-21T12:00:09Z",
+      lastError: null,
+    };
+    const result = evaluateSnapshotDataQuality(
+      current,
+      settings,
+      new Date("2026-07-21T12:00:10Z"),
+    );
+    assert.equal(result.stateAgeMs, 6_000);
+    assert.ok(!result.issues.includes("account_state_stale"));
   });
 
   it("still marks account state stale when reconciliation runs too long", () => {
@@ -109,3 +129,4 @@ describe("snapshot data quality", () => {
     assert.equal(result.issues.length, 0);
   });
 });
+

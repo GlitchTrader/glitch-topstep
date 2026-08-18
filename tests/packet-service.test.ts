@@ -101,8 +101,10 @@ describe("decision packet issuance", () => {
 
   it("changes factual quality when unchanged state crosses the stale boundary", () => {
     let now = CURRENT_TIME_MS;
+    const current = snapshot();
+    current.operational.reconciliation.lastSucceededAt = "2026-07-21T11:59:00Z";
     const store = new SqliteExecutionStore(":memory:");
-    const service = new DecisionPacketService(config(), snapshot, store, healthyRecovery, () => now);
+    const service = new DecisionPacketService(config(), () => current, store, healthyRecovery, () => now);
     const fresh = service.current();
     now += 5_001;
     const stale = service.current();
@@ -175,3 +177,4 @@ describe("decision packet issuance", () => {
     store.close();
   });
 });
+

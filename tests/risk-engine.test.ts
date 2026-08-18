@@ -229,6 +229,7 @@ describe("factual execution safety", () => {
   it("rejects stale or incomplete venue truth", () => {
     const stale = snapshot();
     stale.capturedAt = "2026-07-21T11:59:00Z";
+    stale.operational.reconciliation.lastSucceededAt = "2026-07-21T11:59:00Z";
     assert.throws(
       () => validateEntryRisk(intent(), stale, policy, settings, context),
       /account_state_stale/,
@@ -243,3 +244,4 @@ describe("factual execution safety", () => {
     );
   });
 });
+
