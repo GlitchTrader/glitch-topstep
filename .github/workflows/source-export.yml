@@ -15,10 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Package source
-        run: tar --exclude=.git -czf source.tar.gz .
+        run: tar --exclude=.git -C "$GITHUB_WORKSPACE" -czf "$RUNNER_TEMP/source.tar.gz" .
       - uses: actions/upload-artifact@v4
         with:
           name: source-${{ github.sha }}
-          path: source.tar.gz
+          path: ${{ runner.temp }}/source.tar.gz
           if-no-files-found: error
           retention-days: 1
