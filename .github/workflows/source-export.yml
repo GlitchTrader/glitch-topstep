@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - agent/topstep-capital-preservation
+  pull_request:
 
 permissions:
   contents: read
