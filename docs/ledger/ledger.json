@@ -1289,7 +1289,7 @@
     ]
   },
   "step7_scanner_foundation_2026_08_19": {
-    "status": "in_progress",
+    "status": "validated_foundation",
     "scope": "MNQ, MES, and operator alias MCL resolved only to the exact active ProjectX MCLE-family contract",
     "implemented": [
       "scanner candidates expose observation quality without directional or trade authorization scoring",
@@ -1298,8 +1298,20 @@
       "simultaneous exposure remains disabled by default"
     ],
     "validation": "npm run check: 267 tests passed",
+    "live_validation": {
+      "gateway_status": "ok",
+      "state_complete": true,
+      "streams": ["user:connected", "market:connected"],
+      "reconciliation": "succeeded",
+      "candidates": [
+        {"instrument": "MNQ", "contract_id": "CON.F.US.MNQ.U26", "execution_mode": "selected", "observation_ready": true},
+        {"instrument": "MES", "contract_id": "CON.F.US.MES.U26", "execution_mode": "observation_only", "observation_ready": true},
+        {"instrument": "MCL", "contract_id": "CON.F.US.MCLE.V26", "execution_mode": "observation_only", "observation_ready": true}
+      ],
+      "simultaneous_exposure_enabled": false,
+      "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd"
+    },
     "next": [
-      "validate three-candidate /scanner output against the current ProjectX catalog",
       "add per-contract reconnect and rate-budget evidence",
       "pair the complete candidate ledger with Hermes before any selected-contract execution work"
     ],
