@@ -17,7 +17,12 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => void stop("SIGINT"));
   process.once("SIGTERM", () => void stop("SIGTERM"));
 
-  await service.start();
+  try {
+    await service.start();
+  } catch (error) {
+    await service.stop().catch(() => undefined);
+    throw error;
+  }
   console.log(
     `Glitch Topstep is listening on http://${config.localGateway.host}:${config.localGateway.port} in ${config.tradingMode} mode.`,
   );

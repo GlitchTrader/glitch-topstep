@@ -68,6 +68,8 @@ All sensitive endpoints require:
 Authorization: Bearer <GLITCH_LOCAL_TOKEN>
 ```
 
+Operator controls require the separate `GLITCH_OPERATOR_TOKEN`.
+
 Keep the server bound to `127.0.0.1`. Do not expose port 8790 to the LAN or internet.
 
 ## Secret handling

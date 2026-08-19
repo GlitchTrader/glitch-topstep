@@ -202,7 +202,7 @@ export interface DecisionAudit {
 }
 
 export interface TradeIntent {
-  schemaVersion: "glitch.intent.v2";
+  schemaVersion: "glitch.intent.v2" | "glitch.intent.v3";
   intentId: string;
   createdUtc: string;
   instrument: string;
@@ -223,6 +223,14 @@ export interface TradeIntent {
   newTakeProfit?: number;
   exitFraction?: number;
   targetIntentId?: string;
+  packetId?: string;
+  contractId?: string;
+  scopeHash?: string;
+  scopeGeneration?: number;
+  expiresUtc?: string;
+  entryPriceMin?: number;
+  entryPriceMax?: number;
+  supersedesIntentId?: string;
 }
 
 export interface ValidatedEntry {

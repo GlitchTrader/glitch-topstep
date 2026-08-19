@@ -25,6 +25,12 @@ export interface RiskValidationContext {
   expectedAccountName: string;
   expectedInstrument: string;
   expectedSnapshotHash: string;
+  expectedPacketId?: string;
+  expectedContractId?: string;
+  expectedScopeHash?: string;
+  expectedScopeGeneration?: number;
+  dailyCaptureLocked?: boolean;
+  armedMode?: boolean;
   now?: Date;
 }
 
@@ -87,6 +93,29 @@ export function validateEntryRisk(
   if (intent.snapshotHash !== context.expectedSnapshotHash) {
     throw new RiskRejectedError("snapshot_hash_mismatch");
   }
+  if (context.dailyCaptureLocked) {
+    throw new RiskRejectedError("daily_capture_new_exposure_locked");
+  }
+  if (context.armedMode && intent.schemaVersion !== "glitch.intent.v3") {
+    throw new RiskRejectedError("armed_intent_v3_required");
+  }
+  if (intent.schemaVersion === "glitch.intent.v3") {
+    if (intent.packetId !== context.expectedPacketId) {
+      throw new RiskRejectedError("packet_id_mismatch");
+    }
+    if (intent.contractId !== (context.expectedContractId ?? snapshot.contract.id)) {
+      throw new RiskRejectedError("contract_id_mismatch");
+    }
+    if (context.expectedScopeHash !== undefined && intent.scopeHash !== context.expectedScopeHash) {
+      throw new RiskRejectedError("scope_hash_mismatch");
+    }
+    if (context.expectedScopeGeneration !== undefined && intent.scopeGeneration !== context.expectedScopeGeneration) {
+      throw new RiskRejectedError("scope_generation_mismatch");
+    }
+    if (intent.expiresUtc === undefined || now.getTime() > Date.parse(intent.expiresUtc)) {
+      throw new RiskRejectedError("intent_delivery_expired");
+    }
+  }
   if (!snapshot.quote) {
     throw new RiskRejectedError("quote_missing");
   }
@@ -134,6 +163,20 @@ export function validateEntryRisk(
 
   const side = intent.action === "ENTER_LONG" ? "long" : "short";
   const referencePrice = side === "long" ? snapshot.quote.bestAsk : snapshot.quote.bestBid;
+  if (
+    intent.schemaVersion === "glitch.intent.v3"
+    && (
+      intent.entryPriceMin === undefined
+      || intent.entryPriceMax === undefined
+      || referencePrice < intent.entryPriceMin
+      || referencePrice > intent.entryPriceMax
+    )
+  ) {
+    throw new RiskRejectedError(
+      "entry_range_superseded",
+      `reference=${referencePrice};range=${intent.entryPriceMin}-${intent.entryPriceMax}`,
+    );
+  }
   const brackets = calculateBracketTicks(
     side,
     referencePrice,

@@ -12,6 +12,7 @@ function environment(): NodeJS.ProcessEnv {
     GLITCH_INSTRUMENT: "MNQ",
     GLITCH_LOSS_MODEL: "express_funded_eod",
     GLITCH_LOCAL_TOKEN: "012345678901234567890123",
+    GLITCH_OPERATOR_TOKEN: "987654321098765432109876",
   };
 }
 

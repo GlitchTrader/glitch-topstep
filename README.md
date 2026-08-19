@@ -47,6 +47,7 @@ npm run check
 
 ```text
 GLITCH_LOCAL_TOKEN=<long-random-string>
+GLITCH_OPERATOR_TOKEN=<different-long-random-string>
 GLITCH_TRADING_MODE=shadow
 GLITCH_DATA_DIR=./data
 ```
@@ -110,6 +111,8 @@ notepad "$env:LOCALAPPDATA\hermes\profiles\glitch-topstep\.env"
 ```
 
 Set `GLITCH_TOPSTEP_LOCAL_TOKEN` to the **same** value as gateway `GLITCH_LOCAL_TOKEN`. Run `setup.ps1`, then `/topstep_status` and `/trade` in Hermes.
+
+`POST /control` and `GET /control` require the distinct `GLITCH_OPERATOR_TOKEN`; the model token is rejected for operator controls.
 
 The profile never receives ProjectX credentials.
 

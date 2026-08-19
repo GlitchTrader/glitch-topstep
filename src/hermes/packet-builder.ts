@@ -57,6 +57,11 @@ export interface DirectDecisionPacket {
   venue: "projectx";
   firm: "topstep";
   instrument: string;
+  decision_scope: {
+    contract_id: string;
+    generation: number;
+    scope_hash: string;
+  };
   account: {
     id: number;
     name: string;
@@ -136,6 +141,7 @@ export interface DirectDecisionPacket {
     maximum_additional_contracts: number;
     recovery_blocked: boolean;
     entry_submission_pending: boolean;
+    daily_capture_locked: boolean;
     unresolved_mutations: number;
     ambiguous_mutations: number;
     last_recovery_utc: string | null;
@@ -432,6 +438,8 @@ export function buildDecisionPacket(
   session: TopstepSessionConfig = emptySessionConfig(),
   dailyEconomics: DailyEconomicsPacket | null = null,
   bracketVerification: BracketVerificationContext | null = null,
+  decisionScope?: { generation: number; scopeHash: string },
+  dailyCaptureLocked = false,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -469,6 +477,10 @@ export function buildDecisionPacket(
     now,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
+  if (dailyCaptureLocked && newExposureGate) {
+    newExposureGate.passed = false;
+    newExposureGate.detail = [newExposureGate.detail, "daily_capture_locked"].filter(Boolean).join(",");
+  }
   const protection = derivePacketProtection(snapshot, null, tranches, bracketVerification);
   // EXIT is live under degraded_armed; only disabled/shadow omit or shadow the submit path.
   const exitPermitted = tradingMode !== "disabled"
@@ -478,7 +490,7 @@ export function buildDecisionPacket(
     protection,
     remainingCapacity,
     exitPermitted,
-  );
+  ).filter((action) => !dailyCaptureLocked || (action !== "ENTER_LONG" && action !== "ENTER_SHORT"));
   const sessionLevels = resolveSessionMarketLevels(quote);
   // Required issues only — depth gaps stay optional evidence notes, not exposure gates.
   const requiredIssues = [...quality.issues];
@@ -496,6 +508,11 @@ export function buildDecisionPacket(
     venue: "projectx",
     firm: "topstep",
     instrument,
+    decision_scope: {
+      contract_id: snapshot.contract.id,
+      generation: decisionScope?.generation ?? snapshot.operational.generation,
+      scope_hash: decisionScope?.scopeHash ?? snapshotHash,
+    },
     account: {
       id: snapshot.account.id,
       name: snapshot.account.name,
@@ -580,6 +597,7 @@ export function buildDecisionPacket(
       maximum_additional_contracts: remainingCapacity,
       recovery_blocked: recovery.blockingNewExposure,
       entry_submission_pending: recovery.entrySubmissionPending,
+      daily_capture_locked: dailyCaptureLocked,
       unresolved_mutations: recovery.unresolvedMutations,
       ambiguous_mutations: recovery.ambiguousMutations,
       last_recovery_utc: recovery.lastRecoveryUtc,
@@ -589,7 +607,7 @@ export function buildDecisionPacket(
     },
     protection,
     required_output_template: {
-      schema_version: "glitch.intent.v2",
+      schema_version: "glitch.intent.v3",
       intent_id: "GENERATE_UUID",
       created_utc: createdUtc,
       instrument,
@@ -598,6 +616,13 @@ export function buildDecisionPacket(
       action: defaultAction,
       confidence: 0.5,
       snapshot_hash: snapshotHash,
+      packet_id: packetId,
+      contract_id: snapshot.contract.id,
+      scope_hash: decisionScope?.scopeHash ?? snapshotHash,
+      scope_generation: decisionScope?.generation ?? snapshot.operational.generation,
+      expires_utc: expiresUtc,
+      entry_price_min: quote?.bestBid ?? null,
+      entry_price_max: quote?.bestAsk ?? null,
       model_version: "CONFIGURED_MODEL",
       prompt_version: GLITCH_TOPSTEP_PROMPT_VERSION,
       reason: "Replace with a compact evidence-based reason.",

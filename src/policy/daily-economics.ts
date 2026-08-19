@@ -13,6 +13,23 @@ export interface DailyEconomicsConfig {
   enabled: boolean;
   nominalSizeUsd: number | null;
   profitTargetUsd: number | null;
+  objectiveRatePct?: number;
+  lockNewExposureOnReached?: boolean;
+}
+
+export interface DailyCaptureObjectivePacket {
+  schema_version: "glitch.topstep.daily_capture.v1";
+  objective_rate_pct: number;
+  baseline_equity_usd: number;
+  objective_usd: number;
+  realized_progress_usd: number | null;
+  remaining_usd: number | null;
+  reached: boolean | null;
+  new_exposure_lock_configured: boolean;
+  reset_start_utc: string;
+  reset_end_exclusive_utc: string;
+  authority: "operator_configured" | "reconciled_trades";
+  note: string;
 }
 
 export interface DailyEconomicsPacket {
@@ -28,6 +45,7 @@ export interface DailyEconomicsPacket {
   profit_target_remaining_usd: number | null;
   largest_winning_day_usd: number | null;
   consistency_pct_mirror: number | null;
+  daily_capture: DailyCaptureObjectivePacket;
   notes: string[];
 }
 
@@ -72,6 +90,21 @@ export function computeDailyEconomics(
   const tradingDayId = resolveTradingDayId(now, session.timezone, resetLocalTime);
   const bounds = tradingDayBoundsUtc(tradingDayId, session.timezone, resetLocalTime);
   const nominalSizeUsd = config.nominalSizeUsd ?? policy.startingBalance;
+  const objectiveRatePct = config.objectiveRatePct ?? 0.5;
+  if (!Number.isFinite(objectiveRatePct) || objectiveRatePct <= 0 || objectiveRatePct > 100) {
+    throw new Error("daily_capture_objective_rate_invalid");
+  }
+  const objectiveUsd = roundMoney(nominalSizeUsd * objectiveRatePct / 100);
+  const captureBase = {
+    schema_version: "glitch.topstep.daily_capture.v1" as const,
+    objective_rate_pct: objectiveRatePct,
+    baseline_equity_usd: nominalSizeUsd,
+    objective_usd: objectiveUsd,
+    new_exposure_lock_configured: config.lockNewExposureOnReached ?? true,
+    reset_start_utc: bounds.startUtc,
+    reset_end_exclusive_utc: bounds.endExclusiveUtc,
+    note: "Context for disciplined participation; never a quota, direction, sizing formula, or promise of profit.",
+  };
   const notes = [
     "mirrors are not Topstep dashboard authority",
     "daily_economics is cognition evidence only; Glitch does not gate ENTER_* on PnL bands",
@@ -94,6 +127,13 @@ export function computeDailyEconomics(
         : roundMoney(Math.max(0, config.profitTargetUsd - (conservativeEquity - policy.startingBalance))),
       largest_winning_day_usd: null,
       consistency_pct_mirror: null,
+      daily_capture: {
+        ...captureBase,
+        realized_progress_usd: null,
+        remaining_usd: null,
+        reached: null,
+        authority: "operator_configured",
+      },
       notes,
     };
   }
@@ -119,6 +159,13 @@ export function computeDailyEconomics(
       : roundMoney(Math.max(0, config.profitTargetUsd - (conservativeEquity - policy.startingBalance))),
     largest_winning_day_usd: null,
     consistency_pct_mirror: null,
+    daily_capture: {
+      ...captureBase,
+      realized_progress_usd: realizedPnlUsd,
+      remaining_usd: roundMoney(Math.max(0, objectiveUsd - realizedPnlUsd)),
+      reached: realizedPnlUsd >= objectiveUsd,
+      authority: "reconciled_trades",
+    },
     notes,
   };
 }

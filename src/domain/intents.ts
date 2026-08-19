@@ -26,6 +26,14 @@ const CORE_FIELDS = new Set([
   "new_take_profit",
   "exit_fraction",
   "target_intent_id",
+  "packet_id",
+  "contract_id",
+  "scope_hash",
+  "scope_generation",
+  "expires_utc",
+  "entry_price_min",
+  "entry_price_max",
+  "supersedes_intent_id",
 ]);
 
 const AUDIT_FIELDS = new Set([
@@ -106,7 +114,7 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit 
     flatCase: stringField(value, "flat_case", 500),
     aggressiveCase: stringField(value, "aggressive_case", 500),
     conservativeCase: stringField(value, "conservative_case", 500),
-    decisiveEvidence: stringField(value, "decisive_evidence", 500),
+    decisiveEvidence: stringField(value, "decisive_evidence", 5000),
     disconfirmingEvidence: stringField(value, "disconfirming_evidence", 500),
     changeCondition: stringField(value, "change_condition", 500),
     finalChoice,
@@ -122,7 +130,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
       throw new IntentParseError("unknown_intent_field", key);
     }
   }
-  if (input.schema_version !== "glitch.intent.v2") {
+  if (input.schema_version !== "glitch.intent.v2" && input.schema_version !== "glitch.intent.v3") {
     throw new IntentParseError("schema_version_invalid", "schema_version");
   }
 
@@ -143,6 +151,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     throw new IntentParseError("prompt_version_mismatch", "prompt_version");
   }
   const action = parseAction(input.action);
+  const schemaVersion = input.schema_version;
   const confidence = input.confidence;
   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     throw new IntentParseError("confidence_invalid", "confidence");
@@ -154,6 +163,9 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   const newStopPrice = optionalNumber(input, "new_stop_price");
   const newTakeProfit = optionalNumber(input, "new_take_profit");
   const exitFraction = optionalNumber(input, "exit_fraction");
+  const entryPriceMin = optionalNumber(input, "entry_price_min");
+  const entryPriceMax = optionalNumber(input, "entry_price_max");
+  const scopeGeneration = optionalNumber(input, "scope_generation");
   const targetIntentIdRaw = input.target_intent_id;
   const orderType = input.order_type;
   if (orderType !== undefined && orderType !== "MARKET") {
@@ -181,6 +193,28 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     }
     if (stopLoss === undefined || stopLoss <= 0 || takeProfit1 === undefined || takeProfit1 <= 0) {
       throw new IntentParseError("entry_fields_invalid", "stop_loss");
+    }
+    if (schemaVersion === "glitch.intent.v3") {
+      const requiredStrings = ["packet_id", "contract_id", "scope_hash", "expires_utc"] as const;
+      for (const field of requiredStrings) {
+        stringField(input, field, 256);
+      }
+      if (!Number.isInteger(scopeGeneration) || (scopeGeneration ?? 0) < 1) {
+        throw new IntentParseError("scope_generation_invalid", "scope_generation");
+      }
+      if (
+        entryPriceMin === undefined
+        || entryPriceMax === undefined
+        || entryPriceMin <= 0
+        || entryPriceMax <= 0
+        || entryPriceMin > entryPriceMax
+      ) {
+        throw new IntentParseError("entry_price_range_invalid", "entry_price_min");
+      }
+      const expiresUtc = stringField(input, "expires_utc", 64);
+      if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(expiresUtc) || !Number.isFinite(Date.parse(expiresUtc))) {
+        throw new IntentParseError("expires_utc_invalid", "expires_utc");
+      }
     }
   } else if (action === "MOVE_STOP") {
     if (newStopPrice === undefined || newStopPrice <= 0) {
@@ -243,7 +277,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     : takeProfit1;
 
   return {
-    schemaVersion: "glitch.intent.v2",
+    schemaVersion,
     intentId,
     createdUtc,
     instrument: stringField(input, "instrument", 32),
@@ -264,5 +298,15 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     ...(newTakeProfit === undefined ? {} : { newTakeProfit }),
     ...(exitFraction === undefined ? {} : { exitFraction }),
     ...(targetIntentId === undefined ? {} : { targetIntentId }),
+    ...(input.packet_id === undefined ? {} : { packetId: stringField(input, "packet_id", 128) }),
+    ...(input.contract_id === undefined ? {} : { contractId: stringField(input, "contract_id", 256) }),
+    ...(input.scope_hash === undefined ? {} : { scopeHash: stringField(input, "scope_hash", 256) }),
+    ...(scopeGeneration === undefined ? {} : { scopeGeneration }),
+    ...(input.expires_utc === undefined ? {} : { expiresUtc: stringField(input, "expires_utc", 64) }),
+    ...(entryPriceMin === undefined ? {} : { entryPriceMin }),
+    ...(entryPriceMax === undefined ? {} : { entryPriceMax }),
+    ...(input.supersedes_intent_id === undefined
+      ? {}
+      : { supersedesIntentId: stringField(input, "supersedes_intent_id", 64) }),
   };
 }

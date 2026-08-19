@@ -774,7 +774,7 @@ describe("position management coordinator", () => {
     }
   });
 
-  it("submits partial EXIT as an opposite-side market order", async () => {
+  it("fails partial EXIT closed in armed mode until protection continuity is proven", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-partial-exit-"));
     const store = new SqliteExecutionStore(":memory:");
     try {
@@ -835,16 +835,16 @@ describe("position management coordinator", () => {
         decision_audit: audit("EXIT"),
         quantity: 1,
       });
-      assert.equal(receipt.status, "pending");
-      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
-      assert.equal(placedSize, 1);
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "partial_exit_protection_transition_unproven");
+      assert.equal(placedSize, undefined);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
-  it("submits targeted partial EXIT against a specific tranche remaining quantity", async () => {
+  it("fails targeted partial EXIT closed before cancelling protection in armed mode", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-targeted-exit-"));
     const store = new SqliteExecutionStore(":memory:");
     try {
@@ -918,17 +918,17 @@ describe("position management coordinator", () => {
         quantity: 1,
         target_intent_id: ENTRY_INTENT_ID_B,
       });
-      assert.equal(receipt.status, "pending");
-      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
-      assert.equal(placedSize, 1);
-      assert.deepEqual(cancelledOrderIds.sort(), [9201, 9202]);
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "partial_exit_protection_transition_unproven");
+      assert.equal(placedSize, undefined);
+      assert.deepEqual(cancelledOrderIds, []);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
 
-  it("submits partial targeted EXIT when venue reports multiple single-lot positions", async () => {
+  it("fails partial targeted EXIT closed with split venue position rows", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-split-positions-"));
     const store = new SqliteExecutionStore(":memory:");
     try {
@@ -1000,9 +1000,9 @@ describe("position management coordinator", () => {
         quantity: 1,
         target_intent_id: ENTRY_INTENT_ID_B,
       });
-      assert.equal(receipt.status, "pending");
-      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
-      assert.equal(placedSize, 1);
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "partial_exit_protection_transition_unproven");
+      assert.equal(placedSize, undefined);
       assert.equal(closeCalled, false);
     } finally {
       store.close();

@@ -52,11 +52,11 @@ export class SqliteExecutionStore {
         snapshot_hash, packet_id, issued_utc, expires_utc, invalidated_utc, payload_json
       ) VALUES (?, ?, ?, ?, NULL, ?)
       ON CONFLICT(snapshot_hash) DO UPDATE SET
-        packet_id = excluded.packet_id,
-        issued_utc = excluded.issued_utc,
-        expires_utc = excluded.expires_utc,
-        invalidated_utc = NULL,
-        payload_json = excluded.payload_json
+        packet_id = CASE WHEN issued_packets.expires_utc < excluded.issued_utc OR issued_packets.invalidated_utc IS NOT NULL THEN excluded.packet_id ELSE issued_packets.packet_id END,
+        issued_utc = CASE WHEN issued_packets.expires_utc < excluded.issued_utc OR issued_packets.invalidated_utc IS NOT NULL THEN excluded.issued_utc ELSE issued_packets.issued_utc END,
+        expires_utc = CASE WHEN issued_packets.expires_utc < excluded.issued_utc OR issued_packets.invalidated_utc IS NOT NULL THEN excluded.expires_utc ELSE issued_packets.expires_utc END,
+        invalidated_utc = CASE WHEN issued_packets.expires_utc < excluded.issued_utc OR issued_packets.invalidated_utc IS NOT NULL THEN NULL ELSE issued_packets.invalidated_utc END,
+        payload_json = CASE WHEN issued_packets.expires_utc < excluded.issued_utc OR issued_packets.invalidated_utc IS NOT NULL THEN excluded.payload_json ELSE issued_packets.payload_json END
     `).run(
       packet.market.snapshot_hash,
       packet.packet_id,
@@ -98,6 +98,15 @@ export class SqliteExecutionStore {
       `).get(intent.intentId) as SqlRow | undefined;
       if (existing) {
         const storedHash = String(existing.body_hash);
+        if (storedHash === "" || storedHash.startsWith("legacy:")) {
+          // v1 databases did not persist the semantic body hash. The first
+          // replay after upgrade establishes it atomically, preserving the
+          // original intent row instead of falsely reporting a conflict.
+          this.database.prepare(`
+            UPDATE intents SET body_hash = ? WHERE intent_id = ?
+          `).run(bodyHash, intent.intentId);
+          return { status: "duplicate" as const };
+        }
         return storedHash === bodyHash
           ? { status: "duplicate" as const }
           : { status: "conflict" as const };
@@ -452,6 +461,66 @@ export class SqliteExecutionStore {
     return row !== undefined;
   }
 
+  public latchDailyCapture(tradingDayId: string, reachedUtc: string): void {
+    this.database.prepare(`
+      INSERT OR IGNORE INTO daily_capture_locks (trading_day_id, reached_utc)
+      VALUES (?, ?)
+    `).run(tradingDayId, reachedUtc);
+  }
+
+  public isDailyCaptureLocked(tradingDayId: string | null): boolean {
+    if (!tradingDayId) {
+      return false;
+    }
+    return this.database.prepare(`
+      SELECT 1 AS ok FROM daily_capture_locks WHERE trading_day_id = ?
+    `).get(tradingDayId) !== undefined;
+  }
+
+  public recordExecutionFact(input: {
+    intentId: string;
+    phase: string;
+    recordedUtc: string;
+    detail?: Record<string, unknown>;
+  }): number {
+    const result = this.database.prepare(`
+      INSERT INTO execution_facts (intent_id, phase, recorded_utc, detail_json)
+      VALUES (?, ?, ?, ?)
+    `).run(input.intentId, input.phase, input.recordedUtc, JSON.stringify(input.detail ?? {}));
+    return Number(result.lastInsertRowid);
+  }
+
+  public executionFactsAfter(afterSequence: number, limit = 500): Record<string, unknown> {
+    if (!Number.isInteger(afterSequence) || afterSequence < 0 || !Number.isInteger(limit) || limit < 1 || limit > 1_000) {
+      throw new Error("execution_fact_cursor_invalid");
+    }
+    const rows = this.database.prepare(`
+      SELECT sequence, intent_id, phase, recorded_utc, detail_json
+      FROM execution_facts WHERE sequence > ? ORDER BY sequence ASC LIMIT ?
+    `).all(afterSequence, limit) as Array<{
+      sequence: number;
+      intent_id: string;
+      phase: string;
+      recorded_utc: string;
+      detail_json: string;
+    }>;
+    const high = this.database.prepare(`SELECT COALESCE(MAX(sequence), 0) AS high FROM execution_facts`)
+      .get() as { high: number };
+    return {
+      schema_version: "glitch.topstep.execution_facts.v1",
+      after_sequence: afterSequence,
+      high_water_sequence: Number(high.high),
+      count: rows.length,
+      facts: rows.map((row) => ({
+        sequence: Number(row.sequence),
+        intent_id: row.intent_id,
+        phase: row.phase,
+        recorded_utc: row.recorded_utc,
+        detail: JSON.parse(row.detail_json) as Record<string, unknown>,
+      })),
+    };
+  }
+
   private migrate(): void {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -517,6 +586,7 @@ export class SqliteExecutionStore {
     `);
     this.applyMigration(2, `
       ALTER TABLE intents ADD COLUMN body_hash TEXT NOT NULL DEFAULT '';
+      UPDATE intents SET body_hash = 'legacy:' || intent_id WHERE body_hash = '';
     `);
     this.applyMigration(3, `
       CREATE TABLE execution_outbox_v3 (
@@ -546,6 +616,22 @@ export class SqliteExecutionStore {
       CREATE INDEX IF NOT EXISTS idx_execution_outbox_state
         ON execution_outbox(state, created_utc);
     `);
+    this.applyMigration(4, `
+      CREATE TABLE daily_capture_locks (
+        trading_day_id TEXT PRIMARY KEY,
+        reached_utc TEXT NOT NULL
+      ) STRICT;
+    `);
+    this.applyMigration(5, `
+      CREATE TABLE execution_facts (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        intent_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        recorded_utc TEXT NOT NULL,
+        detail_json TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX idx_execution_facts_intent ON execution_facts(intent_id, sequence);
+    `);
   }
 
   private applyMigration(version: number, sql: string): void {
@@ -555,11 +641,13 @@ export class SqliteExecutionStore {
     if (applied) {
       return;
     }
-    this.database.exec(sql);
-    this.database.prepare(`
+    this.inTransaction(() => {
+      this.database.exec(sql);
+      this.database.prepare(`
       INSERT INTO schema_migrations(version, applied_utc)
       VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-    `).run(version);
+      `).run(version);
+    });
   }
 
   private transitionMutation(

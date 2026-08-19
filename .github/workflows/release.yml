@@ -1,0 +1,74 @@
+name: paired-release-candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile_commit:
+        description: Immutable glitch-topstep-hermes-profile commit SHA
+        required: true
+      profile_version:
+        description: Profile semantic version
+        required: true
+      profile_manifest_sha256:
+        description: SHA-256 of profile SHA256SUMS
+        required: true
+      prompt_version:
+        description: Immutable profile prompt version
+        required: true
+      evidence_ref:
+        description: PRAC or shadow validation evidence reference
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  release-candidate:
+    environment: armed-production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: GlitchTrader/glitch-topstep-hermes-profile
+          ref: ${{ inputs.profile_commit }}
+          path: profile
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - name: Build package, SBOM, checksums, and immutable pair manifest
+        env:
+          EVIDENCE_REF: ${{ inputs.evidence_ref }}
+        run: |
+          mkdir -p release
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git show-ref --verify --quiet refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          test "$(git -C profile rev-parse HEAD)" = "${{ inputs.profile_commit }}"
+          git -C profile show-ref --verify --quiet refs/remotes/origin/main
+          git -C profile merge-base --is-ancestor "${{ inputs.profile_commit }}" origin/main
+          test "${{ inputs.profile_version }}" = "$(sed -n 's/^version: *["\x27]*\([^"\x27 ]*\).*/\1/p' profile/distribution.yaml)"
+          test "${{ inputs.prompt_version }}" = "$(sed -n 's/^PROMPT_VERSION = ["\x27]*\([^"\x27]*\).*/\1/p' profile/scripts/distribution_manifest.py)"
+          test "${{ inputs.profile_manifest_sha256 }}" = "$(sha256sum profile/SHA256SUMS | cut -d ' ' -f1)"
+          npm pack --pack-destination release
+          npm sbom --sbom-format cyclonedx > release/gateway.cdx.json
+          node scripts/build-paired-release-manifest.mjs --gateway-commit "$GITHUB_SHA" --profile-root profile --evidence-ref "$EVIDENCE_REF" --output release/paired-release.json
+          sha256sum release/* > release/SHA256SUMS
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: release/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: paired-release-${{ github.sha }}
+          path: release
+          if-no-files-found: error
+          retention-days: 30

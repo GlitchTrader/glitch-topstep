@@ -71,9 +71,16 @@ function intent(
   intentId: string,
   snapshotHash: string,
   createdUtc: string,
+  packet?: {
+    packet_id: string;
+    contract: { id: string };
+    decision_scope: { scope_hash: string; generation: number };
+    expires_utc: string;
+    market: { bid: number | null; ask: number | null };
+  },
 ): Record<string, unknown> {
   return {
-    schema_version: "glitch.intent.v2",
+    schema_version: "glitch.intent.v3",
     intent_id: intentId,
     created_utc: createdUtc,
     instrument: "MNQ",
@@ -100,6 +107,13 @@ function intent(
     order_type: "MARKET",
     stop_loss: 19_990.25,
     take_profit_1: 20_020.25,
+    packet_id: packet?.packet_id,
+    contract_id: packet?.contract.id,
+    scope_hash: packet?.decision_scope.scope_hash,
+    scope_generation: packet?.decision_scope.generation,
+    expires_utc: packet?.expires_utc,
+    entry_price_min: packet ? (packet.market.bid ?? packet.market.ask) : undefined,
+    entry_price_max: packet ? (packet.market.ask ?? packet.market.bid) : undefined,
   };
 }
 
@@ -160,11 +174,13 @@ describe("execution coordinator serialization", () => {
           "00000000-0000-4000-8000-000000000201",
           firstPacket.market.snapshot_hash,
           now.toISOString(),
+          firstPacket,
         )),
         coordinator.handleWireIntent(intent(
           "00000000-0000-4000-8000-000000000202",
           firstPacket.market.snapshot_hash,
           now.toISOString(),
+          firstPacket,
         )),
       ]);
 
@@ -192,6 +208,7 @@ describe("execution coordinator serialization", () => {
         "00000000-0000-4000-8000-000000000203",
         pendingPacket.market.snapshot_hash,
         new Date().toISOString(),
+        pendingPacket,
       ));
       assert.equal(third.status, "rejected");
       assert.equal(third.code, "entry_submission_pending");
@@ -245,6 +262,7 @@ describe("execution coordinator serialization", () => {
         "00000000-0000-4000-8000-000000000301",
         packet.market.snapshot_hash,
         now.toISOString(),
+        packet,
       );
       const conflicting = { ...base, reason: "Different body hash." };
       const first = await coordinator.handleWireIntent(base);
@@ -311,6 +329,7 @@ describe("execution coordinator serialization", () => {
         "00000000-0000-4000-8000-000000000401",
         packet.market.snapshot_hash,
         now.toISOString(),
+        packet,
       );
       const receipts = await Promise.all(
         Array.from({ length: 100 }, () => coordinator.handleWireIntent(wireIntent)),
@@ -423,6 +442,7 @@ describe("execution coordinator serialization", () => {
         "00000000-0000-4000-8000-000000000601",
         packet.market.snapshot_hash,
         now.toISOString(),
+        packet,
       ));
       assert.equal(receipt.status, "pending");
       assert.equal(receipt.code, "entry_submitted_pending_reconciliation");

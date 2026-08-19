@@ -32,6 +32,7 @@ export interface AppConfig {
     host: string;
     port: number;
     token: string;
+    operatorToken?: string;
     ownership?: {
       executionDatabasePath: string;
       evidenceDatabasePath: string;
@@ -45,6 +46,13 @@ export interface AppConfig {
   policy: TopstepPolicyState;
   session: TopstepSessionConfig;
   dailyEconomics: DailyEconomicsConfig;
+  multiInstrument?: {
+    allowlist: string[];
+    rolloverGeneration: number;
+    simultaneousExposureEnabled: boolean;
+    depthAllowlist: string[];
+    historyRequestsPerMinute: number;
+  };
   risk: RiskSettings;
   providerEvidence: {
     marketEventRetention: number;
@@ -181,6 +189,10 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
   const localToken = required(environment, "GLITCH_LOCAL_TOKEN");
   if (localToken.length < 24) {
     throw new Error("GLITCH_LOCAL_TOKEN must contain at least 24 characters");
+  }
+  const operatorToken = required(environment, "GLITCH_OPERATOR_TOKEN");
+  if (operatorToken.length < 24 || operatorToken === localToken) {
+    throw new Error("GLITCH_OPERATOR_TOKEN must be a distinct value of at least 24 characters");
   }
   if (
     tradingMode === "armed"
@@ -329,6 +341,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
         (value) => Number.isInteger(value) && value >= 1024 && value <= 65_535,
       ),
       token: localToken,
+      operatorToken,
       ownership: {
         executionDatabasePath: join(dataDir, "glitch-topstep.sqlite"),
         evidenceDatabasePath: join(dataDir, "projectx-evidence.sqlite"),
@@ -369,6 +382,40 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       enabled: dailyEconomicsEnabled,
       nominalSizeUsd,
       profitTargetUsd,
+      objectiveRatePct: numberValue(
+        environment,
+        "GLITCH_DAILY_CAPTURE_OBJECTIVE_PCT",
+        0.5,
+        (value) => value > 0 && value <= 100,
+      ),
+      lockNewExposureOnReached: booleanValue(
+        environment,
+        "GLITCH_DAILY_CAPTURE_LOCK_ENABLED",
+        true,
+      ),
+    },
+    multiInstrument: {
+      allowlist: optional(environment, "GLITCH_INSTRUMENT_ALLOWLIST", instrument)
+        .split(",").map((value) => value.trim().toUpperCase()).filter(Boolean),
+      rolloverGeneration: numberValue(
+        environment,
+        "GLITCH_INSTRUMENT_ROLLOVER_GENERATION",
+        1,
+        (value) => Number.isInteger(value) && value >= 1,
+      ),
+      simultaneousExposureEnabled: booleanValue(
+        environment,
+        "GLITCH_SIMULTANEOUS_EXPOSURE_ENABLED",
+        false,
+      ),
+      depthAllowlist: optional(environment, "GLITCH_DEPTH_ALLOWLIST", instrument)
+        .split(",").map((value) => value.trim().toUpperCase()).filter(Boolean),
+      historyRequestsPerMinute: numberValue(
+        environment,
+        "GLITCH_HISTORY_REQUESTS_PER_MINUTE",
+        30,
+        (value) => Number.isInteger(value) && value >= 1 && value <= 60,
+      ),
     },
     risk: {
       estimatedRoundTurnFeesUsd: numberValue(environment, "GLITCH_ESTIMATED_ROUND_TURN_FEES_USD", 2.5, (value) => value >= 0),

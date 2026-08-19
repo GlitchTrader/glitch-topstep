@@ -174,6 +174,18 @@ function observeTimeframe(
   const latestBarPartial = latest === null
     ? false
     : latest.epochMs + timeframeMinutes * MINUTE_MS > nowMs;
+  const currentPartial = latestBarPartial ? latest : null;
+  const priorCompleted = latestBarPartial ? (accepted.at(-2) ?? null) : latest;
+  const partialProgress = currentPartial === null
+    ? null
+    : Math.max(0, Math.min(1, (nowMs - currentPartial.epochMs) / (timeframeMinutes * MINUTE_MS)));
+  const identityIssues: string[] = [];
+  if (latestBarPartial && priorCompleted === null) {
+    identityIssues.push("prior_completed_bar_missing");
+  }
+  if (currentPartial && priorCompleted && currentPartial.epochMs <= priorCompleted.epochMs) {
+    identityIssues.push("bar_identity_not_monotonic");
+  }
   const features = latest === null
     ? null
     : calculateDescriptiveMarketFeatures(accepted, {
@@ -188,8 +200,23 @@ function observeTimeframe(
     rejected_bars: input.length - accepted.length,
     latest_bar_utc: latest?.timestamp ?? null,
     latest_bar_partial: latestBarPartial,
+    current_partial_bar: currentPartial === null ? null : toCanonical(currentPartial),
+    prior_completed_bar: priorCompleted === null ? null : toCanonical(priorCompleted),
+    partial_progress: partialProgress,
+    bar_identity_issues: identityIssues,
     gaps: findMarketBarGaps(accepted, timeframeMinutes),
     features,
+  };
+}
+
+function toCanonical(bar: AcceptedBar): CanonicalMarketBar {
+  return {
+    timestamp: bar.timestamp,
+    open: bar.open,
+    high: bar.high,
+    low: bar.low,
+    close: bar.close,
+    volume: bar.volume,
   };
 }
 
