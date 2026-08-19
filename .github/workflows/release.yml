@@ -48,17 +48,21 @@ jobs:
       - name: Build package, SBOM, checksums, and immutable pair manifest
         env:
           EVIDENCE_REF: ${{ inputs.evidence_ref }}
+          PROFILE_COMMIT: ${{ inputs.profile_commit }}
+          PROFILE_VERSION: ${{ inputs.profile_version }}
+          PROFILE_MANIFEST_SHA256: ${{ inputs.profile_manifest_sha256 }}
+          PROMPT_VERSION: ${{ inputs.prompt_version }}
         run: |
           mkdir -p release
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           git show-ref --verify --quiet refs/remotes/origin/main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-          test "$(git -C profile rev-parse HEAD)" = "${{ inputs.profile_commit }}"
+          test "$(git -C profile rev-parse HEAD)" = "$PROFILE_COMMIT"
           git -C profile show-ref --verify --quiet refs/remotes/origin/main
-          git -C profile merge-base --is-ancestor "${{ inputs.profile_commit }}" origin/main
-          test "${{ inputs.profile_version }}" = "$(sed -n 's/^version: *["\x27]*\([^"\x27 ]*\).*/\1/p' profile/distribution.yaml)"
-          test "${{ inputs.prompt_version }}" = "$(sed -n 's/^PROMPT_VERSION = ["\x27]*\([^"\x27]*\).*/\1/p' profile/scripts/distribution_manifest.py)"
-          test "${{ inputs.profile_manifest_sha256 }}" = "$(sha256sum profile/SHA256SUMS | cut -d ' ' -f1)"
+          git -C profile merge-base --is-ancestor "$PROFILE_COMMIT" origin/main
+          test "$PROFILE_VERSION" = "$(sed -n 's/^version: *["\x27]*\([^"\x27 ]*\).*/\1/p' profile/distribution.yaml)"
+          test "$PROMPT_VERSION" = "$(sed -n 's/^PROMPT_VERSION = ["\x27]*\([^"\x27]*\).*/\1/p' profile/scripts/distribution_manifest.py)"
+          test "$PROFILE_MANIFEST_SHA256" = "$(sha256sum profile/SHA256SUMS | cut -d ' ' -f1)"
           npm pack --pack-destination release
           npm sbom --sbom-format cyclonedx > release/gateway.cdx.json
           node scripts/build-paired-release-manifest.mjs --gateway-commit "$GITHUB_SHA" --profile-root profile --evidence-ref "$EVIDENCE_REF" --output release/paired-release.json
