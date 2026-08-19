@@ -1264,5 +1264,23 @@
       "Profile gateway URLs are restricted to loopback HTTP or HTTPS origins; flatten-all requires the separate operator token; scanner ledgers require at least one frozen trigger per candidate.",
       "Release checkout credentials are not persisted and both paired commits must be reachable from protected main history."
     ]
+  },
+  "live_validation_2026_08_19": {
+    "accepted": [
+      "sanitized ProjectX fixture capture: 15 fixtures",
+      "reconnect proof: generation 2 to 3; final state ready/state_complete/reconciled with both streams connected"
+    ],
+    "rejected_or_incomplete": [
+      "event-rates proof rejected because the one-minute sample had incomplete buckets and the two-minute sample observed retained-event count regression during pruning",
+      "R1-04 kill matrix rejected because the harness reported gateway_not_killed and kill_point_not_reached; zero kill points were accepted"
+    ],
+    "post_test_safety": "Gateway restored without the temporary acceptance flag; armed, ready, state_complete=true, reconciled, no ambiguous or unresolved mutations.",
+    "issue_comments": [
+      "https://github.com/GlitchTrader/glitch-topstep/issues/49#issuecomment-5344359075",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/50#issuecomment-5344359402",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/51#issuecomment-5344358858",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/110#issuecomment-5344359580",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/112#issuecomment-5344359835"
+    ]
   }
 }
