@@ -1325,8 +1325,28 @@
       "exact_contract_allowlist_required": true,
       "simulated_contract_matrix": ["MNQ:CON.F.US.MNQ.U26", "MES:CON.F.US.MES.U26", "MCL:CON.F.US.MCLE.V26"],
       "gateway_check": "270 passed, 0 failed",
-      "paired_profile_check": "177 passed, 1 expected skip"
-    },
-    "stop_line": "No strategy ranking, hot contract switching, or simultaneous exposure is enabled by this foundation."
+      "paired_profile_check": "177 passed, 1 expected skip",
+      "stop_line": "No strategy ranking, hot contract switching, or simultaneous exposure is enabled by this foundation."
+    }
+  },
+  "runtime_hardening_2026_08_19": {
+    "status": "implemented_and_runtime_validated",
+    "implemented": [
+      "Gateway loads .env automatically from the current working directory before required configuration validation.",
+      "Explicit process environment values take precedence over .env values; .env is never committed or logged.",
+      "Unknown trade outcomes remain eligible for later attribution enrichment and known exit reasons supersede unknown.",
+      "Live evidence capture scripts accept explicit output directories to avoid OneDrive file locks."
+    ],
+    "validation": [
+      "npm run check: 271 passed, 0 failed",
+      "Runtime started from the OneDrive directory without manually injecting environment variables: armed, ready, state_complete=true",
+      "TS-R2-07 live 30-minute retrospective: quote/print/depth present, retention within policy, proof test passed",
+      "Fake-provider TS-R1-01 kill matrix: 2 passed, 0 failed"
+    ],
+    "remaining": [
+      "R1-04 live kill harness was blocked by OneDrive data-directory permissions before the isolated child listener started; no live kill claim is accepted.",
+      "The historical MCL outcome remains unknown because the active runtime scope is MNQ; the new attribution repair will be verified on the next MCL/MCLE flat session.",
+      "OneDrive may lock dist, SQLite, and fixture files; runtime deployment must preserve the writable database attribute and use an output directory outside synchronized fixtures."
+    ]
   }
 }
