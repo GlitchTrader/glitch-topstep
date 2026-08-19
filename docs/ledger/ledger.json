@@ -1268,13 +1268,18 @@
   "live_validation_2026_08_19": {
     "accepted": [
       "sanitized ProjectX fixture capture: 15 fixtures",
-      "reconnect proof: generation 2 to 3; final state ready/state_complete/reconciled with both streams connected"
+      "reconnect proof: generation 2 to 3; final state ready/state_complete/reconciled with both streams connected",
+      "R1-04 kill matrix: six kill points, unique per-run intents, zero duplicate provider entries, zero open orders after cleanup",
+      "TS-R2-07 event rates: 30-minute retrospective, sequence delta 5095, quote 10.81/s, print 6.12/s, depth 103.60/s",
+      "durable controls live: pause and resume completed; pause survived gateway restart; final operator_paused=false with zero pending/failed controls",
+      "lifecycle live: post-restart ready, state_complete=true, user and market streams connected, reconciliation succeeded"
     ],
     "rejected_or_incomplete": [
-      "event-rates proof rejected because the one-minute sample had incomplete buckets and the two-minute sample observed retained-event count regression during pruning",
-      "R1-04 kill matrix rejected because the harness reported gateway_not_killed and kill_point_not_reached; zero kill points were accepted"
+      "live outcome correction/replay soak remains pending",
+      "partial EXIT provider transition and protection rearm remain pending",
+      "PM-4 Phase C E2E did not start: the runtime build rejected the submitted intent as armed_intent_v3_required; no entry, partial EXIT, or rearm claim is accepted"
     ],
-    "post_test_safety": "Gateway restored without the temporary acceptance flag; armed, ready, state_complete=true, reconciled, no ambiguous or unresolved mutations.",
+    "post_test_safety": "Gateway restored without the temporary acceptance flag; armed, ready, state_complete=true, reconciled, both streams connected, no ambiguous or unresolved mutations, operator_paused=false.",
     "issue_comments": [
       "https://github.com/GlitchTrader/glitch-topstep/issues/49#issuecomment-5344359075",
       "https://github.com/GlitchTrader/glitch-topstep/issues/50#issuecomment-5344359402",

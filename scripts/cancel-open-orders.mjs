@@ -1,9 +1,11 @@
 import fs from "node:fs";
 
-for (const line of fs.readFileSync(".env", "utf8").split(/\r?\n/)) {
-  if (!line || line.startsWith("#")) continue;
-  const i = line.indexOf("=");
-  process.env[line.slice(0, i)] = line.slice(i + 1);
+if (fs.existsSync(".env")) {
+  for (const line of fs.readFileSync(".env", "utf8").split(/\r?\n/)) {
+    if (!line || line.startsWith("#")) continue;
+    const i = line.indexOf("=");
+    process.env[line.slice(0, i)] = line.slice(i + 1);
+  }
 }
 
 const { loadConfig } = await import("../dist/src/config.js");

@@ -45,6 +45,11 @@ export interface EventRatesProof {
     event_count_end: number;
     event_count_delta: number;
     bytes_per_event: number | null;
+    sequence_start?: number | null;
+    sequence_end?: number | null;
+    sequence_delta?: number | null;
+    retained_count_delta?: number;
+    pruning_observed?: boolean;
   };
   retention_observed: {
     peak_market_event_count: number;
@@ -131,14 +136,23 @@ export function buildEventRatesProof(input: {
   diskBytesEnd: number;
   eventCountStart: number;
   eventCountEnd: number;
+  latestSequenceStart?: number | null;
+  latestSequenceEnd?: number | null;
   peakMarketEventCount: number;
   minimumDurationMinutes?: number;
 }): EventRatesProof {
   const failures = validateEventRatesProofInput(input);
   const durationMinutes = input.durationMinutes;
   const eventCountDelta = input.eventCountEnd - input.eventCountStart;
+  const sequenceDelta = input.latestSequenceStart !== null
+    && input.latestSequenceStart !== undefined
+    && input.latestSequenceEnd !== null
+    && input.latestSequenceEnd !== undefined
+    ? input.latestSequenceEnd - input.latestSequenceStart
+    : null;
+  const durableEventDelta = sequenceDelta ?? eventCountDelta;
   const diskDelta = input.diskBytesEnd - input.diskBytesStart;
-  const bytesPerEvent = eventCountDelta > 0 ? diskDelta / eventCountDelta : null;
+  const bytesPerEvent = durableEventDelta > 0 ? diskDelta / durableEventDelta : null;
   return {
     schema_version: EVENT_RATES_PROOF_SCHEMA,
     captured_utc: input.capturedUtc,
@@ -161,6 +175,11 @@ export function buildEventRatesProof(input: {
       event_count_end: input.eventCountEnd,
       event_count_delta: eventCountDelta,
       bytes_per_event: bytesPerEvent,
+      sequence_start: input.latestSequenceStart ?? null,
+      sequence_end: input.latestSequenceEnd ?? null,
+      sequence_delta: sequenceDelta,
+      retained_count_delta: eventCountDelta,
+      pruning_observed: eventCountDelta < 0,
     },
     retention_observed: {
       peak_market_event_count: input.peakMarketEventCount,
@@ -189,6 +208,8 @@ export function validateEventRatesProof(proof: EventRatesProof): string[] {
     diskBytesEnd: proof.disk.evidence_db_bytes_end,
     eventCountStart: proof.disk.event_count_start,
     eventCountEnd: proof.disk.event_count_end,
+    latestSequenceStart: proof.disk.sequence_start,
+    latestSequenceEnd: proof.disk.sequence_end,
     peakMarketEventCount: proof.retention_observed.peak_market_event_count,
     minimumDurationMinutes: 30,
   });
@@ -205,6 +226,8 @@ function validateEventRatesProofInput(input: {
   diskBytesEnd: number;
   eventCountStart: number;
   eventCountEnd: number;
+  latestSequenceStart?: number | null;
+  latestSequenceEnd?: number | null;
   peakMarketEventCount: number;
   minimumDurationMinutes?: number;
 }): string[] {
@@ -230,7 +253,13 @@ function validateEventRatesProofInput(input: {
   if (input.diskBytesEnd < input.diskBytesStart) {
     failures.push("evidence_db_shrank_unexpectedly");
   }
-  if (input.eventCountEnd < input.eventCountStart) {
+  if (input.latestSequenceStart !== null && input.latestSequenceStart !== undefined
+    && input.latestSequenceEnd !== null && input.latestSequenceEnd !== undefined
+    && input.latestSequenceEnd < input.latestSequenceStart) {
+    failures.push("provider_sequence_regressed_during_disk_sample");
+  } else if ((input.latestSequenceStart === null || input.latestSequenceStart === undefined)
+    && (input.latestSequenceEnd === null || input.latestSequenceEnd === undefined)
+    && input.eventCountEnd < input.eventCountStart) {
     failures.push("event_count_regressed_during_disk_sample");
   }
   return failures;

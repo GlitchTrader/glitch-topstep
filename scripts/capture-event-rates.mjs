@@ -9,14 +9,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = path.join(ROOT, "tests", "fixtures", "projectx", "live");
 
-for (const line of fs.readFileSync(path.join(ROOT, ".env"), "utf8").split(/\r?\n/)) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) continue;
-  const eq = trimmed.indexOf("=");
-  if (eq < 0) continue;
-  const name = trimmed.slice(0, eq);
-  if (process.env[name] === undefined) {
-    process.env[name] = trimmed.slice(eq + 1);
+const envPath = path.join(ROOT, ".env");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 0) continue;
+    const name = trimmed.slice(0, eq);
+    if (process.env[name] === undefined) {
+      process.env[name] = trimmed.slice(eq + 1);
+    }
   }
 }
 
@@ -121,10 +124,14 @@ function queryRetrospectiveWindow(minutes) {
 const healthStart = await fetchHealth();
 const diskBytesStart = evidenceDbBytes();
 const eventCountStart = Number(healthStart.provider_evidence?.eventCount ?? 0);
+const latestSequenceStart = healthStart.provider_evidence?.latestSequence == null
+  ? null : Number(healthStart.provider_evidence.latestSequence);
 await sleep(Math.max(diskSampleSeconds, 1) * 1000);
 const healthEnd = await fetchHealth();
 const diskBytesEnd = evidenceDbBytes();
 const eventCountEnd = Number(healthEnd.provider_evidence?.eventCount ?? 0);
+const latestSequenceEnd = healthEnd.provider_evidence?.latestSequence == null
+  ? null : Number(healthEnd.provider_evidence.latestSequence);
 
 const retrospective = queryRetrospectiveWindow(
   Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 30,
@@ -161,6 +168,8 @@ const proof = buildEventRatesProof({
   diskBytesEnd,
   eventCountStart,
   eventCountEnd,
+  latestSequenceStart,
+  latestSequenceEnd,
   peakMarketEventCount: retrospective.currentMarketEventCount,
 });
 

@@ -63,6 +63,8 @@ describe("TS-R2-07 event rates proof", () => {
       diskBytesEnd: 150_000,
       eventCountStart: 1_000,
       eventCountEnd: 1_250,
+      latestSequenceStart: 10_000,
+      latestSequenceEnd: 10_250,
       peakMarketEventCount: 400_000,
       minimumDurationMinutes: 30,
     });
@@ -71,7 +73,35 @@ describe("TS-R2-07 event rates proof", () => {
     assert.equal(proof.stream_rates_per_second.quote, 240 / 1800);
     assert.equal(proof.stream_rates_per_second.market_trade, 60 / 1800);
     assert.equal(proof.stream_rates_per_second.depth, 180 / 1800);
+    assert.equal(proof.disk.sequence_delta, 250);
     assert.deepEqual(validateEventRatesProof(proof), []);
+  });
+
+  it("does not reject retention pruning when the provider sequence advances", () => {
+    const proof = buildEventRatesProof({
+      capturedUtc: "2026-08-03T01:00:00.000Z",
+      mode: "live_poll",
+      scope: { account_id: 1, account_name: "SIM", contract_id: "C", instrument: "MNQ" },
+      windowStartUtc: "2026-08-03T00:00:00.000Z",
+      windowEndUtc: "2026-08-03T00:30:00.000Z",
+      durationMinutes: 30,
+      retentionPolicy: retentionPolicy(),
+      eventTotals: { quote: 30, market_trade: 30, depth: 30 },
+      minuteBuckets: Array.from({ length: 30 }, (_, index) => ({
+        minute_utc: `2026-08-03T00:${String(index).padStart(2, "0")}:00Z`,
+        quote: 1, market_trade: 1, depth: 1, market_event_total: 3,
+      })),
+      diskBytesStart: 100,
+      diskBytesEnd: 200,
+      eventCountStart: 509_000,
+      eventCountEnd: 500_000,
+      latestSequenceStart: 1_000,
+      latestSequenceEnd: 1_030,
+      peakMarketEventCount: 509_000,
+      minimumDurationMinutes: 30,
+    });
+    assert.deepEqual(validateEventRatesProof(proof), []);
+    assert.equal(proof.disk.pruning_observed, true);
   });
 
   it("validates the live event rates proof fixture captured on Windows", () => {

@@ -4,15 +4,16 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 
-const env = Object.fromEntries(
-  fs.readFileSync(".env", "utf8")
-    .split(/\r?\n/)
-    .filter((l) => l && !l.startsWith("#"))
-    .map((l) => {
-      const i = l.indexOf("=");
-      return [l.slice(0, i), l.slice(i + 1)];
-    }),
-);
+const env = { ...process.env };
+if (fs.existsSync(".env")) {
+  for (const line of fs.readFileSync(".env", "utf8").split(/\r?\n/)) {
+    if (!line || line.startsWith("#")) continue;
+    const i = line.indexOf("=");
+    if (i > 0 && env[line.slice(0, i)] === undefined) {
+      env[line.slice(0, i)] = line.slice(i + 1);
+    }
+  }
+}
 const token = env.GLITCH_LOCAL_TOKEN;
 const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 const TICK = 0.25;
@@ -194,7 +195,7 @@ async function postIntent(body) {
 
 function baseIntent(action, snap, intentId = randomUUID()) {
   return {
-    schema_version: "glitch.intent.v2",
+    schema_version: "glitch.intent.v3",
     intent_id: intentId,
     created_utc: new Date().toISOString(),
     instrument: env.GLITCH_INSTRUMENT,
@@ -332,6 +333,17 @@ async function submitIntent(body, steps, stepName, retries = 24) {
     current = {
       ...current,
       snapshot_hash: pkt.market.snapshot_hash,
+      packet_id: pkt.packet_id,
+      contract_id: pkt.decision_scope.contract_id,
+      scope_hash: pkt.decision_scope.scope_hash,
+      scope_generation: pkt.decision_scope.generation,
+      expires_utc: pkt.expires_utc,
+      ...(current.action === "ENTER_LONG" || current.action === "ENTER_SHORT"
+        ? {
+          entry_price_min: (current.action === "ENTER_LONG" ? pkt.market.ask : pkt.market.bid) - 20 * TICK,
+          entry_price_max: (current.action === "ENTER_LONG" ? pkt.market.ask : pkt.market.bid) + 20 * TICK,
+        }
+        : {}),
       created_utc: new Date().toISOString(),
     };
     const res = await postIntent(current);
