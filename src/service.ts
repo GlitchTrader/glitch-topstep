@@ -176,7 +176,11 @@ export class GlitchTopstepService {
     this.lifecycle.transition("starting");
     await this.runtimeLock.acquire();
     await this.api.login();
-    const [accounts, contracts, positions, orders] = await this.fetchStartupScope();
+    const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
+    const accounts = accountsCol.items;
+    const contracts = contractsCol.items;
+    const positions = positionsCol.items;
+    const orders = ordersCol.items;
 
     const account = accounts.find((candidate) => candidate.id === this.config.scope.accountId);
     if (!account) {
@@ -228,6 +232,7 @@ export class GlitchTopstepService {
       sortedById(accounts),
       this.config.scope.accountId,
       null,
+      accountsCol.envelope,
     );
     this.recordRestSnapshot(
       "contracts_snapshot",
@@ -235,6 +240,7 @@ export class GlitchTopstepService {
       sortedById(contracts),
       null,
       this.config.scope.contractId,
+      contractsCol.envelope,
     );
     this.recordRestSnapshot(
       "positions_snapshot",
@@ -242,6 +248,7 @@ export class GlitchTopstepService {
       sortedById(positions),
       this.config.scope.accountId,
       this.config.scope.contractId,
+      positionsCol.envelope,
     );
     this.recordRestSnapshot(
       "open_orders_snapshot",
@@ -249,6 +256,7 @@ export class GlitchTopstepService {
       sortedById(orders),
       this.config.scope.accountId,
       this.config.scope.contractId,
+      ordersCol.envelope,
     );
 
     this.state.registerContracts(contracts);
@@ -468,7 +476,16 @@ export class GlitchTopstepService {
         }
         return this.packets.current();
       },
-      (limit) => this.providerEvidenceStore.recent(limit),
+      (limit, query) => {
+        if (query?.source || query?.eventType) {
+          return this.providerEvidenceStore.query({
+            limit,
+            source: query.source,
+            eventType: query.eventType,
+          });
+        }
+        return this.providerEvidenceStore.recent(limit);
+      },
       coordinator,
       this.ownershipService,
       (limit) => this.tradeOutcomeStore.recent(limit),
@@ -763,10 +780,10 @@ export class GlitchTopstepService {
   }
 
   private async fetchStartupScope(): Promise<
-    [Awaited<ReturnType<ProjectXApiClient["searchAccounts"]>>,
-      Awaited<ReturnType<ProjectXApiClient["listAvailableContracts"]>>,
-      Awaited<ReturnType<ProjectXApiClient["searchOpenPositions"]>>,
-      Awaited<ReturnType<ProjectXApiClient["searchOpenOrders"]>>]
+    [Awaited<ReturnType<ProjectXApiClient["searchAccountsCollection"]>>,
+      Awaited<ReturnType<ProjectXApiClient["listAvailableContractsCollection"]>>,
+      Awaited<ReturnType<ProjectXApiClient["searchOpenPositionsCollection"]>>,
+      Awaited<ReturnType<ProjectXApiClient["searchOpenOrdersCollection"]>>]
   > {
     const retryDelaysMs = [0, 30_000, 60_000];
     for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
@@ -776,10 +793,10 @@ export class GlitchTopstepService {
       }
       try {
         return await Promise.all([
-          this.api.searchAccounts(true),
-          this.api.listAvailableContracts(this.config.scope.liveMarketData),
-          this.api.searchOpenPositions(this.config.scope.accountId),
-          this.api.searchOpenOrders(this.config.scope.accountId),
+          this.api.searchAccountsCollection(true),
+          this.api.listAvailableContractsCollection(this.config.scope.liveMarketData),
+          this.api.searchOpenPositionsCollection(this.config.scope.accountId),
+          this.api.searchOpenOrdersCollection(this.config.scope.accountId),
         ]);
       } catch (error: unknown) {
         const rateLimited = error instanceof ProjectXApiError && error.status === 429;
@@ -809,11 +826,14 @@ export class GlitchTopstepService {
         this.config.scope.contractId,
       ).instrumentOpenContracts;
       const openTranches = this.resolveClosedTranchesForFlat(beforeOpen);
-      const [accounts, positions, orders] = await Promise.all([
-        this.api.searchAccounts(true),
-        this.api.searchOpenPositions(this.config.scope.accountId),
-        this.api.searchOpenOrders(this.config.scope.accountId),
+      const [accountsCol, positionsCol, ordersCol] = await Promise.all([
+        this.api.searchAccountsCollection(true),
+        this.api.searchOpenPositionsCollection(this.config.scope.accountId),
+        this.api.searchOpenOrdersCollection(this.config.scope.accountId),
       ]);
+      const accounts = accountsCol.items;
+      const positions = positionsCol.items;
+      const orders = ordersCol.items;
       const account = accounts.find((candidate) => candidate.id === this.config.scope.accountId);
       if (!account || account.name !== this.config.scope.accountName) {
         throw new Error("configured_account_disappeared_or_changed");
@@ -826,6 +846,7 @@ export class GlitchTopstepService {
         sortedById(accounts),
         this.config.scope.accountId,
         null,
+        accountsCol.envelope,
       );
       this.recordRestSnapshot(
         "positions_snapshot",
@@ -833,6 +854,7 @@ export class GlitchTopstepService {
         sortedById(positions),
         this.config.scope.accountId,
         this.config.scope.contractId,
+        positionsCol.envelope,
       );
       this.recordRestSnapshot(
         "open_orders_snapshot",
@@ -840,6 +862,7 @@ export class GlitchTopstepService {
         sortedById(orders),
         this.config.scope.accountId,
         this.config.scope.contractId,
+        ordersCol.envelope,
       );
 
       this.state.replaceAccounts(accounts, receivedAt);
@@ -1120,6 +1143,7 @@ export class GlitchTopstepService {
     normalizedPayload: unknown,
     accountId: number | null,
     contractId: string | null,
+    rawPayload: unknown = null,
   ): boolean {
     return this.restEvidenceRecorder.recordIfChanged({
       receivedUtc,
@@ -1128,6 +1152,7 @@ export class GlitchTopstepService {
       accountId,
       contractId,
       normalizedPayload,
+      rawPayload,
     });
   }
 

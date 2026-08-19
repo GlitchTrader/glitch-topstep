@@ -72,6 +72,10 @@ Operator controls require the separate `GLITCH_OPERATOR_TOKEN`.
 
 Keep the server bound to `127.0.0.1`. Do not expose port 8790 to the LAN or internet.
 
+Topstep flatten (`GLITCH_SESSION_MUST_FLAT_LOCAL_TIME`, default 15:10 CT) closes `session.entry_window_open` until the trading-day reset (17:00 CT). Quotes may still flow; ProjectX order mutations can fail with "instrument is not in an active trading status". Hermes skips flat ENTER when the window is closed.
+
+Inspect sanitized REST reconciliation envelopes with `GET /evidence?source=projectx_rest` (Bearer `GLITCH_LOCAL_TOKEN`).
+
 ## Secret handling
 
 - never commit `.env`

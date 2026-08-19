@@ -28,7 +28,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Provider event journal | Integrated | Real payload-rate, reconnect, and disk-failure acceptance |
 | Evidence-before-state ordering | Implemented | Real SignalR payload fixture |
 | Sanitized raw realtime evidence | Implemented | Validate against current ProjectX payloads |
-| Normalized REST reconciliation evidence | Implemented | Raw REST envelopes remain an explicit gap |
+| Normalized REST reconciliation evidence | Implemented | Sanitized REST envelopes stored with snapshot identity; inspect `GET /evidence?source=projectx_rest` |
 | Bounded market-event retention | Implemented | Tune retention from observed quote/print/DOM rates |
 | Authenticated evidence inspection | Implemented | Operator acceptance and replay tooling |
 | Explicit provider relationship index | Implemented | Validate `trade.orderId` retention on real payloads |

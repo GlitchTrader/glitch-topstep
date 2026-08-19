@@ -1,13 +1,19 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AccountVenueSnapshot } from "../domain/models.js";
-import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
+import type { StoredProviderEvidenceEvent, ProviderEvidenceSource } from "../domain/provider-evidence.js";
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import type { OutcomeRevisionPage } from "../storage/sqlite-outcome-feed.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
 
+const EVIDENCE_SOURCES = new Set<ProviderEvidenceSource>([
+  "projectx_rest",
+  "projectx_user_stream",
+  "projectx_market_stream",
+  "projectx_lifecycle",
+]);
 const MAX_BODY_BYTES = 65_536;
 const DEFAULT_EVIDENCE_LIMIT = 100;
 const MAX_EVIDENCE_LIMIT = 1_000;
@@ -37,7 +43,10 @@ export class LocalGatewayServer {
     private readonly health: () => Record<string, unknown>,
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly packet: () => DirectDecisionPacket,
-    private readonly evidence: (limit: number) => StoredProviderEvidenceEvent[],
+    private readonly evidence: (
+      limit: number,
+      query?: { source?: ProviderEvidenceSource; eventType?: string },
+    ) => StoredProviderEvidenceEvent[],
     private readonly coordinator: ExecutionCoordinator,
     ownershipService: ProjectXOrderOwnershipService | null = null,
     private readonly outcomes: (limit: number) => Promise<TradeOutcomeV1[]> = async () => [],
@@ -119,7 +128,12 @@ export class LocalGatewayServer {
         return;
       }
       if (request.method === "GET" && url.pathname === "/evidence") {
-        const events = this.evidence(this.evidenceLimit(url.searchParams.get("limit")));
+        const source = this.evidenceSource(url.searchParams.get("source"));
+        const eventType = url.searchParams.get("event_type")?.trim() || undefined;
+        const events = this.evidence(this.evidenceLimit(url.searchParams.get("limit")), {
+          source,
+          eventType,
+        });
         this.json(response, 200, {
           schema_version: "glitch.projectx.evidence_page.v1",
           recorded_utc: new Date().toISOString(),
@@ -283,6 +297,18 @@ export class LocalGatewayServer {
     }
     const text = Buffer.concat(chunks).toString("utf8");
     return JSON.parse(text);
+  }
+
+  private evidenceSource(raw: string | null): ProviderEvidenceSource | undefined {
+    if (raw === null || raw.length === 0) {
+      return undefined;
+    }
+    if (!EVIDENCE_SOURCES.has(raw as ProviderEvidenceSource)) {
+      throw new InvalidQueryError(
+        `source must be one of ${[...EVIDENCE_SOURCES].join(",")}`,
+      );
+    }
+    return raw as ProviderEvidenceSource;
   }
 
   private evidenceLimit(raw: string | null): number {

@@ -199,6 +199,33 @@ describe("ProjectX provider evidence store", () => {
     store.close();
   });
 
+  it("redacts credential keys in retained REST envelopes", () => {
+    const store = new SqliteProviderEvidenceStore(":memory:");
+    const event = store.append({
+      receivedUtc: "2026-08-19T20:50:00Z",
+      providerTimestampUtc: null,
+      source: "projectx_rest",
+      eventType: "accounts_snapshot",
+      generation: 1,
+      accountId: 101,
+      contractId: null,
+      providerEntityId: null,
+      rawPayload: {
+        success: true,
+        errorCode: 0,
+        errorMessage: null,
+        token: "session-secret",
+        accounts: [{ id: 101, name: "TEST" }],
+      },
+      normalizedPayload: [{ id: 101, name: "TEST" }],
+    });
+    const raw = event.rawPayload as { token: string; accounts: Array<{ id: number }> };
+    assert.equal(raw.token, "[REDACTED]");
+    assert.equal(raw.accounts[0]?.id, 101);
+    assert.equal(store.query({ source: "projectx_rest", eventType: "accounts_snapshot" }).length, 1);
+    store.close();
+  });
+
   it("rejects unbounded evidence reads and invalid internal options", () => {
     const store = new SqliteProviderEvidenceStore(":memory:");
     assert.throws(() => store.recent(0), /provider_evidence_limit_invalid/);

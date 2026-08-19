@@ -1,9 +1,9 @@
 {
   "schema_version": "glitch.projectx.stream_subscriptions_proof.v1",
-  "captured_utc": "2026-08-03T01:20:09.256Z",
+  "captured_utc": "2026-08-19T20:51:31.147Z",
   "scope": {
-    "account_id": 26080387,
-    "account_name": "PRAC-V2-645601-15979101",
+    "account_id": 26282486,
+    "account_name": "PRAC-V2-645601-47191819",
     "contract_id": "CON.F.US.MNQ.U26",
     "instrument": "MNQ"
   },
@@ -51,20 +51,22 @@
   "connection_health": {
     "user_stream_state": "connected",
     "market_stream_state": "connected",
-    "last_user_event_utc": null,
-    "last_market_event_utc": "2026-08-03T01:20:11.429Z",
+    "last_user_event_utc": "2026-08-19T20:49:25.669Z",
+    "last_market_event_utc": "2026-08-19T20:51:31.613Z",
     "reconciliation_state": "succeeded",
-    "reconciliation_generation": 13,
-    "operational_generation": 13
+    "reconciliation_generation": 1,
+    "operational_generation": 1
   },
   "observed_event_types": {
     "projectx_lifecycle": [
       "market_closed",
       "market_connected_and_subscribed",
       "market_connecting",
+      "market_liveness_restart",
       "market_reconnect_failed",
       "market_reconnected_and_subscribed",
       "market_reconnecting",
+      "market_restart_failed",
       "market_stopping",
       "user_closed",
       "user_connected_and_subscribed",
@@ -95,8 +97,8 @@
     ]
   },
   "order_flow": {
-    "trade_count_60s": 267,
-    "quote_age_ms": -120
+    "trade_count_60s": 109,
+    "quote_age_ms": 249
   },
   "proof_passed": true,
   "proof_failures": []

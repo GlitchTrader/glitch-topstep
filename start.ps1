@@ -68,6 +68,9 @@ $dataDir = if ($env:GLITCH_DATA_DIR) { $env:GLITCH_DATA_DIR } else { Join-Path $
 if (-not [System.IO.Path]::IsPathRooted($dataDir)) {
     $dataDir = Join-Path $PSScriptRoot $dataDir
 }
+if ($dataDir -match '(?i)(\\OneDrive\\|OneDrive -)') {
+    Write-Warning "GLITCH_DATA_DIR is under OneDrive ($dataDir). SQLite WAL plus OneDrive sync can stall or corrupt the gateway. Prefer a path under $env:LOCALAPPDATA\glitch-topstep."
+}
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
 $stdoutLog = Join-Path $dataDir "gateway.stdout.log"

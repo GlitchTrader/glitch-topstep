@@ -8,9 +8,9 @@
       "raw_payload": {
         "action": 1,
         "data": {
-          "id": 26080387,
-          "name": "PRAC-V2-645601-15979101",
-          "balance": 150378.16,
+          "id": 26282486,
+          "name": "PRAC-V2-645601-47191819",
+          "balance": 149848.64,
           "canTrade": true,
           "isVisible": true,
           "simulated": true
@@ -32,36 +32,14 @@
       "source": "projectx_market_stream",
       "raw_payload": {
         "contractId": "CON.F.US.MNQ.U26",
-        "payload": [
-          {
-            "timestamp": "2026-07-31T19:18:30.3152901+00:00",
-            "type": 5,
-            "price": 28464.25,
-            "volume": 2164,
-            "currentVolume": 1
-          },
-          {
-            "timestamp": "2026-07-31T19:18:30.3212889+00:00",
-            "type": 5,
-            "price": 28464.5,
-            "volume": 2305,
-            "currentVolume": 1
-          },
-          {
-            "timestamp": "2026-07-31T19:18:30.3489591+00:00",
-            "type": 4,
-            "price": 28464.25,
-            "volume": 1,
-            "currentVolume": 0
-          },
-          {
-            "timestamp": "2026-07-31T19:18:30.3489849+00:00",
-            "type": 3,
-            "price": 28464.75,
-            "volume": 8,
-            "currentVolume": 0
-          }
-        ]
+        "payload": {
+          "contractId": "CON.F.US.MNQ.U26",
+          "timestamp": "2026-08-19T20:51:31.4173693+00:00",
+          "type": 4,
+          "price": 29547,
+          "volume": 2,
+          "currentVolume": 0
+        }
       }
     },
     {
@@ -90,6 +68,11 @@
       "raw_payload": null
     },
     {
+      "event_type": "market_liveness_restart",
+      "source": "projectx_lifecycle",
+      "raw_payload": null
+    },
+    {
       "event_type": "market_reconnect_failed",
       "source": "projectx_lifecycle",
       "raw_payload": {
@@ -111,6 +94,14 @@
       }
     },
     {
+      "event_type": "market_restart_failed",
+      "source": "projectx_lifecycle",
+      "raw_payload": {
+        "name": "Error",
+        "message": "WebSocket failed to connect. The connection could not be found on the server, either the endpoint may not be a SignalR endpoint, the connection ID is not present on the server, or there is a proxy blocking WebSockets. If you have multiple servers check that sticky sessions are enabled."
+      }
+    },
+    {
       "event_type": "market_stopping",
       "source": "projectx_lifecycle",
       "raw_payload": null
@@ -119,79 +110,15 @@
       "event_type": "market_trade",
       "source": "projectx_market_stream",
       "raw_payload": {
-        "contractId": "CON.F.US.MNQ.U26",
+        "contractId": "CON.F.US.MES.U26",
         "payload": [
           {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.5,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
+            "symbolId": "F.US.MES",
+            "price": 7730.5,
+            "timestamp": "2026-08-19T20:51:30.052+00:00",
             "type": 1,
             "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.5,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.5,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.5,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.25,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.25,
-            "timestamp": "2026-07-31T19:18:30.288+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.25,
-            "timestamp": "2026-07-31T19:18:30.292+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.25,
-            "timestamp": "2026-07-31T19:18:30.292+00:00",
-            "type": 1,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
-          },
-          {
-            "symbolId": "F.US.MNQ",
-            "price": 28464.5,
-            "timestamp": "2026-07-31T19:18:30.304+00:00",
-            "type": 0,
-            "volume": 1,
-            "contractId": "CON.F.US.MNQ.U26"
+            "contractId": "CON.F.US.MES.U26"
           }
         ]
       }
@@ -207,23 +134,18 @@
       "raw_payload": {
         "action": 1,
         "data": {
-          "id": 3348158587,
-          "accountId": 26080387,
+          "id": 3425270858,
+          "accountId": 26282486,
           "contractId": "CON.F.US.MNQ.U26",
           "symbolId": "F.US.MNQ",
-          "creationTimestamp": "2026-07-31T14:28:51.477795+00:00",
-          "updateTimestamp": "2026-07-31T14:34:48.6786816+00:00",
-          "status": 3,
-          "type": 1,
+          "creationTimestamp": "2026-08-19T20:49:25.3938333+00:00",
+          "updateTimestamp": "2026-08-19T20:49:25.3962105+00:00",
+          "status": 5,
+          "type": 2,
           "side": 1,
           "size": 1,
-          "limitPrice": 28345.75,
           "fillVolume": 0,
-          "customTag": "glt-3a95b5a2-3c68-4ef2-8cfd-962d9aead4c9-TP",
-          "trailDistance": 405,
-          "trailPrice": 101.25,
-          "parentOrderId": 3348158584,
-          "linkedOrderId": 3348158586
+          "customTag": "glt-33fa8e1e-d19c-422d-ac43-efb12061d97c"
         }
       }
     },
@@ -233,14 +155,14 @@
       "raw_payload": {
         "action": 2,
         "data": {
-          "id": 806869468,
-          "accountId": 26080387,
+          "id": 825245547,
+          "accountId": 26282486,
           "contractId": "CON.F.US.MNQ.U26",
           "contractDisplayName": "MNQU26",
-          "creationTimestamp": "2026-07-31T14:28:51.496433+00:00",
+          "creationTimestamp": "2026-08-19T14:15:48.611387+00:00",
           "type": 0,
           "size": 0,
-          "averagePrice": 28248
+          "averagePrice": 29398.5
         }
       }
     },
@@ -256,14 +178,10 @@
         "contractId": "CON.F.US.MNQ.U26",
         "payload": {
           "symbol": "F.US.MNQ",
-          "lastPrice": 28464.5,
-          "bestBid": 28464.25,
-          "bestAsk": 28464.75,
-          "change": 226.75,
-          "changePercent": 0.008,
-          "volume": 2605725,
-          "lastUpdated": "2026-07-31T19:18:30.3509455+00:00",
-          "timestamp": "2026-07-31T19:18:30.288+00:00",
+          "bestBid": 29547,
+          "bestAsk": 29547.5,
+          "lastUpdated": "2026-08-19T20:51:31.4347534+00:00",
+          "timestamp": "2026-08-19T20:51:31.348+00:00",
           "contract": "CON.F.US.MNQ.U26"
         }
       }
@@ -272,19 +190,20 @@
       "event_type": "trade",
       "source": "projectx_user_stream",
       "raw_payload": {
-        "action": 1,
+        "action": 0,
         "data": {
-          "id": 2935109671,
-          "accountId": 26080387,
+          "id": 3004518356,
+          "accountId": 26282486,
           "contractId": "CON.F.US.MNQ.U26",
-          "creationTimestamp": "2026-07-31T14:29:57.387903+00:00",
-          "price": 28248,
+          "creationTimestamp": "2026-08-19T14:16:01.4061289+00:00",
+          "price": 29423,
+          "profitAndLoss": -49,
           "fees": 0.36,
           "commissions": 0.25,
           "side": 0,
           "size": 1,
           "voided": false,
-          "orderId": 3348171017
+          "orderId": 3423462488
         }
       }
     },
@@ -308,7 +227,7 @@
       "source": "projectx_lifecycle",
       "raw_payload": {
         "name": "Error",
-        "message": "Invocation canceled due to the underlying connection being closed."
+        "message": "Server timeout elapsed without receiving a message from the server."
       }
     },
     {

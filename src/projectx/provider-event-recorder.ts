@@ -33,6 +33,7 @@ export interface RecordRestSnapshotInput {
   contractId: string | null;
   providerEntityId?: string | null;
   normalizedPayload: unknown;
+  rawPayload?: unknown;
 }
 
 export class ProviderRestSnapshotRecorder {
@@ -64,7 +65,7 @@ export class ProviderRestSnapshotRecorder {
       contractId: input.contractId,
       providerEntityId: input.providerEntityId ?? null,
       relatedProviderEntityId: null,
-      rawPayload: null,
+      rawPayload: input.rawPayload ?? null,
       normalizedPayload: input.normalizedPayload ?? null,
     });
     this.lastContentHashByIdentity.set(identity, contentHash);
