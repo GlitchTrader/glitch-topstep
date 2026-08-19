@@ -67,7 +67,7 @@ jobs:
           npm sbom --sbom-format cyclonedx > release/gateway.cdx.json
           node scripts/build-paired-release-manifest.mjs --gateway-commit "$GITHUB_SHA" --profile-root profile --evidence-ref "$EVIDENCE_REF" --output release/paired-release.json
           sha256sum release/* > release/SHA256SUMS
-      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: release/*
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
