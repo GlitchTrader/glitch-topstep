@@ -7,7 +7,11 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const OUT_DIR = path.join(ROOT, "tests", "fixtures", "projectx", "live");
+const OUT_DIR = path.resolve(
+  process.env.GLITCH_EVENT_RATES_OUTPUT_DIR
+    ?? path.join(ROOT, "tests", "fixtures", "projectx", "live"),
+);
+fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const envPath = path.join(ROOT, ".env");
 if (fs.existsSync(envPath)) {
