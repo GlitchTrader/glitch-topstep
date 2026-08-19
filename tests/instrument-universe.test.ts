@@ -26,3 +26,17 @@ test("contract resolution fails closed on absent or ambiguous active contracts",
   );
 });
 
+test("contract resolution rejects duplicate exact identity and invalid tick economics", () => {
+  assert.throws(
+    () => resolveInstrumentUniverse(
+      ["MNQ", "MES"],
+      [contracts[0]!, { ...contracts[1]!, id: contracts[0]!.id, symbolId: "F.US.MES" }],
+    ),
+    /instrument_contract_collision:CON\.F\.US\.MNQ\.U26/,
+  );
+  assert.throws(
+    () => resolveInstrumentUniverse(["MCL"], [{ ...contracts[2]!, tickValue: 0 }]),
+    /contract_economics_invalid:MCL:CON\.F\.US\.MCLE\.U26/,
+  );
+});
+

@@ -67,6 +67,9 @@ export function resolveInstrumentUniverse(
       throw new Error(`active_contract_ambiguous:${instrument}:${candidates.map((row) => row.id).join(",")}`);
     }
     const contract = candidates[0]!;
+    if (!(contract.tickSize > 0) || !(contract.tickValue > 0)) {
+      throw new Error(`contract_economics_invalid:${instrument}:${contract.id}`);
+    }
     return {
       instrument,
       contract_id: contract.id,
@@ -77,6 +80,13 @@ export function resolveInstrumentUniverse(
       active_contract: true,
     };
   });
+  const contractIds = new Set<string>();
+  for (const contract of contracts) {
+    if (contractIds.has(contract.contract_id)) {
+      throw new Error(`instrument_contract_collision:${contract.contract_id}`);
+    }
+    contractIds.add(contract.contract_id);
+  }
   const canonical = contracts
     .slice()
     .sort((left, right) => left.instrument.localeCompare(right.instrument))

@@ -3,6 +3,7 @@ import type { MarketObservationState } from "../domain/market-observation.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import { ProjectXMarketObservationService } from "./projectx-observation-service.js";
 import { RateAwareScheduler, type RateAwareSchedulerStatus } from "./rate-aware-scheduler.js";
+import { summarizeScannerObservation, type ScannerObservationQuality } from "./scanner-quality.js";
 
 export interface MultiInstrumentMarketPacket {
   schema_version: "glitch.topstep.market_universe.v1";
@@ -19,6 +20,7 @@ export interface MultiInstrumentMarketPacket {
     tick_value: number;
     execution_mode: "selected" | "observation_only";
     market_observation: MarketObservationState;
+    observation_quality: ScannerObservationQuality;
   }>;
 }
 
@@ -77,6 +79,9 @@ export class MultiInstrumentMarketDataPlane {
         tick_value: contract.tick_value,
         execution_mode: contract.contract_id === this.selectedContractId ? "selected" : "observation_only",
         market_observation: this.observations.get(contract.contract_id)!.current(),
+        observation_quality: summarizeScannerObservation(
+          this.observations.get(contract.contract_id)!.current(),
+        ),
       })),
     };
   }
