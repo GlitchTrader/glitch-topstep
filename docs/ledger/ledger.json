@@ -3,6 +3,12 @@
   "project": "glitch-topstep",
   "updated": "2026-08-19",
   "release_target": "beta",
+  "reconciliation": {
+    "date": "2026-08-19",
+    "merged_prs": [128, 129, 131, 132, 133, 134, 135],
+    "implementation_note": "Roadmap 1-27 implementation and dependency workflow updates are merged. Open roadmap issues remain open when they still require live ProjectX acceptance, operational evidence, or future enablement; simultaneous multi-instrument exposure remains disabled by default.",
+    "stream_validation": "262 Gateway tests passed, including SignalR supervisor, reconnect, liveness, stream payload, and ProjectX fixture proofs."
+  },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
     "hermes": "owns probabilistic market judgment and trade intent",
