@@ -20,7 +20,7 @@
     "acceptance:r1-04": "npm run build && node scripts/acceptance-r1-04-kill-matrix.mjs"
   },
   "dependencies": {
-    "@microsoft/signalr": "^8.0.7"
+    "@microsoft/signalr": "^10.0.11"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
