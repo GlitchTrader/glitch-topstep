@@ -41,6 +41,8 @@ export interface ProjectXRealtimeOptions {
   token: () => string;
   accountId: number;
   contractId: string;
+  contractIds?: readonly string[];
+  depthContractIds?: readonly string[];
   evidence: ProviderEvidenceSink;
   logLevel?: number;
   onReconnected?: () => void | Promise<void>;
@@ -500,11 +502,15 @@ export class ProjectXRealtimeClient {
   }
 
   private async subscribeMarket(): Promise<void> {
-    await Promise.all([
-      this.marketConnection.invoke("SubscribeContractQuotes", this.options.contractId),
-      this.marketConnection.invoke("SubscribeContractTrades", this.options.contractId),
-      this.marketConnection.invoke("SubscribeContractMarketDepth", this.options.contractId),
-    ]);
+    const contractIds = [...new Set(this.options.contractIds ?? [this.options.contractId])];
+    const depthContractIds = new Set(this.options.depthContractIds ?? [this.options.contractId]);
+    await Promise.all(contractIds.flatMap((contractId) => [
+      this.marketConnection.invoke("SubscribeContractQuotes", contractId),
+      this.marketConnection.invoke("SubscribeContractTrades", contractId),
+      ...(depthContractIds.has(contractId)
+        ? [this.marketConnection.invoke("SubscribeContractMarketDepth", contractId)]
+        : []),
+    ]));
   }
 }
 

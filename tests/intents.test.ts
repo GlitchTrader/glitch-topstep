@@ -49,6 +49,35 @@ describe("Glitch intent contract", () => {
     assert.equal(parseTradeIntent(entry).quantity, 1);
   });
 
+  it("accepts v3 entries only with exact packet, contract, scope, expiry, and bounded range", () => {
+    const input = baseIntent();
+    const entry = {
+      ...input,
+      schema_version: "glitch.intent.v3",
+      action: "ENTER_LONG",
+      quantity: 1,
+      order_type: "MARKET",
+      stop_loss: 19_990,
+      take_profit_1: 20_020,
+      packet_id: "packet-1",
+      contract_id: "CON.F.US.MCLE.U26",
+      scope_hash: "scope-hash",
+      scope_generation: 2,
+      expires_utc: "2026-07-21T12:05:00Z",
+      entry_price_min: 70.01,
+      entry_price_max: 70.05,
+      decision_audit: { ...input.decision_audit, final_choice: "ENTER_LONG" },
+    };
+    const parsed = parseTradeIntent(entry);
+    assert.equal(parsed.schemaVersion, "glitch.intent.v3");
+    assert.equal(parsed.contractId, "CON.F.US.MCLE.U26");
+    assert.equal(parsed.entryPriceMax, 70.05);
+    assert.throws(
+      () => parseTradeIntent({ ...entry, entry_price_min: 71 }),
+      /entry_price_range_invalid/,
+    );
+  });
+
   it("rejects unknown fields, profile mismatches, prompt mismatches, and choice mismatches", () => {
     assert.throws(() => parseTradeIntent({ ...baseIntent(), surprise: true }), /unknown_intent_field/);
     assert.throws(

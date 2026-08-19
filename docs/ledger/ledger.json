@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-07",
+  "updated": "2026-08-19",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -483,7 +483,7 @@
       ],
       "acceptance": [
         "Second contract configurable without code fork; outcomes and ownership scoped per instrument.",
-        "Shadow session per contract with sanitized fixtures.",
+        "Simulated armed session per contract with sanitized fixtures, executed one contract at a time; initial second contract is MCL resolved to ProjectX MCLE.",
         "docs/PARITY.md instrument-general row acceptance updated."
       ],
       "stop_line": "No simultaneous multi-instrument trading in this row.",
@@ -553,11 +553,706 @@
         "src/execution/coordinator.ts",
         "glitch-topstep-hermes-profile:GTHP-020"
       ]
+    },
+    {
+      "id": "TS-PROD-01",
+      "title": "Make protected reduction and bracket rearm fail-safe",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_architecture",
+      "issue": 109,
+      "depends_on": [
+        "TS-PM-03-EVIDENCE",
+        "TS-R4-08"
+      ],
+      "acceptance": [
+        "Partial EXIT is fail-closed in armed mode until a native atomic/provable protection transition exists.",
+        "Every positioned state proves stop coverage greater than or equal to venue open quantity; TP may degrade to stop-only.",
+        "A durable ProtectionSaga recovers every cancel, close, rearm, timeout, crash, and stream/REST ordering state without duplicate mutation.",
+        "Flat evidence triggers immediate idempotent orphan-protection sweep.",
+        "Sanitized PRAC evidence proves ProjectX group relationships and partial-close behavior before capability advertisement."
+      ],
+      "stop_line": "Do not infer OCO/ownership from timing or geometry and do not advertise partial EXIT without provider acceptance evidence.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/execution/coordinator.ts",
+        "src/service.ts",
+        "tests/position-management.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/109"
+      ]
+    },
+    {
+      "id": "TS-PROD-02",
+      "title": "Publish a single-writer revisioned outcome feed with cursor replay",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "learning_architecture",
+      "issue": 110,
+      "depends_on": [
+        "TS-R3-03"
+      ],
+      "acceptance": [
+        "Gateway is the sole canonical outcome writer; direct writes into the Hermes state directory are removed.",
+        "Outcome revisions carry monotonic sequence, stable outcome_id, revision, status, and content_hash.",
+        "A bounded after_sequence feed replays more than 10000 records without gaps and exposes retention floor explicitly.",
+        "Corrections replace the current projection without destroying revision history or creating silent duplicate learning episodes.",
+        "Shared contract fixtures pass against glitch-topstep-hermes-profile:GTHP-PROD-01."
+      ],
+      "stop_line": "Do not deduplicate corrections forever by intent_id and do not share a mutable JSONL file between processes.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/trade-outcome-store.ts",
+        "src/learning/trade-outcome-publisher.ts",
+        "src/server/local-gateway.ts",
+        "glitch-topstep-hermes-profile:GTHP-PROD-01",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/110"
+      ]
+    },
+    {
+      "id": "TS-PROD-03",
+      "title": "Make service startup rollback and shutdown drain transactional",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "runtime_architecture",
+      "issue": 111,
+      "depends_on": [],
+      "acceptance": [
+        "Startup failure at every acquisition point disposes all prior resources in reverse order.",
+        "An exclusive account/contract runtime lock prevents a second mutation owner before intent admission starts.",
+        "Shutdown closes admission, cancels new work, drains coordinator/reconcile/history/outcomes/writers, closes stores, then releases the lock.",
+        "SIGINT, SIGTERM, fatal startup error, and fatal runtime error share one idempotent lifecycle path.",
+        "Health exposes starting, ready, draining, failed_startup, and failed_shutdown with actionable details."
+      ],
+      "stop_line": "Do not use process.exit to hide leaked handles or close stores while active consumers can still write.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/service.ts",
+        "src/index.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/111"
+      ]
+    },
+    {
+      "id": "TS-PROD-04",
+      "title": "Make append and rewrite writers durable, recoverable, and health-visible",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "storage",
+      "issue": 112,
+      "depends_on": [
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "One failed write does not poison the scheduling chain for all subsequent writes.",
+        "In-memory indexes change only after durable commit.",
+        "Authoritative state uses transactional SQLite; remaining exports use atomic replace and corruption quarantine.",
+        "Disk full, permission, rename, fsync, corrupt-tail, and restart fault tests are green.",
+        "Persistence backlog and failure state are visible and block new exposure when execution truth is uncertain."
+      ],
+      "stop_line": "Do not skip corrupt records silently or treat a successful in-memory update as a successful commit.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/jsonl-event-store.ts",
+        "src/storage/trade-outcome-store.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/112"
+      ]
+    },
+    {
+      "id": "TS-PROD-05",
+      "title": "Move market evidence persistence behind bounded backpressure",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "market_data_architecture",
+      "issue": 113,
+      "depends_on": [
+        "TS-R2-07",
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "A dedicated persistence worker acknowledges durable commit before provider evidence mutates VenueState.",
+        "Identity events are never dropped; quote/depth coalescing is deterministic, measured, and retains provenance.",
+        "High-water overflow visibly degrades new exposure while preserving user-order, position, trade, EXIT, and reconciliation processing.",
+        "Burst and soak tests above TS-R2-07 rates publish event-loop, queue, commit, HTTP, memory, and disk SLOs.",
+        "Shutdown drains the queue or leaves a durable resumable cursor."
+      ],
+      "stop_line": "Do not solve event-loop blocking by weakening execution-state durability or silently dropping identity events.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/projectx-evidence-store.ts",
+        "src/projectx/realtime.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/113"
+      ]
+    },
+    {
+      "id": "TS-PROD-06",
+      "title": "Decompose coordinator and service into explicit state-machine modules",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 114,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "IntentAdmission, ExecutionSaga, ProtectionSaga, ReconciliationService, OutcomeFeed, EvidenceIngestor, and LifecycleSupervisor have explicit ports and state contracts.",
+        "Domain modules do not perform filesystem, network, clock, or SQLite IO directly.",
+        "Coordinator and service become thin orchestration/composition layers without behavior loss.",
+        "Characterization, transition, property, and fault tests stay green after each incremental extraction.",
+        "Automated architecture checks reject cycles and forbidden adapter imports."
+      ],
+      "stop_line": "No big-bang rewrite, generic microservice framework, or premature venue-neutral abstraction.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/execution/coordinator.ts",
+        "src/service.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/114"
+      ]
+    },
+    {
+      "id": "TS-PROD-07",
+      "title": "Version and test the paired gateway and profile protocol contract",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "release_architecture",
+      "issue": 115,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-02",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03"
+      ],
+      "acceptance": [
+        "Health and profile manifest intersect on protocol revision, schemas, prompt versions, semver ranges, capabilities, outcome feed, and artifact hashes.",
+        "Critical capabilities include semantic revision and provider acceptance evidence, not an unversioned boolean.",
+        "Cross-repository CI tests immutable gateway/profile SHAs across supported and intentionally incompatible pairs.",
+        "Armed mutation fails closed with an explicit mismatch while read-only diagnostics remain available.",
+        "Release and rollback select a signed pair manifest rather than independently latest components."
+      ],
+      "stop_line": "Do not treat tested gateway version as informational when semantic compatibility controls mutation safety.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/release/compatibility.ts",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/115"
+      ]
+    },
+    {
+      "id": "TS-PROD-08",
+      "title": "Enforce main protection and production supply-chain gates",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "release_security",
+      "issue": 116,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-02",
+        "TS-PROD-03",
+        "TS-PROD-07"
+      ],
+      "acceptance": [
+        "Both repositories enforce main rulesets with PR, review, resolved conversations, required checks, and no force-push/deletion.",
+        "Break-glass is narrow, audited, time-bounded, and tested.",
+        "Workflows use least privilege, immutable action SHAs, deterministic installs, secret/dependency/SAST checks, and CODEOWNERS.",
+        "Release publishes SBOM, checksums, provenance/attestation, and an immutable paired artifact manifest.",
+        "Deployment cannot promote armed mode without a separate human gate and attached PRAC/shadow evidence."
+      ],
+      "stop_line": "Repository privacy and a small maintainer set do not replace enforced controls.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        ".github/workflows/ci.yml",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/116"
+      ]
+    },
+    {
+      "id": "TS-CAP-01",
+      "title": "Publish a configurable 0.5% daily-capture objective and progress contract",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "risk_architecture",
+      "issue": 118,
+      "depends_on": [
+        "TS-R1-03",
+        "TS-PROD-07",
+        "glitch-topstep-hermes-profile:GTHP-CAP-01"
+      ],
+      "acceptance": [
+        "Packet publishes configured objective rate, baseline equity, target dollars, realized progress, remaining objective, and whether the objective is reached.",
+        "The default rate is 0.5% and remains operator-configurable and versioned.",
+        "The objective is contextual evidence only and never becomes an entry trigger, direction, quantity formula, or promise of achievable profit.",
+        "Reset boundaries and realized-PnL attribution are explicit and replay-testable.",
+        "Shared fixtures pass against glitch-topstep-hermes-profile issue 102."
+      ],
+      "stop_line": "Do not turn the objective into a quota or size positions from the remaining target gap.",
+      "sources": [
+        "src/hermes/packet-builder.ts",
+        "src/risk/risk-engine.ts",
+        "glitch-topstep-hermes-profile:GTHP-CAP-01",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/118"
+      ]
+    },
+    {
+      "id": "TS-CAP-02",
+      "title": "Protect daily capture with tighten-only owned stops and a realized-PnL entry lock",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_architecture",
+      "issue": 119,
+      "depends_on": [
+        "TS-CAP-01",
+        "TS-PROD-01",
+        "TS-R4-08",
+        "glitch-topstep-hermes-profile:GTHP-CAP-01"
+      ],
+      "acceptance": [
+        "After the configured objective is reached, new exposure is durably locked for the session while reductions and flatten remain available.",
+        "Owned stop changes are tighten-only and preserve complete quantity coverage with provider-confirmed receipts.",
+        "Realized, unrealized, fees, pending exposure, and reset boundaries cannot be conflated when calculating the lock.",
+        "Crash and reconnect tests prove the lock and protection state survive restart without duplicate mutations.",
+        "The gateway never widens risk or forces an exit solely to hit the objective."
+      ],
+      "stop_line": "Do not advertise profit protection until provider-confirmed stop coverage and a durable realized-PnL lock are proven.",
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/risk/risk-engine.ts",
+        "src/service.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/119"
+      ]
+    },
+    {
+      "id": "TS-MKT-01",
+      "title": "Publish the current partial bar and prior completed one-minute bar explicitly",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "market_data_architecture",
+      "issue": 120,
+      "depends_on": [
+        "TS-R2-07",
+        "glitch-topstep-hermes-profile:GTHP-MKT-01"
+      ],
+      "acceptance": [
+        "Packet exposes separately identified current partial and prior completed one-minute bars with timestamps and provenance.",
+        "Partial-bar progress and feature adjustments are explicit and cannot masquerade as closed-candle evidence.",
+        "Missing, stale, duplicated, or contradictory bar identity is reported as data quality rather than fabricated zero values.",
+        "Contract fixtures cover minute rollover, gaps, partial-only responses, and out-of-order history results.",
+        "Shared fixtures pass against glitch-topstep-hermes-profile issue 103."
+      ],
+      "stop_line": "Do not publish one ambiguous latest bar or make a completed candle a universal execution gate.",
+      "sources": [
+        "src/market/projectx-observation-service.ts",
+        "src/hermes/packet-builder.ts",
+        "glitch-topstep-hermes-profile:GTHP-MKT-01",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/120"
+      ]
+    },
+    {
+      "id": "TS-ENTRY-01",
+      "title": "Add bounded entry ranges and delivery-time supersession semantics",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "intent_protocol",
+      "issue": 121,
+      "depends_on": [
+        "TS-PROD-07",
+        "glitch-topstep-hermes-profile:GTHP-ENTRY-01"
+      ],
+      "acceptance": [
+        "Intent contract supports a bounded entry range tied to exact packet, contract, scope generation, and expiry.",
+        "Gateway revalidates the latest authoritative price immediately before mutation.",
+        "Outside-range delivery rejects the executable intent with an attributable supersession result and permits one fresh comparison.",
+        "Favorable movement outside the range never becomes implicit permission or causes the old intent to be amended.",
+        "Idempotent retry and stale-packet tests prove no old intent can execute against a new snapshot."
+      ],
+      "stop_line": "Do not widen an entry range after delivery or replay an old intent against a newer packet.",
+      "sources": [
+        "src/domain/intent.ts",
+        "src/risk/risk-engine.ts",
+        "src/execution/coordinator.ts",
+        "glitch-topstep-hermes-profile:GTHP-ENTRY-01",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/121"
+      ]
+    },
+    {
+      "id": "TS-CTRL-01",
+      "title": "Make pause, resume, mode, and flatten controls durable and content-bound",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "control_plane",
+      "issue": 122,
+      "depends_on": [
+        "TS-PROD-03",
+        "TS-PROD-04"
+      ],
+      "acceptance": [
+        "Pause, resume, mode change, and flatten directives carry unique identity, content hash, scope, issuer, timestamp, and durable status.",
+        "Duplicate delivery is idempotent while changed content under a reused identity fails closed.",
+        "Restart resumes pending control work without silently replaying completed mutations.",
+        "Flatten remains available during degraded cognition and cannot be confused with a new-exposure command.",
+        "Health reports pending, applying, completed, rejected, and failed control states truthfully."
+      ],
+      "stop_line": "Do not acknowledge a control command before its durable state and native effect are attributable.",
+      "sources": [
+        "src/server/local-gateway.ts",
+        "src/service.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/122"
+      ]
+    },
+    {
+      "id": "TS-EXEC-01",
+      "title": "Publish immediate lifecycle facts and execution-fidelity diagnostics",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "execution_learning",
+      "issue": 123,
+      "depends_on": [
+        "TS-PROD-02",
+        "TS-PROD-04",
+        "glitch-topstep-hermes-profile:GTHP-LEARN-02"
+      ],
+      "acceptance": [
+        "Intent admission, submission, provider acceptance/rejection, partial fill, protection confirmation, amendment, exit fill, and flat are published as immediate attributable facts.",
+        "Diagnostics separate decision latency, transport latency, slippage, fees, rejection, fill quality, and protection fidelity.",
+        "Immediate facts remain visible until the revisioned enriched outcome catches up.",
+        "Corrections preserve stable identity and do not create duplicate learning episodes.",
+        "Shared fixtures pass against glitch-topstep-hermes-profile issue 107."
+      ],
+      "stop_line": "Do not turn transport, provider, or protection failures into directional trading lessons.",
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/learning/trade-outcome-publisher.ts",
+        "src/storage/projectx-evidence-store.ts",
+        "glitch-topstep-hermes-profile:GTHP-LEARN-02",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/123"
+      ]
+    },
+    {
+      "id": "TS-MULTI-02",
+      "title": "Build a rate-aware multi-instrument universe and market-data plane",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "market_data_architecture",
+      "issue": 124,
+      "depends_on": [
+        "TS-MULTI-01",
+        "TS-PROD-05",
+        "TS-MKT-01",
+        "glitch-topstep-hermes-profile:GTHP-MULTI-01"
+      ],
+      "acceptance": [
+        "An operator allowlist resolves to exact active ProjectX contract IDs, native tick economics, a scope hash, and explicit rollover generation.",
+        "One market-hub supervisor owns per-contract subscriptions and restores every configured subscription exactly once after reconnect.",
+        "A centralized scheduler warms and repairs bars for 4 to 6 instruments with measured headroom under ProjectX rate limits.",
+        "Quotes, bars, flow, depth, data quality, and evidence are isolated by exact contract ID; DOM is optional and bounded to a shortlist.",
+        "Additional instruments remain observation-only until paired global cognition and portfolio admission are compatible."
+      ],
+      "stop_line": "Do not clone the full single-contract service per instrument or auto-trade every contract returned by discovery.",
+      "sources": [
+        "src/config.ts",
+        "src/projectx/realtime.ts",
+        "src/market/projectx-observation-service.ts",
+        "src/state/venue-state.ts",
+        "glitch-topstep-hermes-profile:GTHP-MULTI-01",
+        "https://gateway.docs.projectx.com/docs/api-reference/market-data/available-contracts/",
+        "https://gateway.docs.projectx.com/docs/api-reference/market-data/retrieve-bars/",
+        "https://gateway.docs.projectx.com/docs/realtime/",
+        "https://gateway.docs.projectx.com/docs/getting-started/rate-limits/",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/124"
+      ]
+    },
+    {
+      "id": "TS-MULTI-03",
+      "title": "Add account-wide portfolio admission and exact-contract execution",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_architecture",
+      "issue": 125,
+      "depends_on": [
+        "TS-MULTI-02",
+        "TS-PROD-01",
+        "TS-PROD-03",
+        "TS-PROD-07",
+        "TS-ENTRY-01",
+        "glitch-topstep-hermes-profile:GTHP-MULTI-01"
+      ],
+      "acceptance": [
+        "One selected exact contract is admitted under an account-wide serialization lock with current identity, range, lease, tick, quantity, and scope validation.",
+        "Protected worst-case downside includes every position, working or pending entry, fees, slippage reserve, hard loss floor, and daily-capture lock.",
+        "Ownership, protection, reconciliation, receipts, outcomes, and orphan cleanup are scoped by account plus contract.",
+        "Inactive or rolled contracts reject new exposure while existing old-contract positions remain monitored and reducible to flat.",
+        "Initial capability permits one newly selected instrument per account cycle; simultaneous cross-instrument exposure requires a later explicit capability."
+      ],
+      "stop_line": "Do not race independent single-contract coordinators for account capacity or compare raw contract counts across different tick economics.",
+      "sources": [
+        "src/service.ts",
+        "src/state/venue-state.ts",
+        "src/execution/coordinator.ts",
+        "src/risk/risk-engine.ts",
+        "glitch-topstep-hermes-profile:GTHP-MULTI-01",
+        "https://gateway.docs.projectx.com/docs/api-reference/order/order-place/",
+        "https://gateway.docs.projectx.com/docs/api-reference/positions/search-open-positions/",
+        "https://gateway.docs.projectx.com/docs/realtime/",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/125"
+      ]
     }
   ],
   "roadmap_only": [
     "provider-event replay and archive",
-    "versioned Topstep policy and session calendar beyond operator_configured",
-    "multi-timeframe and multi-product observation enrichment"
-  ]
+    "versioned Topstep policy and session calendar beyond operator_configured"
+  ],
+  "implementation_order": {
+    "plan_issue": 127,
+    "universe": [
+      "MNQ",
+      "MES",
+      "MCL"
+    ],
+    "contract_alias_note": "MCL is an operator-facing alias; resolve it to the exact active ProjectX contract returned by Contract/available or searchById, currently the MCLE/F.US.MCLE family in the captured catalog.",
+    "completed_baseline": [
+      "TS-BRACKET-01",
+      "TS-AUDIT-03",
+      "TS-REL-01",
+      "TS-R1-04",
+      "TS-R2-06",
+      "TS-BETA-01",
+      "TS-R3-01",
+      "TS-R3-02",
+      "TS-R4-06",
+      "TS-R3-03",
+      "TS-R3-04",
+      "TS-AUDIT-04",
+      "TS-R4-07",
+      "TS-R4-08"
+    ],
+    "steps": [
+      {
+        "order": 1,
+        "id": "TS-PROD-08",
+        "issue": 116,
+        "phase": "foundation",
+        "title": "Governance, branch protection, and production supply chain"
+      },
+      {
+        "order": 2,
+        "id": "TS-PROD-03",
+        "issue": 111,
+        "phase": "foundation",
+        "title": "Transactional startup, rollback, and shutdown drain"
+      },
+      {
+        "order": 3,
+        "id": "TS-PROD-04",
+        "issue": 112,
+        "phase": "foundation",
+        "title": "Durable and recoverable writers"
+      },
+      {
+        "order": 4,
+        "id": "TS-PROD-05",
+        "issue": 113,
+        "phase": "foundation",
+        "title": "Bounded market-evidence backpressure"
+      },
+      {
+        "order": 5,
+        "id": "TS-R2-08",
+        "issue": 66,
+        "phase": "evidence",
+        "title": "Sanitized raw REST reconciliation envelopes"
+      },
+      {
+        "order": 6,
+        "id": "TS-PM-03-EVIDENCE",
+        "issue": 67,
+        "phase": "evidence",
+        "title": "ProjectX partial-EXIT and bracket behavior evidence"
+      },
+      {
+        "order": 7,
+        "id": "TS-PROD-02",
+        "issue": 110,
+        "phase": "learning_integrity",
+        "title": "Single-writer revisioned outcome feed with cursor replay"
+      },
+      {
+        "order": 8,
+        "id": "TS-PROD-01",
+        "issue": 109,
+        "phase": "execution_safety",
+        "title": "Fail-safe protected reduction and bracket rearm"
+      },
+      {
+        "order": 9,
+        "id": "TS-PROD-07",
+        "issue": 115,
+        "phase": "pairing",
+        "title": "Versioned gateway/profile protocol"
+      },
+      {
+        "order": 10,
+        "id": "TS-CTRL-01",
+        "issue": 122,
+        "phase": "control_plane",
+        "title": "Durable pause, resume, mode, and flatten controls"
+      },
+      {
+        "order": 11,
+        "id": "TS-PROD-06",
+        "issue": 114,
+        "phase": "architecture",
+        "title": "Explicit lifecycle, execution, reconciliation, evidence, and outcome state machines"
+      },
+      {
+        "order": 12,
+        "id": "TS-MKT-01",
+        "issue": 120,
+        "phase": "market_contract",
+        "title": "Explicit current partial and prior completed one-minute bars"
+      },
+      {
+        "order": 13,
+        "id": "TS-CAP-01",
+        "issue": 118,
+        "phase": "participation",
+        "title": "Configurable 0.5% daily-capture objective as context"
+      },
+      {
+        "order": 14,
+        "id": "TS-ENTRY-01",
+        "issue": 121,
+        "phase": "intent_delivery",
+        "title": "Bounded entry ranges and delivery-time supersession"
+      },
+      {
+        "order": 15,
+        "id": "TS-EXEC-01",
+        "issue": 123,
+        "phase": "execution_learning",
+        "title": "Immediate lifecycle facts and execution-fidelity diagnostics"
+      },
+      {
+        "order": 16,
+        "id": "GTHP-CAP-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 102,
+        "phase": "profile_pair",
+        "title": "Daily objective without quota or forced activity"
+      },
+      {
+        "order": 17,
+        "id": "GTHP-MKT-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 103,
+        "phase": "profile_pair",
+        "title": "Consume partial and completed bars with explicit roles"
+      },
+      {
+        "order": 18,
+        "id": "GTHP-TRIGGER-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 104,
+        "phase": "profile_pair",
+        "title": "Frozen per-path triggers with HELD, FAILED, and EXPIRED"
+      },
+      {
+        "order": 19,
+        "id": "GTHP-ENTRY-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 105,
+        "phase": "profile_pair",
+        "title": "Bounded entry ranges and one delivery reassessment"
+      },
+      {
+        "order": 20,
+        "id": "GTHP-OPS-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 106,
+        "phase": "profile_operations",
+        "title": "Truthful learner preemption, retry, pause, and status"
+      },
+      {
+        "order": 21,
+        "id": "GTHP-LEARN-02",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 107,
+        "phase": "profile_learning",
+        "title": "Prompt-version separation, idea deduplication, and execution fidelity"
+      },
+      {
+        "order": 22,
+        "id": "TS-EVAL-01",
+        "issue": 68,
+        "phase": "validation",
+        "title": "Comparative cognition evaluation on frozen evidence"
+      },
+      {
+        "order": 23,
+        "id": "TS-MULTI-01",
+        "issue": 69,
+        "phase": "multi_instrument_baseline",
+        "title": "Second configurable contract, initially MCL/MCLE"
+      },
+      {
+        "order": 24,
+        "id": "TS-MULTI-02",
+        "issue": 124,
+        "phase": "scanner_data_plane",
+        "title": "Rate-aware universe, subscriptions, bars, and partitioned evidence"
+      },
+      {
+        "order": 25,
+        "id": "GTHP-MULTI-01",
+        "repo": "glitch-topstep-hermes-profile",
+        "issue": 108,
+        "phase": "scanner_cognition",
+        "title": "Complete candidate ledger and global MNQ/MES/MCL ranking"
+      },
+      {
+        "order": 26,
+        "id": "TS-MULTI-03",
+        "issue": 125,
+        "phase": "selected_execution",
+        "title": "Account-wide admission and exact-contract execution"
+      },
+      {
+        "order": 27,
+        "id": "TS-MULTI-04",
+        "issue": 126,
+        "phase": "simultaneous_portfolio",
+        "title": "Opt-in simultaneous multi-instrument exposure after proven portfolio risk"
+      }
+    ]
+  },
+  "implementation_run_2026_08_19": {
+    "scope": "implementation order 1-27 across gateway and paired Hermes profile",
+    "operator_symbol": "MCL",
+    "provider_family": "MCLE",
+    "code_status": "implemented_on_paired_clean_branches",
+    "implemented_orders": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
+    "safe_defaults": {
+      "partial_exit": "fail_closed_in_armed_until_projectx_acceptance_evidence",
+      "simultaneous_multi_instrument": "disabled_unless_explicitly_enabled",
+      "additional_instruments": "observation_only_until_selected_exact_contract_scope",
+      "daily_capture": "context_only_default_0.5_percent_not_a_quota"
+    },
+    "external_validation_pending": [
+      "capture ProjectX PRAC partial-exit bracket behavior",
+      "run bounded evidence burst and soak above captured TS-R2-07 rates",
+      "run two real prompt artifacts over one frozen cognition corpus",
+      "complete simulated armed sessions for MNQ, MES, and MCL exact contracts",
+      "prove simultaneous portfolio exposure in simulation before enabling it",
+      "publish and attest an immutable paired release manifest"
+    ],
+    "github_controls_verified": [
+      "main protection on both repositories: PR, one approval, CODEOWNERS, resolved conversations, strict required checks, linear history, admin enforcement, no force-push, no deletion",
+      "secret scanning and push protection enabled on both repositories",
+      "Dependabot security updates enabled on both repositories"
+    ],
+    "report": "docs/ledger/audits/2026-08-19-implementation-1-27.md",
+    "post_review_hardening": [
+      "Existing positions without exact protective geometry fail closed for new scale-ins instead of being priced at zero downside.",
+      "Restored effective trading mode is reflected in new packets; operator flatten uses the durable v3 EXIT/outbox path.",
+      "Outcome publication is drained before stores close; control replay uses server monotonic sequence; legacy intent hashes are backfilled/reconciled transactionally.",
+      "Profile gateway URLs are restricted to loopback HTTP or HTTPS origins; flatten-all requires the separate operator token; scanner ledgers require at least one frozen trigger per candidate.",
+      "Release checkout credentials are not persisted and both paired commits must be reachable from protected main history."
+    ]
+  }
 }

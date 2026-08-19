@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../config.js";
 import { parseTradeIntent, IntentParseError } from "../domain/intents.js";
-import type { AccountVenueSnapshot, TradeIntent } from "../domain/models.js";
+import type { AccountVenueSnapshot, TradeIntent, TradingMode } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
   bindProtection,
@@ -33,6 +33,7 @@ import { maybeKill } from "./kill-hook.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import { evaluatePortfolioAdmission } from "../risk/portfolio-risk.js";
 
 export interface ExecutionReceipt {
   schema_version: "glitch.direct.execution_receipt.v1";
@@ -65,7 +66,16 @@ export class ExecutionCoordinator {
     private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
     private readonly invalidateIssuedPackets: () => void,
     private readonly tranches: () => TrancheView[] = () => [],
+    private readonly controlState: () => { paused: boolean; mode: TradingMode } = () => ({
+      paused: false,
+      mode: config.tradingMode,
+    }),
+    private readonly dailyCaptureLocked: () => boolean = () => false,
   ) {}
+
+  private currentMode(): TradingMode {
+    return this.controlState().mode;
+  }
 
   public handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
     const result = this.executionQueue.then(() => this.handleWireIntentSerial(input));
@@ -122,6 +132,15 @@ export class ExecutionCoordinator {
         code: "intent_already_processing_or_recovery_required",
       });
     }
+    this.store.recordExecutionFact({
+      intentId: intent.intentId,
+      phase: "intent_admitted",
+      recordedUtc: receivedUtc,
+      detail: {
+        action: intent.action,
+        decision_latency_ms: Math.max(0, Date.parse(receivedUtc) - Date.parse(intent.createdUtc)),
+      },
+    });
 
     maybeKill("after_intent_before_outbox");
 
@@ -136,7 +155,7 @@ export class ExecutionCoordinator {
       });
     }
 
-    if (this.config.tradingMode === "disabled") {
+    if (this.currentMode() === "disabled") {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
@@ -181,6 +200,14 @@ export class ExecutionCoordinator {
       });
     }
 
+    if (this.controlState().paused) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "new_exposure_paused_by_operator",
+      });
+    }
+
     const recovery = this.store.recoveryStatus();
     if (recovery.blockingNewExposure) {
       return this.record({
@@ -207,8 +234,48 @@ export class ExecutionCoordinator {
           expectedAccountName: this.config.scope.accountName,
           expectedInstrument: this.config.scope.instrument,
           expectedSnapshotHash: issuedPacket.market.snapshot_hash,
+          expectedPacketId: issuedPacket.packet_id,
+          expectedContractId: issuedPacket.contract.id,
+          expectedScopeHash: issuedPacket.decision_scope.scope_hash,
+          expectedScopeGeneration: issuedPacket.decision_scope.generation,
+          dailyCaptureLocked: issuedPacket.execution.daily_capture_locked || this.dailyCaptureLocked(),
+          armedMode: this.currentMode() === "armed",
         },
       );
+
+      const foreignExposure = currentSnapshot.positions.some(
+        (position) => position.contractId !== this.config.scope.contractId,
+      ) || currentSnapshot.openOrders.some(
+        (order) => order.contractId !== this.config.scope.contractId,
+      );
+      // Venue snapshots do not carry the exact protective stop geometry needed to
+      // price existing downside. Treat every existing position as unproven until
+      // the ownership/reconciliation layer supplies that geometry; never model it
+      // as zero-risk and admit a scale-in on an understated buffer.
+      const unprotectedExistingExposure = currentSnapshot.positions.length > 0 || foreignExposure;
+      const portfolio = evaluatePortfolioAdmission({
+        hard_loss_buffer_usd: validated.riskBudget.currentBuffer,
+        existing: [],
+        pending: [],
+        candidate: {
+          contract_id: validated.contract.id,
+          quantity: validated.quantity,
+          stop_distance_ticks: validated.stopTicks,
+          tick_value: validated.contract.tickValue,
+          fees_usd: this.config.risk.estimatedRoundTurnFeesUsd,
+          slippage_ticks: this.config.risk.slippageReserveTicks,
+        },
+        simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+        unprotected_existing_exposure: unprotectedExistingExposure,
+      });
+      if (!portfolio.allowed) {
+        return this.record({
+          intentId: intent.intentId,
+          status: "rejected",
+          code: portfolio.code,
+          detail: `protected_downside_usd=${portfolio.protected_downside_usd.toFixed(2)};remaining_buffer_usd=${portfolio.remaining_buffer_usd.toFixed(2)}`,
+        });
+      }
 
       if (!gatewayModePermitsLiveOrders(issuedPacket.execution.gateway_mode)) {
         return this.record({
@@ -219,7 +286,7 @@ export class ExecutionCoordinator {
         });
       }
 
-      if (this.config.tradingMode === "shadow") {
+      if (this.currentMode() === "shadow") {
         return this.record({
           intentId: intent.intentId,
           status: "shadowed",
@@ -323,7 +390,7 @@ export class ExecutionCoordinator {
         code: "exit_verified_not_submitted",
       });
     }
-    if (this.config.tradingMode === "shadow") {
+    if (this.currentMode() === "shadow") {
       return this.record({
         intentId: intent.intentId,
         status: "shadowed",
@@ -409,6 +476,14 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
+    if (partialExit && this.currentMode() === "armed") {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "partial_exit_protection_transition_unproven",
+        detail: "Armed partial EXIT remains fail-closed until sanitized ProjectX evidence proves native protection continuity.",
+      });
+    }
     if (partialExit && intent.targetIntentId !== undefined) {
       const cancelError = await this.cancelTrancheProtectionOrders(snapshot, intent);
       if (cancelError) {
@@ -589,7 +664,7 @@ export class ExecutionCoordinator {
         detail: `new_price=${newPrice}`,
       });
     }
-    if (this.config.tradingMode === "shadow") {
+    if (this.currentMode() === "shadow") {
       return this.record({
         intentId: intent.intentId,
         status: "shadowed",
@@ -753,7 +828,7 @@ export class ExecutionCoordinator {
   }
 
   private async rearmTrancheProtectionSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
-    if (this.config.tradingMode !== "armed" || snapshot.instrumentOpenContracts === 0) {
+    if (this.currentMode() !== "armed" || snapshot.instrumentOpenContracts === 0) {
       return false;
     }
     const nonProtective = snapshot.openOrders.filter(
@@ -1108,7 +1183,7 @@ export class ExecutionCoordinator {
       receipt_id: randomUUID(),
       recorded_utc: new Date().toISOString(),
       intent_id: input.intentId,
-      mode: this.config.tradingMode,
+      mode: this.currentMode(),
       status: input.status,
       code: input.code,
       ...(input.detail === undefined ? {} : { detail: input.detail }),
@@ -1133,7 +1208,7 @@ export class ExecutionCoordinator {
       receipt_id: randomUUID(),
       recorded_utc: new Date().toISOString(),
       intent_id: input.intentId,
-      mode: this.config.tradingMode,
+      mode: this.currentMode(),
       status: input.status,
       code: input.code,
       ...(input.orderId === undefined ? {} : { order_id: input.orderId }),
@@ -1142,6 +1217,19 @@ export class ExecutionCoordinator {
       ...(input.error === undefined ? {} : { error: input.error }),
       ...(input.path === undefined ? {} : { path: input.path }),
     };
+    if (receipt.intent_id) {
+      this.store.recordExecutionFact({
+        intentId: receipt.intent_id,
+        phase: executionFactPhase(receipt),
+        recordedUtc: receipt.recorded_utc,
+        detail: {
+          status: receipt.status,
+          code: receipt.code,
+          provider_order_id: receipt.order_id ?? null,
+          transport_or_provider_detail: receipt.detail ?? null,
+        },
+      });
+    }
     this.store.recordReceipt({ ...receipt });
     maybeKill("after_receipt_before_jsonl");
     try {
@@ -1157,4 +1245,23 @@ export class ExecutionCoordinator {
     }
     return receipt;
   }
+}
+
+function executionFactPhase(receipt: ExecutionReceipt): string {
+  if (receipt.code.includes("submitted")) {
+    return "provider_submission_acknowledged";
+  }
+  if (receipt.status === "open_protected") {
+    return "protection_confirmed";
+  }
+  if (receipt.status === "closed") {
+    return "exit_submitted_or_flat";
+  }
+  if (receipt.status === "rejected") {
+    return "intent_rejected";
+  }
+  if (receipt.status === "ambiguous") {
+    return "provider_outcome_ambiguous";
+  }
+  return "execution_receipt";
 }

@@ -507,7 +507,8 @@ export class SqliteProviderEvidenceStore {
   }
 
   private migrate(): void {
-    this.database.exec(`
+    this.inTransaction(() => {
+      this.database.exec(`
       CREATE TABLE IF NOT EXISTS provider_evidence_migrations (
         version INTEGER PRIMARY KEY,
         applied_utc TEXT NOT NULL
@@ -533,16 +534,16 @@ export class SqliteProviderEvidenceStore {
         raw_payload_json TEXT NOT NULL,
         normalized_payload_json TEXT NOT NULL
       ) STRICT;
-    `);
+      `);
 
-    const columns = this.database.prepare(`PRAGMA table_info(provider_events)`).all() as unknown as Array<{
+      const columns = this.database.prepare(`PRAGMA table_info(provider_events)`).all() as unknown as Array<{
       name: string;
-    }>;
-    if (!columns.some((column) => column.name === "related_provider_entity_id")) {
-      this.database.exec(`ALTER TABLE provider_events ADD COLUMN related_provider_entity_id TEXT`);
-    }
+      }>;
+      if (!columns.some((column) => column.name === "related_provider_entity_id")) {
+        this.database.exec(`ALTER TABLE provider_events ADD COLUMN related_provider_entity_id TEXT`);
+      }
 
-    this.database.exec(`
+      this.database.exec(`
       CREATE INDEX IF NOT EXISTS idx_provider_events_time
         ON provider_events(received_utc, sequence);
       CREATE INDEX IF NOT EXISTS idx_provider_events_entity
@@ -575,22 +576,23 @@ export class SqliteProviderEvidenceStore {
 
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-    `);
+      `);
 
-    const headColumns = this.database.prepare(`PRAGMA table_info(provider_evidence_heads)`).all() as unknown as Array<{
+      const headColumns = this.database.prepare(`PRAGMA table_info(provider_evidence_heads)`).all() as unknown as Array<{
       name: string;
-    }>;
-    if (!headColumns.some((column) => column.name === "provider_timestamp_utc")) {
-      this.database.exec(`ALTER TABLE provider_evidence_heads ADD COLUMN provider_timestamp_utc TEXT`);
-    }
+      }>;
+      if (!headColumns.some((column) => column.name === "provider_timestamp_utc")) {
+        this.database.exec(`ALTER TABLE provider_evidence_heads ADD COLUMN provider_timestamp_utc TEXT`);
+      }
 
-    this.backfillTradeRelations();
-    this.database.exec(`
+      this.backfillTradeRelations();
+      this.database.exec(`
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
-    `);
+      `);
+    });
   }
 
   private backfillTradeRelations(): void {

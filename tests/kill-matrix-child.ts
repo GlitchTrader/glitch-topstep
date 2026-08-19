@@ -105,9 +105,9 @@ function config(dataDir: string): AppConfig {
   };
 }
 
-function entryIntent(snapshotHash: string, createdUtc: string): Record<string, unknown> {
+function entryIntent(snapshotHash: string, createdUtc: string, packet?: any): Record<string, unknown> {
   return {
-    schema_version: "glitch.intent.v2",
+    schema_version: "glitch.intent.v3",
     intent_id: INTENT_ID,
     created_utc: createdUtc,
     instrument: "MNQ",
@@ -134,6 +134,13 @@ function entryIntent(snapshotHash: string, createdUtc: string): Record<string, u
     order_type: "MARKET",
     stop_loss: 19_990.25,
     take_profit_1: 20_020.25,
+    packet_id: packet?.packet_id,
+    contract_id: packet?.contract?.id,
+    scope_hash: packet?.decision_scope?.scope_hash,
+    scope_generation: packet?.decision_scope?.generation,
+    expires_utc: packet?.expires_utc,
+    entry_price_min: packet?.market?.bid,
+    entry_price_max: packet?.market?.ask,
   };
 }
 
@@ -316,7 +323,7 @@ async function main(): Promise<void> {
       process.exit(0);
     }
 
-    const body = entryIntent(packet.market.snapshot_hash, now.toISOString());
+    const body = entryIntent(packet.market.snapshot_hash, now.toISOString(), packet);
     if (point === "during_duplicate_wait") {
       void coordinator.handleWireIntent(body);
       void coordinator.handleWireIntent(body);

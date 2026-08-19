@@ -49,6 +49,10 @@ export interface TimeframeMarketObservation {
   rejected_bars: number;
   latest_bar_utc: string | null;
   latest_bar_partial: boolean;
+  current_partial_bar: CanonicalMarketBar | null;
+  prior_completed_bar: CanonicalMarketBar | null;
+  partial_progress: number | null;
+  bar_identity_issues: string[];
   gaps: MarketBarGap[];
   features: DescriptiveMarketFeatures | null;
 }

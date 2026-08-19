@@ -27,6 +27,8 @@ export class DecisionPacketService {
     private readonly tranches: () => TrancheView[] = () => [],
     private readonly tradeOutcomes: () => TradeOutcomeV1[] = () => [],
     private readonly tradeOutcomesLoaded: () => boolean = () => false,
+    private readonly decisionScope: () => { generation: number; scopeHash: string } | undefined = () => undefined,
+    private readonly effectiveTradingMode: () => "disabled" | "shadow" | "armed" = () => this.config.tradingMode,
   ) {}
 
   public current(): DirectDecisionPacket {
@@ -49,13 +51,23 @@ export class DecisionPacketService {
       this.tradeOutcomesLoaded(),
       now,
     );
+    if (
+      dailyEconomics?.daily_capture.reached === true
+      && dailyEconomics.daily_capture.new_exposure_lock_configured
+      && dailyEconomics.trading_day_id
+    ) {
+      this.store.latchDailyCapture(dailyEconomics.trading_day_id, now.toISOString());
+    }
+    const dailyCaptureLocked = this.store.isDailyCaptureLocked(
+      dailyEconomics?.trading_day_id ?? null,
+    );
     const packet = buildDecisionPacket(
       venueSnapshot,
       this.config.policy,
       this.config.risk,
       this.recovery(),
       this.config.scope.instrument,
-      this.config.tradingMode,
+      this.effectiveTradingMode(),
       this.config.packetLeaseMs,
       now,
       this.marketObservation(),
@@ -64,6 +76,8 @@ export class DecisionPacketService {
       this.config.session,
       dailyEconomics,
       bracketVerification,
+      this.decisionScope(),
+      dailyCaptureLocked,
     );
     this.store.recordIssuedPacket(packet);
     return packet;

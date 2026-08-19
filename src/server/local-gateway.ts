@@ -5,6 +5,7 @@ import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+import type { OutcomeRevisionPage } from "../storage/sqlite-outcome-feed.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
 
 const MAX_BODY_BYTES = 65_536;
@@ -15,6 +16,7 @@ export interface LocalGatewayOptions {
   host: string;
   port: number;
   token: string;
+  operatorToken?: string;
   ownership?: {
     executionDatabasePath: string;
     evidenceDatabasePath: string;
@@ -40,6 +42,11 @@ export class LocalGatewayServer {
     ownershipService: ProjectXOrderOwnershipService | null = null,
     private readonly outcomes: (limit: number) => Promise<TradeOutcomeV1[]> = async () => [],
     private readonly acceptanceStreamGap?: () => Promise<{ phases: unknown[] }>,
+    private readonly outcomeFeed?: (afterSequence: number, limit: number) => OutcomeRevisionPage,
+    private readonly control?: (input: unknown) => Promise<unknown>,
+    private readonly controlLookup?: (controlId: string) => unknown,
+    private readonly scanner?: () => unknown,
+    private readonly executionFacts?: (afterSequence: number, limit: number) => unknown,
   ) {
     const ownership = options.ownership;
     this.ownsOwnershipService = ownershipService === null && ownership !== undefined;
@@ -92,7 +99,14 @@ export class LocalGatewayServer {
         this.json(response, 200, this.health());
         return;
       }
-      if (!this.authorized(request)) {
+      const operatorRoute = url.pathname === "/control"
+        && (request.method === "GET" || request.method === "POST");
+      if (operatorRoute) {
+        if (!this.operatorAuthorized(request)) {
+          this.json(response, 403, { error: "operator_authorization_required" });
+          return;
+        }
+      } else if (!this.authorized(request)) {
         this.json(response, 401, { error: "unauthorized" });
         return;
       }
@@ -132,6 +146,34 @@ export class LocalGatewayServer {
         });
         return;
       }
+      if (request.method === "GET" && url.pathname === "/scanner") {
+        if (!this.scanner) {
+          this.json(response, 503, { error: "scanner_unavailable" });
+          return;
+        }
+        this.json(response, 200, this.scanner());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/outcomes/feed") {
+        if (!this.outcomeFeed) {
+          this.json(response, 503, { error: "outcome_feed_unavailable" });
+          return;
+        }
+        const afterSequence = this.nonNegativeInteger(url.searchParams.get("after_sequence"), 0);
+        const limit = this.evidenceLimit(url.searchParams.get("limit"));
+        this.json(response, 200, this.outcomeFeed(afterSequence, limit));
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/execution/facts") {
+        if (!this.executionFacts) {
+          this.json(response, 503, { error: "execution_facts_unavailable" });
+          return;
+        }
+        const afterSequence = this.nonNegativeInteger(url.searchParams.get("after_sequence"), 0);
+        const limit = this.evidenceLimit(url.searchParams.get("limit"));
+        this.json(response, 200, this.executionFacts(afterSequence, limit));
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/intent/receipt") {
         const intentId = url.searchParams.get("intent_id")?.trim();
         if (!intentId) {
@@ -155,6 +197,36 @@ export class LocalGatewayServer {
             ? 503
             : 202;
         this.json(response, status, receipt);
+        return;
+      }
+      if (request.method === "POST" && url.pathname === "/control") {
+        if (!this.control) {
+          this.json(response, 503, { error: "control_plane_unavailable" });
+          return;
+        }
+        if (!this.operatorAuthorized(request)) {
+          this.json(response, 403, { error: "operator_authorization_required" });
+          return;
+        }
+        const body = await this.readJsonBody(request);
+        const operatorCommand = typeof body === "object" && body !== null && !Array.isArray(body)
+          ? { ...(body as Record<string, unknown>), issuer: "local_operator" }
+          : body;
+        this.json(response, 202, await this.control(operatorCommand));
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/control") {
+        if (!this.operatorAuthorized(request)) {
+          this.json(response, 403, { error: "operator_authorization_required" });
+          return;
+        }
+        const controlId = url.searchParams.get("control_id")?.trim();
+        if (!controlId) {
+          this.json(response, 400, { error: "control_id_required" });
+          return;
+        }
+        const result = this.controlLookup?.(controlId) ?? null;
+        this.json(response, result === null ? 404 : 200, result ?? { error: "control_not_found" });
         return;
       }
       if (
@@ -226,6 +298,31 @@ export class LocalGatewayServer {
 
   private outcomeLimit(raw: string | null): number {
     return this.evidenceLimit(raw);
+  }
+
+  private operatorAuthorized(request: IncomingMessage): boolean {
+    const token = this.options.operatorToken;
+    if (!token) {
+      return false;
+    }
+    const header = request.headers.authorization;
+    if (!header?.startsWith("Bearer ")) {
+      return false;
+    }
+    const provided = Buffer.from(header.slice("Bearer ".length).trim());
+    const expected = Buffer.from(token);
+    return provided.length === expected.length && timingSafeEqual(provided, expected);
+  }
+
+  private nonNegativeInteger(raw: string | null, fallback: number): number {
+    if (raw === null || raw.length === 0) {
+      return fallback;
+    }
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new InvalidQueryError("value must be a non-negative integer");
+    }
+    return value;
   }
 
   private json(response: ServerResponse, status: number, value: unknown): void {

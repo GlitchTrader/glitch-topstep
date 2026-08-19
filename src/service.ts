@@ -41,6 +41,21 @@ import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { TradeOutcomeStore } from "./storage/trade-outcome-store.js";
 import { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
+import {
+  DurableControlStore,
+  parseControlCommand,
+  type StoredControlCommand,
+} from "./control/durable-control-store.js";
+import type { TradingMode } from "./domain/models.js";
+import {
+  GLITCH_TOPSTEP_OPERATOR_PROFILE,
+  GLITCH_TOPSTEP_PROMPT_VERSION,
+} from "./domain/operator.js";
+import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
+import { RuntimeScopeLock } from "./service/runtime-lock.js";
+import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
+import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
+import type { MarketObservationState } from "./domain/market-observation.js";
 
 const DEFAULT_PROVIDER_HISTORY = {
   initialLookbackHours: 168,
@@ -63,10 +78,13 @@ export class GlitchTopstepService {
   private readonly tradeOutcomeStore: TradeOutcomeStore;
   private readonly tradeOutcomePublisher: TradeOutcomePublisher;
   private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
+  private readonly controlStore: DurableControlStore;
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private readonly historySync: ProjectXHistorySyncService;
   private readonly historySyncIntervalMs: number;
   private readonly marketObservation: ProjectXMarketObservationService;
+  private instrumentUniverse: InstrumentUniverse | null = null;
+  private scannerMarketData: MultiInstrumentMarketDataPlane | null = null;
   private orderFlow: ProjectXOrderFlowService | null = null;
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
@@ -80,12 +98,21 @@ export class GlitchTopstepService {
   private orderFlowTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
   private tradeOutcomePublishInFlight = false;
+  private tradeOutcomePublication: Promise<void> | null = null;
   private lastReconciledOpenContracts = 0;
   private cachedOpenTranches: TrancheView[] = [];
   private readonly tradeExcursion = new TradeExcursionTracker();
   private storesClosed = false;
+  private controlPaused = false;
+  private runtimeTradingMode: TradingMode;
+  private readonly lifecycle = new LifecycleSupervisor();
+  private readonly runtimeLock: RuntimeScopeLock;
+  private stopping: Promise<void> | null = null;
+  private starting: Promise<void> | null = null;
 
   public constructor(private readonly config: AppConfig) {
+    this.runtimeTradingMode = config.tradingMode;
+    this.runtimeLock = new RuntimeScopeLock(config.dataDir, config.scope.accountId);
     this.api = new ProjectXApiClient({
       apiUrl: config.projectX.apiUrl,
       username: config.projectX.username,
@@ -108,6 +135,7 @@ export class GlitchTopstepService {
         marketPruneInterval: config.providerEvidence.marketPruneInterval,
       },
     );
+    this.controlStore = new DurableControlStore(join(config.dataDir, "glitch-topstep-controls.sqlite"));
     this.restEvidenceRecorder = new ProviderRestSnapshotRecorder(this.providerEvidenceStore);
     const history = config.providerHistory ?? DEFAULT_PROVIDER_HISTORY;
     this.historySyncIntervalMs = history.syncIntervalMs;
@@ -135,6 +163,18 @@ export class GlitchTopstepService {
   }
 
   public async start(): Promise<void> {
+    if (this.starting) return this.starting;
+    this.starting = this.startSerial();
+    try {
+      await this.starting;
+    } finally {
+      this.starting = null;
+    }
+  }
+
+  private async startSerial(): Promise<void> {
+    this.lifecycle.transition("starting");
+    await this.runtimeLock.acquire();
     await this.api.login();
     const [accounts, contracts, positions, orders] = await this.fetchStartupScope();
 
@@ -149,6 +189,28 @@ export class GlitchTopstepService {
     if (!contract) {
       throw new Error(`configured_contract_not_found:${this.config.scope.contractId}`);
     }
+    const multi = this.config.multiInstrument ?? {
+      allowlist: [this.config.scope.instrument],
+      rolloverGeneration: 1,
+      simultaneousExposureEnabled: false,
+      depthAllowlist: [this.config.scope.instrument],
+      historyRequestsPerMinute: 30,
+    };
+    this.instrumentUniverse = resolveInstrumentUniverse(
+      multi.allowlist,
+      contracts,
+      multi.rolloverGeneration,
+    );
+    if (!this.instrumentUniverse.contracts.some((candidate) => candidate.contract_id === contract.id)) {
+      throw new Error("configured_contract_not_in_resolved_universe");
+    }
+    this.scannerMarketData = new MultiInstrumentMarketDataPlane(
+      this.api,
+      this.instrumentUniverse,
+      multi.historyRequestsPerMinute,
+      contract.id,
+      this.config.scope.liveMarketData,
+    );
     this.orderFlow = new ProjectXOrderFlowService(
       join(this.config.dataDir, "projectx-evidence.sqlite"),
       {
@@ -195,7 +257,7 @@ export class GlitchTopstepService {
     this.state.replaceOrders(orders, receivedAt);
     await Promise.all([
       this.historySync.sync(),
-      this.marketObservation.refresh(),
+      this.refreshMarketObservations(),
       this.orderFlow.refresh(),
     ]);
     const initialRecovery = await recoverExecutionMutations(
@@ -239,7 +301,7 @@ export class GlitchTopstepService {
       this.executionStore,
       () => this.executionStore.recoveryStatus(),
       Date.now,
-      () => this.marketObservation.current(),
+      () => this.currentMarketObservation(),
       () => this.orderFlow?.current() ?? {
         last_attempt_utc: null,
         last_succeeded_utc: null,
@@ -249,6 +311,10 @@ export class GlitchTopstepService {
       () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
       () => this.tradeOutcomeStore.all(),
       () => this.tradeOutcomeStore.isLoaded(),
+      () => this.instrumentUniverse === null
+        ? undefined
+        : { generation: this.instrumentUniverse.generation, scopeHash: this.instrumentUniverse.scope_hash },
+      () => this.runtimeTradingMode,
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -258,6 +324,10 @@ export class GlitchTopstepService {
         token: () => this.api.sessionToken,
         accountId: this.config.scope.accountId,
         contractId: this.config.scope.contractId,
+        contractIds: this.instrumentUniverse.contracts.map((candidate) => candidate.contract_id),
+        depthContractIds: this.instrumentUniverse.contracts
+          .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
+          .map((candidate) => candidate.contract_id),
         evidence: this.providerEvidenceStore,
         onReconnected: async () => {
           this.packets?.invalidateAll();
@@ -266,7 +336,7 @@ export class GlitchTopstepService {
               console.error("ProjectX reconciliation failed after reconnect", error);
             }),
             this.historySync.sync(),
-            this.marketObservation.refresh(),
+            this.refreshMarketObservations(),
             this.orderFlow?.refresh() ?? Promise.resolve(null),
           ]);
           this.packets?.invalidateAll();
@@ -312,7 +382,7 @@ export class GlitchTopstepService {
     // stale packet already fails to resolve. Invalidating here only killed packets a client
     // was still holding.
     this.marketObservationTimer = setInterval(() => {
-      void this.marketObservation.refresh();
+      void this.refreshMarketObservations();
     }, MARKET_OBSERVATION_REFRESH_MS);
     this.marketObservationTimer.unref();
 
@@ -330,6 +400,8 @@ export class GlitchTopstepService {
       (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
       () => this.packets?.invalidateAll(),
       () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
+      () => ({ paused: this.controlPaused, mode: this.runtimeTradingMode }),
+      () => this.packets?.current().execution.daily_capture_locked ?? false,
     );
     this.coordinator = coordinator;
     this.gateway = new LocalGatewayServer(
@@ -340,7 +412,7 @@ export class GlitchTopstepService {
         const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
         const executionRecovery = this.executionStore.recoveryStatus();
         const providerHistory = this.historySync.currentStatus();
-        const marketObservation = this.marketObservation.current();
+        const marketObservation = this.currentMarketObservation();
         const orderFlow = this.orderFlow?.current() ?? {
           last_attempt_utc: null,
           last_succeeded_utc: null,
@@ -365,6 +437,10 @@ export class GlitchTopstepService {
               ? "ok"
               : "degraded",
           trading_mode: this.config.tradingMode,
+          runtime_trading_mode: this.runtimeTradingMode,
+          operator_paused: this.controlPaused,
+          controls: this.controlStore.status(),
+          lifecycle: this.lifecycle.status(),
           gateway_mode: gatewayMode.effective,
           gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
           recorded_utc: recordedAt.toISOString(),
@@ -380,6 +456,8 @@ export class GlitchTopstepService {
           provider_history: providerHistory,
           market_observation: marketObservation,
           order_flow: orderFlow,
+          outcome_feed: this.tradeOutcomeStore.status(),
+          event_ledger: this.ledger.status(),
         };
       },
       snapshot,
@@ -396,7 +474,14 @@ export class GlitchTopstepService {
       process.env.GLITCH_ACCEPTANCE_STREAM_GAP === "1"
         ? () => this.forceAcceptanceStreamGap()
         : undefined,
+      (afterSequence, limit) => this.tradeOutcomeStore.revisionPage(afterSequence, limit),
+      (input) => this.applyControl(input),
+      (controlId) => this.controlStore.get(controlId),
+      () => this.scannerPacket(),
+      (afterSequence, limit) => this.executionStore.executionFactsAfter(afterSequence, limit),
     );
+    this.restoreEffectiveControlState();
+    await this.resumePendingControls();
     await this.gateway.start();
 
     this.tokenRefreshTimer = setInterval(() => {
@@ -422,13 +507,26 @@ export class GlitchTopstepService {
         execution_recovery: this.executionStore.recoveryStatus(),
         provider_evidence: this.providerEvidenceStore.status(),
         provider_history: this.historySync.currentStatus(),
-        market_observation: this.marketObservation.current(),
+        market_observation: this.currentMarketObservation(),
         order_flow: this.orderFlow.current(),
       },
     });
+    this.lifecycle.transition("ready");
   }
 
   public async stop(): Promise<void> {
+    if (this.starting) {
+      await this.starting.catch(() => undefined);
+    }
+    if (this.stopping) {
+      return this.stopping;
+    }
+    this.stopping = this.stopSerial();
+    return this.stopping;
+  }
+
+  private async stopSerial(): Promise<void> {
+    this.lifecycle.transition("draining");
     if (this.orderFlowTimer) {
       clearInterval(this.orderFlowTimer);
       this.orderFlowTimer = null;
@@ -458,8 +556,12 @@ export class GlitchTopstepService {
     await Promise.all([
       this.historySync.waitForIdle(),
       this.marketObservation.waitForIdle(),
+      this.scannerMarketData?.waitForIdle() ?? Promise.resolve(),
       this.orderFlow?.waitForIdle() ?? Promise.resolve(),
+      this.ledger.waitForIdle(),
     ]);
+    await this.tradeOutcomePublication;
+    await this.ledger.waitForIdle();
     this.orderFlow?.close();
     this.orderFlow = null;
     this.gateway = null;
@@ -467,8 +569,186 @@ export class GlitchTopstepService {
     this.packets = null;
     if (!this.storesClosed) {
       this.providerEvidenceStore.close();
+      await this.tradeOutcomeStore.close();
+      this.controlStore.close();
       this.executionStore.close();
       this.storesClosed = true;
+    }
+    await this.runtimeLock.release();
+    this.lifecycle.transition("stopped");
+  }
+
+  private async resumePendingControls(): Promise<void> {
+    this.restoreEffectiveControlState();
+    for (const control of this.controlStore.pending()) {
+      if (control.status === "applying") {
+        // Pause/resume/mode are local idempotent state changes. Reapply the
+        // recorded effect and complete them; never silently restore an armed
+        // state merely because the process crashed during the final write.
+        if (control.action === "pause") {
+          this.controlPaused = true;
+          this.packets?.invalidateAll();
+          this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+        } else if (control.action === "resume") {
+          this.controlPaused = false;
+          this.packets?.invalidateAll();
+          this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+        } else if (control.action === "set_mode" && control.mode) {
+          if (control.mode === "armed" && this.config.tradingMode !== "armed") {
+            this.controlStore.transition(control.control_id, "rejected", "control_cannot_escalate_beyond_startup_mode");
+          } else {
+            this.runtimeTradingMode = control.mode;
+            this.packets?.invalidateAll();
+            this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+          }
+        } else {
+          const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
+          if (current.instrumentOpenContracts === 0) {
+            this.controlStore.transition(control.control_id, "completed", "reconciled_already_flat_after_restart");
+          } else {
+            this.controlPaused = true;
+            this.runtimeTradingMode = "disabled";
+            this.packets?.invalidateAll();
+            this.controlStore.transition(control.control_id, "failed", "flatten_application_ambiguous_requires_operator_reconciliation");
+          }
+        }
+        continue;
+      }
+      await this.applyStoredControl(control);
+    }
+  }
+
+  private restoreEffectiveControlState(): void {
+    const effective = this.controlStore.effectiveState(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    this.controlPaused = effective.paused;
+    if (effective.mode && !(effective.mode === "armed" && this.config.tradingMode !== "armed")) {
+      this.runtimeTradingMode = effective.mode;
+    }
+  }
+
+  private refreshMarketObservations(): Promise<unknown> {
+    return this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
+  }
+
+  private currentMarketObservation(): MarketObservationState {
+    return this.scannerMarketData?.current().candidates
+      .find((candidate) => candidate.contract_id === this.config.scope.contractId)
+      ?.market_observation
+      ?? this.marketObservation.current();
+  }
+
+  private scannerPacket(): Record<string, unknown> {
+    if (!this.scannerMarketData || !this.instrumentUniverse) {
+      throw new Error("scanner_not_ready");
+    }
+    const packet = this.scannerMarketData.current();
+    return {
+      ...packet,
+      account_id: this.config.scope.accountId,
+      simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+      candidates: packet.candidates.map((candidate) => {
+        const snapshot = this.state.buildSnapshot(this.config.scope.accountId, candidate.contract_id);
+        return {
+          ...candidate,
+          quote: snapshot.quote,
+          open_contracts: snapshot.instrumentOpenContracts,
+          state_complete: snapshot.stateComplete,
+          state_issues: snapshot.stateIssues,
+        };
+      }),
+    };
+  }
+
+  private async applyControl(input: unknown): Promise<StoredControlCommand> {
+    const command = parseControlCommand(input);
+    const stored = this.controlStore.submit(command);
+    if (["completed", "rejected", "failed"].includes(stored.status)) {
+      return stored;
+    }
+    return this.applyStoredControl(stored);
+  }
+
+  private async applyStoredControl(stored: StoredControlCommand): Promise<StoredControlCommand> {
+    if (stored.account_id !== this.config.scope.accountId) {
+      return this.controlStore.transition(stored.control_id, "rejected", "control_account_mismatch");
+    }
+    if (stored.contract_id !== null && stored.contract_id !== this.config.scope.contractId) {
+      return this.controlStore.transition(stored.control_id, "rejected", "control_contract_outside_scope");
+    }
+    if (stored.status === "completed" || stored.status === "rejected" || stored.status === "failed") {
+      return stored;
+    }
+    const claimed = this.controlStore.claimPending(stored.control_id);
+    if (!claimed) {
+      return this.controlStore.get(stored.control_id) ?? stored;
+    }
+    try {
+      if (stored.action === "pause") {
+        this.controlPaused = true;
+      } else if (stored.action === "resume") {
+        this.controlPaused = false;
+      } else if (stored.action === "set_mode") {
+        if (stored.mode === "armed" && this.config.tradingMode !== "armed") {
+          return this.controlStore.transition(
+            stored.control_id,
+            "rejected",
+            "control_cannot_escalate_beyond_startup_mode",
+          );
+        }
+        this.runtimeTradingMode = stored.mode!;
+      } else if (stored.action === "flatten") {
+        const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
+        if (current.instrumentOpenContracts > 0) {
+          const packet = this.packets?.current();
+          if (!packet || !this.coordinator) {
+            throw new Error("flatten_execution_path_unavailable");
+          }
+          const receipt = await this.coordinator.handleWireIntent({
+            schema_version: "glitch.intent.v3",
+            intent_id: stored.control_id,
+            created_utc: new Date().toISOString(),
+            instrument: packet.instrument,
+            account: packet.account.name,
+            operator_profile: GLITCH_TOPSTEP_OPERATOR_PROFILE,
+            action: "EXIT",
+            confidence: 1,
+            snapshot_hash: packet.market.snapshot_hash,
+            model_version: "operator-control",
+            prompt_version: GLITCH_TOPSTEP_PROMPT_VERSION,
+            reason: stored.reason,
+            decision_audit: {
+              bull_case: "Not applicable to an explicit risk-reducing operator command.",
+              bear_case: "Not applicable to an explicit risk-reducing operator command.",
+              flat_case: "The requested terminal state is flat.",
+              aggressive_case: "Remain exposed contrary to the operator command.",
+              conservative_case: "Exit current exposure immediately.",
+              decisive_evidence: "The authenticated operator requested flatten.",
+              disconfirming_evidence: "No market evidence overrides a human risk-reducing command.",
+              change_condition: "A later explicit operator command may resume cognition.",
+              final_choice: "EXIT",
+            },
+            packet_id: packet.packet_id,
+            contract_id: packet.decision_scope.contract_id,
+            scope_hash: packet.decision_scope.scope_hash,
+            scope_generation: packet.decision_scope.generation,
+            expires_utc: packet.expires_utc,
+          });
+          if (["rejected", "shadowed", "ambiguous"].includes(receipt.status)) {
+            throw new Error(`flatten_execution_${receipt.code}`);
+          }
+        }
+      }
+      this.packets?.invalidateAll();
+      return this.controlStore.transition(stored.control_id, "completed");
+    } catch (error) {
+      return this.controlStore.transition(
+        stored.control_id,
+        "failed",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -763,6 +1043,10 @@ export class GlitchTopstepService {
       return;
     }
     this.tradeOutcomePublishInFlight = true;
+    let resolvePublication!: () => void;
+    this.tradeOutcomePublication = new Promise<void>((resolve) => {
+      resolvePublication = resolve;
+    });
     try {
       const snapshot = this.state.buildSnapshot(
         this.config.scope.accountId,
@@ -815,6 +1099,8 @@ export class GlitchTopstepService {
       }
     } finally {
       this.tradeOutcomePublishInFlight = false;
+      resolvePublication();
+      this.tradeOutcomePublication = null;
     }
   }
 

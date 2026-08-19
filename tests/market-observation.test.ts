@@ -58,10 +58,27 @@ describe("strategy-neutral market observation", () => {
     );
     assert.equal(observation.timeframes[0]?.gaps[0]?.missing_bars, 1);
     assert.equal(observation.timeframes[0]?.latest_bar_partial, true);
+    assert.equal(observation.timeframes[0]?.current_partial_bar?.timestamp, "2026-07-21T13:00:00.000Z");
+    assert.equal(observation.timeframes[0]?.prior_completed_bar?.timestamp, "2026-07-21T12:59:00.000Z");
+    assert.equal(observation.timeframes[0]?.partial_progress, 0.5);
+    assert.deepEqual(observation.timeframes[0]?.bar_identity_issues, []);
     assert.equal(observation.timeframes[0]?.rejected_bars, 0);
     assert.ok(
       observation.timeframes[0]?.features?.progress_adjusted_volume_z_score_20 !== undefined,
     );
+  });
+
+  it("reports a missing prior completed bar without fabricating candle evidence", () => {
+    const observation = buildMultiTimeframeMarketObservation({
+      instrument: "MCL",
+      contractId: "CON.F.US.MCLE.U26",
+      now: new Date("2026-07-21T12:00:30Z"),
+      series: { 1: bars(1) },
+    });
+    const minute = observation.timeframes[0]!;
+    assert.ok(minute.current_partial_bar);
+    assert.equal(minute.prior_completed_bar, null);
+    assert.deepEqual(minute.bar_identity_issues, ["prior_completed_bar_missing"]);
   });
 
   it("emits descriptive features without a signal, score, or action", () => {

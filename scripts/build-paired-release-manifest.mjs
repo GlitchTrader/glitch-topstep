@@ -1,0 +1,49 @@
+import { createHash } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
+
+function argument(name) {
+  const index = process.argv.indexOf(`--${name}`);
+  if (index < 0 || !process.argv[index + 1]) throw new Error(`missing_${name}`);
+  return process.argv[index + 1];
+}
+
+const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+const lockBytes = readFileSync(new URL("../package-lock.json", import.meta.url));
+const profileRoot = process.argv.includes("--profile-root") ? resolve(argument("profile-root")) : null;
+const profileCommit = profileRoot
+  ? execFileSync("git", ["-c", `safe.directory=${profileRoot}`, "-C", profileRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim()
+  : argument("profile-commit");
+const profileVersion = profileRoot
+  ? /version:\s*["']?([^"'\s]+)/.exec(readFileSync(`${profileRoot}/distribution.yaml`, "utf8"))?.[1]
+  : argument("profile-version");
+const profileManifest = profileRoot ? readFileSync(`${profileRoot}/SHA256SUMS`) : null;
+const promptVersion = profileRoot
+  ? /PROMPT_VERSION\s*=\s*["']([^"']+)/.exec(readFileSync(`${profileRoot}/scripts/distribution_manifest.py`, "utf8"))?.[1]
+  : argument("prompt-version");
+if (!profileVersion || !promptVersion) throw new Error("profile_metadata_missing");
+const manifest = {
+  schema_version: "glitch.topstep.paired_release.v1",
+  created_utc: new Date().toISOString(),
+  immutable: true,
+  armed_promotion_requires_human_approval: true,
+  gateway: {
+    repository: "GlitchTrader/glitch-topstep",
+    commit: argument("gateway-commit"),
+    version: packageJson.version,
+    package_lock_sha256: createHash("sha256").update(lockBytes).digest("hex"),
+  },
+  profile: {
+    repository: "GlitchTrader/glitch-topstep-hermes-profile",
+    commit: profileCommit,
+    version: profileVersion,
+    sha256sums_sha256: createHash("sha256").update(profileManifest ?? argument("profile-manifest-sha256")).digest("hex"),
+    prompt_version: promptVersion,
+  },
+  validation: {
+    prac_or_shadow_evidence_ref: argument("evidence-ref"),
+    partial_exit_provider_acceptance: "not_proven_fail_closed",
+  },
+};
+writeFileSync(argument("output"), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8" });

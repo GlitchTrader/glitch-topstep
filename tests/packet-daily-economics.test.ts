@@ -116,6 +116,11 @@ test("computeDailyEconomics sums realized outcomes inside the trading day", () =
   assert.equal(economics?.profit_target_remaining_usd, 2_495);
   assert.equal(economics?.authority, "reconciled_trades");
   assert.deepEqual(economics?.calibration_band_pct, { low: 0.4, high: 2.0 });
+  assert.equal(economics?.daily_capture.objective_rate_pct, 0.5);
+  assert.equal(economics?.daily_capture.objective_usd, 250);
+  assert.equal(economics?.daily_capture.realized_progress_usd, 420);
+  assert.equal(economics?.daily_capture.reached, true);
+  assert.equal(economics?.daily_capture.remaining_usd, 0);
 });
 
 test("computeDailyEconomics returns null when disabled", () => {

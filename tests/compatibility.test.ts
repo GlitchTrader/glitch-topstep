@@ -16,7 +16,8 @@ describe("gateway compatibility contract", () => {
   });
 
   it("names the profile-facing wire contracts and capabilities", () => {
-    assert.deepEqual(GATEWAY_COMPATIBILITY.intent_schemas, ["glitch.intent.v2"]);
+    assert.deepEqual(GATEWAY_COMPATIBILITY.intent_schemas, ["glitch.intent.v2", "glitch.intent.v3"]);
+    assert.equal(GATEWAY_COMPATIBILITY.protocol_revision, "glitch.topstep.paired.v3");
     assert.deepEqual(GATEWAY_COMPATIBILITY.decision_packet_schemas, [
       "glitch.direct.decision_packet.v1",
       "glitch.direct.decision_packet.v2",
@@ -26,6 +27,8 @@ describe("gateway compatibility contract", () => {
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("native_protection"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("bracket_verification"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("restart_reconciliation"));
+    assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("bounded_entry_range_v1"));
+    assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("partial_exit_fail_closed_v1"));
   });
 
   it("is present in health and contains no credential-shaped fields", () => {
