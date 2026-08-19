@@ -605,6 +605,8 @@
         "Shared contract fixtures pass against glitch-topstep-hermes-profile:GTHP-PROD-01."
       ],
       "stop_line": "Do not deduplicate corrections forever by intent_id and do not share a mutable JSONL file between processes.",
+      "implementation_note": "SQLite revision feed is present and now exposes integrity, current-count, revision-count, and high-water status in health; restart replay is covered by tests. Keep open until the paired Profile consumer contract and >10000-record live/replay evidence are recorded.",
+      "last_verified_utc": "2026-08-19T18:00:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/trade-outcome-store.ts",
@@ -655,6 +657,8 @@
         "Persistence backlog and failure state are visible and block new exposure when execution truth is uncertain."
       ],
       "stop_line": "Do not skip corrupt records silently or treat a successful in-memory update as a successful commit.",
+      "implementation_note": "Outcome persistence now reports SQLite integrity and feed backlog counters through the existing health surface; restart durability is covered by tests. Remaining fault-injection and export atomicity acceptance stays open.",
+      "last_verified_utc": "2026-08-19T18:00:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/jsonl-event-store.ts",
@@ -1259,6 +1263,24 @@
       "Outcome publication is drained before stores close; control replay uses server monotonic sequence; legacy intent hashes are backfilled/reconciled transactionally.",
       "Profile gateway URLs are restricted to loopback HTTP or HTTPS origins; flatten-all requires the separate operator token; scanner ledgers require at least one frozen trigger per candidate.",
       "Release checkout credentials are not persisted and both paired commits must be reachable from protected main history."
+    ]
+  },
+  "live_validation_2026_08_19": {
+    "accepted": [
+      "sanitized ProjectX fixture capture: 15 fixtures",
+      "reconnect proof: generation 2 to 3; final state ready/state_complete/reconciled with both streams connected"
+    ],
+    "rejected_or_incomplete": [
+      "event-rates proof rejected because the one-minute sample had incomplete buckets and the two-minute sample observed retained-event count regression during pruning",
+      "R1-04 kill matrix rejected because the harness reported gateway_not_killed and kill_point_not_reached; zero kill points were accepted"
+    ],
+    "post_test_safety": "Gateway restored without the temporary acceptance flag; armed, ready, state_complete=true, reconciled, no ambiguous or unresolved mutations.",
+    "issue_comments": [
+      "https://github.com/GlitchTrader/glitch-topstep/issues/49#issuecomment-5344359075",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/50#issuecomment-5344359402",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/51#issuecomment-5344358858",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/110#issuecomment-5344359580",
+      "https://github.com/GlitchTrader/glitch-topstep/issues/112#issuecomment-5344359835"
     ]
   }
 }

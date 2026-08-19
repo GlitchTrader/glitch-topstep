@@ -34,8 +34,35 @@ test("revisioned outcome feed preserves corrections and cursor replay", async ()
     assert.equal(page.count, 1);
     assert.equal(page.revisions[0]?.revision, 2);
     assert.equal(page.high_water_sequence, second.sequence);
+    assert.deepEqual(feed.status(), {
+      current_count: 1,
+      revision_count: 2,
+      high_water_sequence: second.sequence,
+      integrity: "ok",
+      integrity_error: null,
+    });
   } finally {
     feed.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("revisioned outcome feed remains readable after a restart", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "outcome-feed-restart-"));
+  const path = join(directory, "feed.sqlite");
+  const first = new SqliteOutcomeFeed(path);
+  const published = first.publish(outcome(7), "provisional", "2026-08-19T12:02:01.000Z");
+  first.close();
+
+  const second = new SqliteOutcomeFeed(path);
+  try {
+    assert.equal(second.current()[0]?.realized_pnl_usd, 7);
+    const replay = second.afterSequence(0, 100);
+    assert.equal(replay.high_water_sequence, published.sequence);
+    assert.equal(replay.revisions[0]?.content_hash.length, 64);
+    assert.equal(second.status().integrity, "ok");
+  } finally {
+    second.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
