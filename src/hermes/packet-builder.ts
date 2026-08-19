@@ -62,6 +62,15 @@ export interface DirectDecisionPacket {
     generation: number;
     scope_hash: string;
   };
+  account_selection: {
+    schema_version: "glitch.topstep.account_selection.v1";
+    mode: "single_contract";
+    selected_instrument: string;
+    selected_contract_id: string;
+    scope_generation: number;
+    scope_hash: string;
+    simultaneous_exposure_enabled: boolean;
+  };
   account: {
     id: number;
     name: string;
@@ -440,6 +449,7 @@ export function buildDecisionPacket(
   bracketVerification: BracketVerificationContext | null = null,
   decisionScope?: { generation: number; scopeHash: string },
   dailyCaptureLocked = false,
+  simultaneousExposureEnabled = false,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -512,6 +522,15 @@ export function buildDecisionPacket(
       contract_id: snapshot.contract.id,
       generation: decisionScope?.generation ?? snapshot.operational.generation,
       scope_hash: decisionScope?.scopeHash ?? snapshotHash,
+    },
+    account_selection: {
+      schema_version: "glitch.topstep.account_selection.v1",
+      mode: "single_contract",
+      selected_instrument: instrument,
+      selected_contract_id: snapshot.contract.id,
+      scope_generation: decisionScope?.generation ?? snapshot.operational.generation,
+      scope_hash: decisionScope?.scopeHash ?? snapshotHash,
+      simultaneous_exposure_enabled: simultaneousExposureEnabled,
     },
     account: {
       id: snapshot.account.id,
