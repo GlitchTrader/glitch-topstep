@@ -8,6 +8,7 @@ import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { ExecutionCoordinator } from "../src/execution/coordinator.js";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
 import type { ProjectXApiClient, PlaceOrderRequest } from "../src/projectx/client.js";
+import type { TrancheView } from "../src/ownership/tranches.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { snapshot, orderFlowWithTrades, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
@@ -452,6 +453,148 @@ describe("execution coordinator serialization", () => {
       }
       assert.ok(placed.stopLossBracket.ticks < 0, "long stop ticks must be negative");
       assert.ok(placed.takeProfitBracket.ticks > 0, "long target ticks must be positive");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("admits same-contract scale-in when ownership already proved protection", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-scale-in-"));
+    const store = new SqliteExecutionStore(":memory:");
+    const entryIntentId = "00000000-0000-4000-8000-00000000a001";
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      current.instrumentOpenContracts = 1;
+      current.totalOpenContracts = 1;
+      current.positions = [{
+        id: 1,
+        accountId: 101,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        type: 2,
+        size: 1,
+        averagePrice: 20_000,
+      }];
+      current.openOrders = [{
+        id: 9201,
+        accountId: 101,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        updateTimestamp: now.toISOString(),
+        status: 1,
+        type: 4,
+        side: 0,
+        size: 1,
+        limitPrice: null,
+        stopPrice: 20_010,
+        customTag: `glt-${entryIntentId}-SL`,
+      }, {
+        id: 9202,
+        accountId: 101,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        updateTimestamp: now.toISOString(),
+        status: 1,
+        type: 1,
+        side: 0,
+        size: 1,
+        limitPrice: 19_980,
+        stopPrice: null,
+        customTag: `glt-${entryIntentId}-TP`,
+      }];
+      const provenTranche: TrancheView = {
+        intent_id: entryIntentId,
+        entry_order_id: 9001,
+        filled_qty: 1,
+        remaining_qty: 1,
+        created_utc: now.toISOString(),
+        protection: {
+          status: "proven",
+          reason: "provider_child_orders_bound_by_custom_tag",
+          stop: {
+            provider_order_id: 9201,
+            custom_tag: `glt-${entryIntentId}-SL`,
+            price: 20_010,
+          },
+          target: {
+            provider_order_id: 9202,
+            custom_tag: `glt-${entryIntentId}-TP`,
+            price: 19_980,
+          },
+        },
+      };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+        [provenTranche],
+      );
+      assert.equal(packet.protection.status, "proven");
+      assert.ok(packet.execution.supported_actions.includes("ENTER_SHORT"));
+      store.recordIssuedPacket(packet);
+      let placeOrderCalls = 0;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => {
+            placeOrderCalls += 1;
+            return 9002;
+          },
+          closePosition: async () => undefined,
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        ...intent(
+          "00000000-0000-4000-8000-000000000801",
+          packet.market.snapshot_hash,
+          now.toISOString(),
+          packet,
+        ),
+        action: "ENTER_SHORT",
+        reason: "Same-contract protected scale-in.",
+        decision_audit: {
+          bull_case: "Bull case.",
+          bear_case: "Bear case.",
+          flat_case: "Flat case.",
+          aggressive_case: "Aggressive case.",
+          conservative_case: "Conservative case.",
+          decisive_evidence: "Evidence.",
+          disconfirming_evidence: "Counter evidence.",
+          change_condition: "Change condition.",
+          final_choice: "ENTER_SHORT",
+        },
+        stop_loss: 20_010.25,
+        take_profit_1: 19_980.25,
+      });
+      assert.notEqual(receipt.code, "portfolio_protection_unproven");
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "entry_submitted_pending_reconciliation");
+      assert.equal(placeOrderCalls, 1);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
