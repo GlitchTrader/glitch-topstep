@@ -1,7 +1,7 @@
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
-import { SqliteOutcomeFeed, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
+import { SqliteOutcomeFeed, type OutcomeFeedStatus, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
 
 export class TradeOutcomeStore {
   private readonly path: string;
@@ -117,8 +117,8 @@ export class TradeOutcomeStore {
     return this.feed.afterSequence(afterSequence, limit);
   }
 
-  public status(): { pending: number; last_write_error: string | null } {
-    return { pending: this.pending.size, last_write_error: this.lastWriteError };
+  public status(): { pending: number; last_write_error: string | null; feed: OutcomeFeedStatus } {
+    return { pending: this.pending.size, last_write_error: this.lastWriteError, feed: this.feed.status() };
   }
 
   public async close(): Promise<void> {

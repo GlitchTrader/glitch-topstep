@@ -605,6 +605,8 @@
         "Shared contract fixtures pass against glitch-topstep-hermes-profile:GTHP-PROD-01."
       ],
       "stop_line": "Do not deduplicate corrections forever by intent_id and do not share a mutable JSONL file between processes.",
+      "implementation_note": "SQLite revision feed is present and now exposes integrity, current-count, revision-count, and high-water status in health; restart replay is covered by tests. Keep open until the paired Profile consumer contract and >10000-record live/replay evidence are recorded.",
+      "last_verified_utc": "2026-08-19T18:00:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/trade-outcome-store.ts",
@@ -655,6 +657,8 @@
         "Persistence backlog and failure state are visible and block new exposure when execution truth is uncertain."
       ],
       "stop_line": "Do not skip corrupt records silently or treat a successful in-memory update as a successful commit.",
+      "implementation_note": "Outcome persistence now reports SQLite integrity and feed backlog counters through the existing health surface; restart durability is covered by tests. Remaining fault-injection and export atomicity acceptance stays open.",
+      "last_verified_utc": "2026-08-19T18:00:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/jsonl-event-store.ts",

@@ -26,6 +26,14 @@ export interface OutcomeRevisionPage {
   revisions: OutcomeRevision[];
 }
 
+export interface OutcomeFeedStatus {
+  current_count: number;
+  revision_count: number;
+  high_water_sequence: number;
+  integrity: "ok" | "failed";
+  integrity_error: string | null;
+}
+
 export class SqliteOutcomeFeed {
   private readonly database: DatabaseSync;
 
@@ -144,6 +152,34 @@ export class SqliteOutcomeFeed {
       SELECT payload_json FROM outcomes_current ORDER BY sequence ASC
     `).all() as Array<{ payload_json: string }>;
     return rows.map((row) => JSON.parse(row.payload_json) as TradeOutcomeV1);
+  }
+
+  public status(): OutcomeFeedStatus {
+    const counts = this.database.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM outcomes_current) AS current_count,
+        (SELECT COUNT(*) FROM outcome_revisions) AS revision_count,
+        COALESCE((SELECT MAX(sequence) FROM outcome_revisions), 0) AS high_water_sequence
+    `).get() as { current_count: number; revision_count: number; high_water_sequence: number };
+    try {
+      const result = this.database.prepare("PRAGMA integrity_check").get() as { integrity_check?: string };
+      const value = result.integrity_check ?? "failed";
+      return {
+        current_count: Number(counts.current_count),
+        revision_count: Number(counts.revision_count),
+        high_water_sequence: Number(counts.high_water_sequence),
+        integrity: value === "ok" ? "ok" : "failed",
+        integrity_error: value === "ok" ? null : value,
+      };
+    } catch (error) {
+      return {
+        current_count: Number(counts.current_count),
+        revision_count: Number(counts.revision_count),
+        high_water_sequence: Number(counts.high_water_sequence),
+        integrity: "failed",
+        integrity_error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   public afterSequence(afterSequence: number, limit = 500): OutcomeRevisionPage {
