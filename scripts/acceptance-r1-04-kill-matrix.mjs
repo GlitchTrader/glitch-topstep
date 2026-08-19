@@ -25,38 +25,46 @@ const KILL_POINTS = [
   "after_receipt_before_jsonl",
 ];
 
+const RUN_SUFFIX = Date.now().toString(16).slice(-8).padStart(8, "0");
+
 const INTENT_BY_POINT = Object.fromEntries(
   KILL_POINTS.map((point, index) => [
     point,
-    `00000000-0000-4000-8000-${(0xa041 + index).toString(16).padStart(12, "0")}`,
+    `00000000-0000-4000-8000-${RUN_SUFFIX}${(0xa041 + index).toString(16).slice(-4).padStart(4, "0")}`,
   ]),
 );
-const CONFLICT_INTENT_ID = "00000000-0000-4000-8000-00000000a099";
+const CONFLICT_INTENT_ID = `00000000-0000-4000-8000-${RUN_SUFFIX}a099`;
 
-for (const line of fs.readFileSync(path.join(ROOT, ".env"), "utf8").split(/\r?\n/)) {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) continue;
-  const eq = trimmed.indexOf("=");
-  if (eq < 0) continue;
-  const name = trimmed.slice(0, eq);
-  if (process.env[name] === undefined) {
-    process.env[name] = trimmed.slice(eq + 1);
+const envPath = path.join(ROOT, ".env");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq < 0) continue;
+    const name = trimmed.slice(0, eq);
+    if (process.env[name] === undefined) {
+      process.env[name] = trimmed.slice(eq + 1);
+    }
   }
 }
 
 const env = process.env;
+const ACCEPTANCE_PORT = Number(env.GLITCH_ACCEPTANCE_PORT ?? 8890);
+const ACCEPTANCE_DATA_DIR = env.GLITCH_ACCEPTANCE_DATA_DIR
+  ?? path.join(ROOT, "data", `r1-04-${RUN_SUFFIX}`);
 const token = env.GLITCH_LOCAL_TOKEN;
 const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 let activeGatewayPid = null;
 
 function gatewayPort() {
-  return Number(env.GLITCH_LOCAL_PORT ?? 8790);
+  return ACCEPTANCE_PORT;
 }
 function apiBase() {
   return `http://127.0.0.1:${gatewayPort()}`;
 }
 function dataDirAbs() {
-  const dataDir = env.GLITCH_DATA_DIR ?? "data";
+  const dataDir = ACCEPTANCE_DATA_DIR;
   return path.isAbsolute(dataDir) ? dataDir : path.join(ROOT, dataDir);
 }
 function sha256File(filePath) {
@@ -105,13 +113,13 @@ async function killGatewayOnPort(port, expectedPid = activeGatewayPid) {
   if (expectedPid !== null) {
     await runPowerShell(
       `$p=Get-Process -Id ${Number(expectedPid)} -ErrorAction SilentlyContinue; `
-      `if ($p) { Stop-Process -Id ${Number(expectedPid)} -Force -ErrorAction Stop }`,
+        + `if ($p) { Stop-Process -Id ${Number(expectedPid)} -Force -ErrorAction Stop }`,
     );
     activeGatewayPid = null;
     await sleep(1500);
     const processStillExists = await runPowerShell(
       `$p=Get-Process -Id ${Number(expectedPid)} -ErrorAction SilentlyContinue; `
-      `if ($p) { 'alive' } else { 'dead' }`,
+        + `if ($p) { 'alive' } else { 'dead' }`,
     );
     if (processStillExists.stdout !== "dead") {
       throw new Error(`gateway_pid_${expectedPid}_still_alive`);
@@ -126,7 +134,7 @@ async function killGatewayOnPort(port, expectedPid = activeGatewayPid) {
   if (!(await isTcpPortOpen(port))) return;
   await runPowerShell(
     `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | `
-      `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop }`,
+      + `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop }`,
   );
   await sleep(1500);
   if (await isTcpPortOpen(port)) {
@@ -135,7 +143,13 @@ async function killGatewayOnPort(port, expectedPid = activeGatewayPid) {
 }
 
 function gatewayChildEnv(extra = {}) {
-  const childEnv = { ...process.env, ...env, ...extra };
+  const childEnv = {
+    ...process.env,
+    ...env,
+    GLITCH_LOCAL_PORT: String(gatewayPort()),
+    GLITCH_DATA_DIR: dataDirAbs(),
+    ...extra,
+  };
   for (const key of Object.keys(extra)) {
     if (extra[key] === undefined || extra[key] === null) {
       delete childEnv[key];
@@ -170,8 +184,9 @@ async function startGateway(steps, label, extraEnv = {}) {
     kill_point: extraEnv.GLITCH_KILL_POINT ?? null,
     recorded_utc: new Date().toISOString(),
   });
-  activeGatewayPid = child.pid;
   await sleep(4000);
+  activeGatewayPid = await listeningPid(port) ?? child.pid;
+  steps[steps.length - 1].listener_pid = activeGatewayPid;
 }
 
 async function health() {
@@ -238,7 +253,7 @@ function buildEntryIntent(intentId, pkt, killPoint) {
   const brackets = wideLongBrackets(pkt);
   if (!brackets) throw new Error("no_brackets");
   return {
-    schema_version: "glitch.intent.v2",
+    schema_version: "glitch.intent.v3",
     intent_id: intentId,
     created_utc: new Date().toISOString(),
     instrument: env.GLITCH_INSTRUMENT,
@@ -255,7 +270,23 @@ function buildEntryIntent(intentId, pkt, killPoint) {
     order_type: "MARKET",
     stop_loss: brackets.sl,
     take_profit_1: brackets.tp,
+    packet_id: pkt.packet_id,
+    contract_id: pkt.decision_scope.contract_id,
+    scope_hash: pkt.decision_scope.scope_hash,
+    scope_generation: pkt.decision_scope.generation,
+    expires_utc: pkt.expires_utc,
+    entry_price_min: pkt.market.bid,
+    entry_price_max: pkt.market.ask,
   };
+}
+
+async function listeningPid(port) {
+  const result = await runPowerShell(
+    `(Get-NetTCPConnection -LocalPort ${Number(port)} -State Listen -ErrorAction SilentlyContinue `
+      + `| Select-Object -First 1 -ExpandProperty OwningProcess)`,
+  );
+  const value = Number.parseInt(result.stdout, 10);
+  return Number.isInteger(value) && value > 0 ? value : null;
 }
 
 function entryCustomTag(intentId) {
