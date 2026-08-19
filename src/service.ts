@@ -402,6 +402,7 @@ export class GlitchTopstepService {
       () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
       () => ({ paused: this.controlPaused, mode: this.runtimeTradingMode }),
       () => this.packets?.current().execution.daily_capture_locked ?? false,
+      () => this.instrumentUniverse,
     );
     this.coordinator = coordinator;
     this.gateway = new LocalGatewayServer(
@@ -649,6 +650,15 @@ export class GlitchTopstepService {
       ...packet,
       account_id: this.config.scope.accountId,
       simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+      account_selection: {
+        schema_version: "glitch.topstep.account_selection.v1",
+        mode: "single_contract",
+        selected_instrument: this.config.scope.instrument,
+        selected_contract_id: this.config.scope.contractId,
+        scope_generation: this.instrumentUniverse.generation,
+        scope_hash: this.instrumentUniverse.scope_hash,
+        simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+      },
       candidates: packet.candidates.map((candidate) => {
         const snapshot = this.state.buildSnapshot(this.config.scope.accountId, candidate.contract_id);
         return {
