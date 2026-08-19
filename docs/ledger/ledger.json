@@ -1287,5 +1287,22 @@
       "https://github.com/GlitchTrader/glitch-topstep/issues/110#issuecomment-5344359580",
       "https://github.com/GlitchTrader/glitch-topstep/issues/112#issuecomment-5344359835"
     ]
+  },
+  "step7_scanner_foundation_2026_08_19": {
+    "status": "in_progress",
+    "scope": "MNQ, MES, and operator alias MCL resolved only to the exact active ProjectX MCLE-family contract",
+    "implemented": [
+      "scanner candidates expose observation quality without directional or trade authorization scoring",
+      "quality distinguishes ready, warming, stale, and provider error states",
+      "universe resolution rejects invalid tick economics and exact-contract collisions",
+      "simultaneous exposure remains disabled by default"
+    ],
+    "validation": "npm run check: 267 tests passed",
+    "next": [
+      "validate three-candidate /scanner output against the current ProjectX catalog",
+      "add per-contract reconnect and rate-budget evidence",
+      "pair the complete candidate ledger with Hermes before any selected-contract execution work"
+    ],
+    "stop_line": "No strategy ranking, hot contract switching, or simultaneous exposure is enabled by this foundation."
   }
 }
