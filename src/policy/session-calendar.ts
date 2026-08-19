@@ -145,6 +145,21 @@ function nextMustFlatUtc(now: Date, config: TopstepSessionConfig): string | null
   return candidate;
 }
 
+function inMustFlatToResetGap(now: Date, config: TopstepSessionConfig): boolean {
+  if (!config.mustFlatLocalTime) {
+    return false;
+  }
+  const flat = parseSessionLocalTime(config.mustFlatLocalTime);
+  const reset = parseSessionLocalTime(config.tradingDayResetLocalTime);
+  const flatMinutes = flat.hour * 60 + flat.minute;
+  const resetMinutes = reset.hour * 60 + reset.minute;
+  if (flatMinutes >= resetMinutes) {
+    return false;
+  }
+  const nowMinutes = localMinutes(localParts(now, config.timezone));
+  return nowMinutes >= flatMinutes && nowMinutes < resetMinutes;
+}
+
 function entryWindowOpen(now: Date, config: TopstepSessionConfig, mustFlatUtc: string | null): boolean {
   if (config.entryOpenLocalTime) {
     const { hour, minute } = parseSessionLocalTime(config.entryOpenLocalTime);
@@ -160,6 +175,11 @@ function entryWindowOpen(now: Date, config: TopstepSessionConfig, mustFlatUtc: s
     if (now.getTime() < openUtc) {
       return false;
     }
+  }
+  // ponytail: nextMustFlatUtc jumps to tomorrow after 15:10, which would keep the
+  // window open through the Topstep dead zone until 17:00 reset. Close that gap.
+  if (inMustFlatToResetGap(now, config)) {
+    return false;
   }
   if (mustFlatUtc === null) {
     return true;
@@ -305,10 +325,16 @@ export function resolveTopstepSession(
   }
   const phase = resolveSessionPhase(config, now);
   notes.push(...phase.notes);
+  const entryOpen = entryWindowOpen(now, config, mustFlatUtc);
+  if (!entryOpen && inMustFlatToResetGap(now, config)) {
+    notes.push(
+      `entry_window_open=false between must_flat ${config.mustFlatLocalTime} and trading-day reset ${config.tradingDayResetLocalTime} ${config.timezone}.`,
+    );
+  }
   return {
     authority: config.authority,
     must_flat_utc: mustFlatUtc,
-    entry_window_open: entryWindowOpen(now, config, mustFlatUtc),
+    entry_window_open: entryOpen,
     phase: phase.phase,
     phase_authority: phase.phase_authority,
     notes,

@@ -2,5 +2,5 @@
   "endpoint": "/api/Auth/loginKey",
   "outcome": "succeeded",
   "session_token_present": "[REDACTED]",
-  "captured_utc": "2026-08-03T01:20:09.256Z"
+  "captured_utc": "2026-08-19T20:51:31.147Z"
 }

@@ -145,7 +145,7 @@ The first explicit relationship is user trade â†’ order. For a normalized `
 
 If a realtime payload parses but cannot be persisted, Glitch does not silently advance state. The stream becomes degraded and REST reconciliation is requested.
 
-REST account, contract, position, and open-order snapshots are persisted before they replace reconciled state. Raw REST envelopes are not yet retained; this remains an explicit evidence gap.
+REST account, contract, position, and open-order snapshots are persisted before they replace reconciled state. The sanitized provider envelope is stored as `rawPayload` with the snapshot identity (`accounts_snapshot`, `contracts_snapshot`, `positions_snapshot`, `open_orders_snapshot`). JWT and credential keys are redacted before SQLite write. Inspect via `GET /evidence?source=projectx_rest&event_type=accounts_snapshot`.
 
 ### Durability and retention
 
@@ -170,6 +170,7 @@ The evidence API is authenticated and bounded:
 
 ```text
 GET /evidence?limit=100
+GET /evidence?source=projectx_rest&event_type=accounts_snapshot&limit=100
 ```
 
 It exists for acceptance, debugging, replay, and ownership research. It is not injected into Hermes by default.

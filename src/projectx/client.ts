@@ -77,6 +77,11 @@ interface ApiEnvelope {
   [key: string]: unknown;
 }
 
+export interface RestCollection<T> {
+  items: T[];
+  envelope: ApiEnvelope;
+}
+
 export class ProjectXApiClient {
   private token: string | null = null;
   private readonly requestTimeoutMs: number;
@@ -141,31 +146,51 @@ export class ProjectXApiClient {
   }
 
   public async searchAccounts(onlyActiveAccounts = true): Promise<AccountInfo[]> {
-    const response = this.asEnvelope(
-      await this.post("/api/Account/search", { onlyActiveAccounts }),
+    return (await this.searchAccountsCollection(onlyActiveAccounts)).items;
+  }
+
+  public async searchAccountsCollection(onlyActiveAccounts = true): Promise<RestCollection<AccountInfo>> {
+    return this.collect(
+      this.asEnvelope(await this.post("/api/Account/search", { onlyActiveAccounts })),
+      "accounts",
+      parseAccount,
     );
-    this.assertSuccess(response);
-    return this.parseArray(response.accounts, "accounts", parseAccount);
   }
 
   public async listAvailableContracts(live: boolean): Promise<ContractInfo[]> {
-    const response = this.asEnvelope(await this.post("/api/Contract/available", { live }));
-    this.assertSuccess(response);
-    return this.parseArray(response.contracts, "contracts", parseContract);
+    return (await this.listAvailableContractsCollection(live)).items;
+  }
+
+  public async listAvailableContractsCollection(live: boolean): Promise<RestCollection<ContractInfo>> {
+    return this.collect(
+      this.asEnvelope(await this.post("/api/Contract/available", { live })),
+      "contracts",
+      parseContract,
+    );
   }
 
   public async searchOpenPositions(accountId: number): Promise<PositionInfo[]> {
-    const response = this.asEnvelope(
-      await this.post("/api/Position/searchOpen", { accountId }),
+    return (await this.searchOpenPositionsCollection(accountId)).items;
+  }
+
+  public async searchOpenPositionsCollection(accountId: number): Promise<RestCollection<PositionInfo>> {
+    return this.collect(
+      this.asEnvelope(await this.post("/api/Position/searchOpen", { accountId })),
+      "positions",
+      parsePosition,
     );
-    this.assertSuccess(response);
-    return this.parseArray(response.positions, "positions", parsePosition);
   }
 
   public async searchOpenOrders(accountId: number): Promise<OrderInfo[]> {
-    const response = this.asEnvelope(await this.post("/api/Order/searchOpen", { accountId }));
-    this.assertSuccess(response);
-    return this.parseArray(response.orders, "orders", parseOrder);
+    return (await this.searchOpenOrdersCollection(accountId)).items;
+  }
+
+  public async searchOpenOrdersCollection(accountId: number): Promise<RestCollection<OrderInfo>> {
+    return this.collect(
+      this.asEnvelope(await this.post("/api/Order/searchOpen", { accountId })),
+      "orders",
+      parseOrder,
+    );
   }
 
   public async searchOrders(
@@ -286,6 +311,18 @@ export class ProjectXApiClient {
       );
     }
     return payload;
+  }
+
+  private collect<T>(
+    envelope: ApiEnvelope,
+    key: string,
+    parser: (value: unknown) => T,
+  ): RestCollection<T> {
+    this.assertSuccess(envelope);
+    return {
+      items: this.parseArray(envelope[key], key, parser),
+      envelope,
+    };
   }
 
   private asEnvelope(input: unknown): ApiEnvelope {

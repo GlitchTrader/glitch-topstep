@@ -121,6 +121,32 @@ describe("ProjectX provider event recorder", () => {
     assert.equal(events.length, 2);
     assert.equal(events[0]?.receivedUtc, "2026-07-21T12:00:00Z");
     assert.equal(events[1]?.receivedUtc, "2026-07-21T12:00:06Z");
+    assert.equal(events[0]?.rawPayload, null);
+  });
+
+  it("stores sanitized REST envelopes with snapshot identity", () => {
+    const events: ProviderEvidenceEvent[] = [];
+    const recorder = new ProviderRestSnapshotRecorder({
+      append: (event) => events.push(event),
+    });
+    const envelope = {
+      success: true,
+      errorCode: 0,
+      errorMessage: null,
+      token: "session-secret",
+      accounts: [{ id: 101, name: "TEST", balance: 1_000 }],
+    };
+    assert.equal(recorder.recordIfChanged({
+      receivedUtc: "2026-07-21T12:00:00Z",
+      eventType: "accounts_snapshot",
+      generation: 1,
+      accountId: 101,
+      contractId: null,
+      normalizedPayload: envelope.accounts,
+      rawPayload: envelope,
+    }), true);
+    assert.deepEqual(events[0]?.rawPayload, envelope);
+    assert.deepEqual(events[0]?.normalizedPayload, envelope.accounts);
   });
 
   it("does not cache a REST snapshot when persistence fails", () => {
