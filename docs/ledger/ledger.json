@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-07",
+  "updated": "2026-08-18",
   "release_target": "beta",
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -552,6 +552,215 @@
         "docs/specs/TS-R4-08.md",
         "src/execution/coordinator.ts",
         "glitch-topstep-hermes-profile:GTHP-020"
+      ]
+    },
+    {
+      "id": "TS-PROD-01",
+      "title": "Make protected reduction and bracket rearm fail-safe",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_architecture",
+      "issue": 109,
+      "depends_on": [
+        "TS-PM-03-EVIDENCE",
+        "TS-R4-08"
+      ],
+      "acceptance": [
+        "Partial EXIT is fail-closed in armed mode until a native atomic/provable protection transition exists.",
+        "Every positioned state proves stop coverage greater than or equal to venue open quantity; TP may degrade to stop-only.",
+        "A durable ProtectionSaga recovers every cancel, close, rearm, timeout, crash, and stream/REST ordering state without duplicate mutation.",
+        "Flat evidence triggers immediate idempotent orphan-protection sweep.",
+        "Sanitized PRAC evidence proves ProjectX group relationships and partial-close behavior before capability advertisement."
+      ],
+      "stop_line": "Do not infer OCO/ownership from timing or geometry and do not advertise partial EXIT without provider acceptance evidence.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/execution/coordinator.ts",
+        "src/service.ts",
+        "tests/position-management.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/109"
+      ]
+    },
+    {
+      "id": "TS-PROD-02",
+      "title": "Publish a single-writer revisioned outcome feed with cursor replay",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "learning_architecture",
+      "issue": 110,
+      "depends_on": [
+        "TS-R3-03"
+      ],
+      "acceptance": [
+        "Gateway is the sole canonical outcome writer; direct writes into the Hermes state directory are removed.",
+        "Outcome revisions carry monotonic sequence, stable outcome_id, revision, status, and content_hash.",
+        "A bounded after_sequence feed replays more than 10000 records without gaps and exposes retention floor explicitly.",
+        "Corrections replace the current projection without destroying revision history or creating silent duplicate learning episodes.",
+        "Shared contract fixtures pass against glitch-topstep-hermes-profile:GTHP-PROD-01."
+      ],
+      "stop_line": "Do not deduplicate corrections forever by intent_id and do not share a mutable JSONL file between processes.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/trade-outcome-store.ts",
+        "src/learning/trade-outcome-publisher.ts",
+        "src/server/local-gateway.ts",
+        "glitch-topstep-hermes-profile:GTHP-PROD-01",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/110"
+      ]
+    },
+    {
+      "id": "TS-PROD-03",
+      "title": "Make service startup rollback and shutdown drain transactional",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "runtime_architecture",
+      "issue": 111,
+      "depends_on": [],
+      "acceptance": [
+        "Startup failure at every acquisition point disposes all prior resources in reverse order.",
+        "An exclusive account/contract runtime lock prevents a second mutation owner before intent admission starts.",
+        "Shutdown closes admission, cancels new work, drains coordinator/reconcile/history/outcomes/writers, closes stores, then releases the lock.",
+        "SIGINT, SIGTERM, fatal startup error, and fatal runtime error share one idempotent lifecycle path.",
+        "Health exposes starting, ready, draining, failed_startup, and failed_shutdown with actionable details."
+      ],
+      "stop_line": "Do not use process.exit to hide leaked handles or close stores while active consumers can still write.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/service.ts",
+        "src/index.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/111"
+      ]
+    },
+    {
+      "id": "TS-PROD-04",
+      "title": "Make append and rewrite writers durable, recoverable, and health-visible",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "storage",
+      "issue": 112,
+      "depends_on": [
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "One failed write does not poison the scheduling chain for all subsequent writes.",
+        "In-memory indexes change only after durable commit.",
+        "Authoritative state uses transactional SQLite; remaining exports use atomic replace and corruption quarantine.",
+        "Disk full, permission, rename, fsync, corrupt-tail, and restart fault tests are green.",
+        "Persistence backlog and failure state are visible and block new exposure when execution truth is uncertain."
+      ],
+      "stop_line": "Do not skip corrupt records silently or treat a successful in-memory update as a successful commit.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/jsonl-event-store.ts",
+        "src/storage/trade-outcome-store.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/112"
+      ]
+    },
+    {
+      "id": "TS-PROD-05",
+      "title": "Move market evidence persistence behind bounded backpressure",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "market_data_architecture",
+      "issue": 113,
+      "depends_on": [
+        "TS-R2-07",
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "A dedicated persistence worker acknowledges durable commit before provider evidence mutates VenueState.",
+        "Identity events are never dropped; quote/depth coalescing is deterministic, measured, and retains provenance.",
+        "High-water overflow visibly degrades new exposure while preserving user-order, position, trade, EXIT, and reconciliation processing.",
+        "Burst and soak tests above TS-R2-07 rates publish event-loop, queue, commit, HTTP, memory, and disk SLOs.",
+        "Shutdown drains the queue or leaves a durable resumable cursor."
+      ],
+      "stop_line": "Do not solve event-loop blocking by weakening execution-state durability or silently dropping identity events.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/storage/projectx-evidence-store.ts",
+        "src/projectx/realtime.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/113"
+      ]
+    },
+    {
+      "id": "TS-PROD-06",
+      "title": "Decompose coordinator and service into explicit state-machine modules",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 114,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-03"
+      ],
+      "acceptance": [
+        "IntentAdmission, ExecutionSaga, ProtectionSaga, ReconciliationService, OutcomeFeed, EvidenceIngestor, and LifecycleSupervisor have explicit ports and state contracts.",
+        "Domain modules do not perform filesystem, network, clock, or SQLite IO directly.",
+        "Coordinator and service become thin orchestration/composition layers without behavior loss.",
+        "Characterization, transition, property, and fault tests stay green after each incremental extraction.",
+        "Automated architecture checks reject cycles and forbidden adapter imports."
+      ],
+      "stop_line": "No big-bang rewrite, generic microservice framework, or premature venue-neutral abstraction.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/execution/coordinator.ts",
+        "src/service.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/114"
+      ]
+    },
+    {
+      "id": "TS-PROD-07",
+      "title": "Version and test the paired gateway and profile protocol contract",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "release_architecture",
+      "issue": 115,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-02",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03"
+      ],
+      "acceptance": [
+        "Health and profile manifest intersect on protocol revision, schemas, prompt versions, semver ranges, capabilities, outcome feed, and artifact hashes.",
+        "Critical capabilities include semantic revision and provider acceptance evidence, not an unversioned boolean.",
+        "Cross-repository CI tests immutable gateway/profile SHAs across supported and intentionally incompatible pairs.",
+        "Armed mutation fails closed with an explicit mismatch while read-only diagnostics remain available.",
+        "Release and rollback select a signed pair manifest rather than independently latest components."
+      ],
+      "stop_line": "Do not treat tested gateway version as informational when semantic compatibility controls mutation safety.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        "src/release/compatibility.ts",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/115"
+      ]
+    },
+    {
+      "id": "TS-PROD-08",
+      "title": "Enforce main protection and production supply-chain gates",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "release_security",
+      "issue": 116,
+      "depends_on": [
+        "TS-PROD-01",
+        "TS-PROD-02",
+        "TS-PROD-03",
+        "TS-PROD-07"
+      ],
+      "acceptance": [
+        "Both repositories enforce main rulesets with PR, review, resolved conversations, required checks, and no force-push/deletion.",
+        "Break-glass is narrow, audited, time-bounded, and tested.",
+        "Workflows use least privilege, immutable action SHAs, deterministic installs, secret/dependency/SAST checks, and CODEOWNERS.",
+        "Release publishes SBOM, checksums, provenance/attestation, and an immutable paired artifact manifest.",
+        "Deployment cannot promote armed mode without a separate human gate and attached PRAC/shadow evidence."
+      ],
+      "stop_line": "Repository privacy and a small maintainer set do not replace enforced controls.",
+      "sources": [
+        "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
+        ".github/workflows/ci.yml",
+        "glitch-topstep-hermes-profile:GTHP-PROD-03",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/116"
       ]
     }
   ],
