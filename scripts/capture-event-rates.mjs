@@ -121,10 +121,14 @@ function queryRetrospectiveWindow(minutes) {
 const healthStart = await fetchHealth();
 const diskBytesStart = evidenceDbBytes();
 const eventCountStart = Number(healthStart.provider_evidence?.eventCount ?? 0);
+const latestSequenceStart = healthStart.provider_evidence?.latestSequence == null
+  ? null : Number(healthStart.provider_evidence.latestSequence);
 await sleep(Math.max(diskSampleSeconds, 1) * 1000);
 const healthEnd = await fetchHealth();
 const diskBytesEnd = evidenceDbBytes();
 const eventCountEnd = Number(healthEnd.provider_evidence?.eventCount ?? 0);
+const latestSequenceEnd = healthEnd.provider_evidence?.latestSequence == null
+  ? null : Number(healthEnd.provider_evidence.latestSequence);
 
 const retrospective = queryRetrospectiveWindow(
   Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 30,
@@ -161,6 +165,8 @@ const proof = buildEventRatesProof({
   diskBytesEnd,
   eventCountStart,
   eventCountEnd,
+  latestSequenceStart,
+  latestSequenceEnd,
   peakMarketEventCount: retrospective.currentMarketEventCount,
 });
 

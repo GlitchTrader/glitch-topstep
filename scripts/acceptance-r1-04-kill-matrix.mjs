@@ -47,6 +47,7 @@ for (const line of fs.readFileSync(path.join(ROOT, ".env"), "utf8").split(/\r?\n
 const env = process.env;
 const token = env.GLITCH_LOCAL_TOKEN;
 const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+let activeGatewayPid = null;
 
 function gatewayPort() {
   return Number(env.GLITCH_LOCAL_PORT ?? 8790);
@@ -100,14 +101,34 @@ async function runPowerShell(command, timeoutMs = 20_000) {
   });
 }
 
-async function killGatewayOnPort(port) {
-  for (let attempt = 0; attempt < 12; attempt++) {
-    if (!(await isTcpPortOpen(port))) return;
+async function killGatewayOnPort(port, expectedPid = activeGatewayPid) {
+  if (expectedPid !== null) {
     await runPowerShell(
-      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }`,
+      `$p=Get-Process -Id ${Number(expectedPid)} -ErrorAction SilentlyContinue; `
+      `if ($p) { Stop-Process -Id ${Number(expectedPid)} -Force -ErrorAction Stop }`,
     );
+    activeGatewayPid = null;
     await sleep(1500);
+    const processStillExists = await runPowerShell(
+      `$p=Get-Process -Id ${Number(expectedPid)} -ErrorAction SilentlyContinue; `
+      `if ($p) { 'alive' } else { 'dead' }`,
+    );
+    if (processStillExists.stdout !== "dead") {
+      throw new Error(`gateway_pid_${expectedPid}_still_alive`);
+    }
+    if (await isTcpPortOpen(port)) {
+      throw new Error(`gateway_pid_${expectedPid}_did_not_release_port`);
+    }
+    return;
   }
+  // Only the initial cleanup may target the port owner. Every process started
+  // by this harness is killed by its recorded PID above.
+  if (!(await isTcpPortOpen(port))) return;
+  await runPowerShell(
+    `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | `
+      `ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction Stop }`,
+  );
+  await sleep(1500);
   if (await isTcpPortOpen(port)) {
     throw new Error(`port_${port}_still_in_use`);
   }
@@ -149,6 +170,7 @@ async function startGateway(steps, label, extraEnv = {}) {
     kill_point: extraEnv.GLITCH_KILL_POINT ?? null,
     recorded_utc: new Date().toISOString(),
   });
+  activeGatewayPid = child.pid;
   await sleep(4000);
 }
 
@@ -450,10 +472,14 @@ async function runKillPoint(killPoint, steps, cases) {
     caseRecord.gateway_killed = false;
     caseRecord.proof_failures.push("gateway_not_killed");
     caseRecord.kill_error = String(error?.message ?? error);
-    if (killSubmit.http === 422) {
-      caseRecord.proof_failures.push("kill_point_not_reached");
-    }
+    caseRecord.proof_failures.push("kill_point_not_reached");
   }
+
+  const stderrLog = path.join(dataDirAbs(), "gateway.stderr.log");
+  const killMarker = fs.existsSync(stderrLog)
+    && fs.readFileSync(stderrLog, "utf8").includes(`GLITCH_KILL:${killPoint}:`);
+  caseRecord.kill_marker_observed = killMarker;
+  if (!killMarker) caseRecord.proof_failures.push("kill_point_marker_not_observed");
 
   await killGatewayOnPort(gatewayPort());
   await startGateway(steps, `${killPoint}_RECOVERY`);
