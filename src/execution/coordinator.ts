@@ -271,11 +271,15 @@ export class ExecutionCoordinator {
           });
         }
       }
-      // Venue snapshots do not carry the exact protective stop geometry needed to
-      // price existing downside. Treat every existing position as unproven until
-      // the ownership/reconciliation layer supplies that geometry; never model it
-      // as zero-risk and admit a scale-in on an understated buffer.
-      const unprotectedExistingExposure = currentSnapshot.positions.length > 0 || foreignExposure;
+      // Venue snapshots do not carry stop geometry, so foreign or unproven
+      // positions stay fail-closed. Same-contract scale-in is already gated by
+      // validateScaleIn; consult ownership on the issued packet and admit only
+      // when that layer has already proven protection.
+      const unprotectedExistingExposure = foreignExposure
+        || (
+          currentSnapshot.positions.length > 0
+          && issuedPacket.protection.status !== "proven"
+        );
       const portfolio = evaluatePortfolioAdmission({
         hard_loss_buffer_usd: validated.riskBudget.currentBuffer,
         existing: [],
