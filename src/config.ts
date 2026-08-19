@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   RiskSettings,
@@ -73,6 +74,39 @@ export interface AppConfig {
 }
 
 const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
+
+/** Parse the small, dependency-free .env dialect used by the gateway. */
+export function parseDotEnv(contents: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const assignment = line.startsWith("export ") ? line.slice(7).trim() : line;
+    const separator = assignment.indexOf("=");
+    if (separator <= 0) continue;
+    const name = assignment.slice(0, separator).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue;
+    let value = assignment.slice(separator + 1).trim();
+    if (value.length >= 2
+      && ((value.startsWith('"') && value.endsWith('"'))
+        || (value.startsWith("'") && value.endsWith("'")))) {
+      value = value.slice(1, -1);
+    }
+    values[name] = value;
+  }
+  return values;
+}
+
+function loadDotEnvIntoProcess(): void {
+  try {
+    const values = parseDotEnv(readFileSync(join(process.cwd(), ".env"), "utf8"));
+    for (const [name, value] of Object.entries(values)) {
+      if (process.env[name] === undefined) process.env[name] = value;
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}
 
 function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name]?.trim();
@@ -169,6 +203,7 @@ function optionalUtc(environment: NodeJS.ProcessEnv, name: string): string | nul
 }
 
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
+  if (environment === process.env) loadDotEnvIntoProcess();
   const tradingMode = enumValue<TradingMode>(
     environment,
     "GLITCH_TRADING_MODE",

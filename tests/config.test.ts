@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, parseDotEnv } from "../src/config.js";
 
 function environment(): NodeJS.ProcessEnv {
   return {
@@ -17,6 +17,20 @@ function environment(): NodeJS.ProcessEnv {
 }
 
 describe("configuration authority", () => {
+  it("parses .env assignments safely", () => {
+    assert.deepEqual(parseDotEnv(`
+      # comment
+      export GLITCH_TRADING_MODE = "armed"
+      GLITCH_LOSS_MODEL=express_funded_eod
+      VALUE_WITH_EQUALS='a=b'
+      invalid-name=ignored
+    `), {
+      GLITCH_TRADING_MODE: "armed",
+      GLITCH_LOSS_MODEL: "express_funded_eod",
+      VALUE_WITH_EQUALS: "a=b",
+    });
+  });
+
   it("defaults to shadow without strategy or paper/live gates", () => {
     const config = loadConfig(environment());
     assert.equal(config.tradingMode, "shadow");
