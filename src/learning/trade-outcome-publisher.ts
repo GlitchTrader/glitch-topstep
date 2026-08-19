@@ -321,6 +321,11 @@ export class TradeOutcomePublisher {
 }
 
 export function isIncompleteOutcome(outcome: TradeOutcomeV1): boolean {
+  // A flat can be observed before the submitted EXIT receipt is durable.
+  // Revisit unknown attribution on the next reconciliation pass.
+  if (outcome.exit_reason === "unknown") {
+    return true;
+  }
   const tradeCount = outcome.attribution?.trade_count ?? 0;
   if (tradeCount < 2 && outcome.realized_pnl_usd === 0) {
     return true;
@@ -343,6 +348,9 @@ export function isIncompleteOutcome(outcome: TradeOutcomeV1): boolean {
 }
 
 export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcomeV1): boolean {
+  if (existing.exit_reason === "unknown" && candidate.exit_reason !== "unknown") {
+    return true;
+  }
   const candidateCount = candidate.attribution?.trade_count ?? 0;
   const existingCount = existing.attribution?.trade_count ?? 0;
   const candidateFills = candidate.fills?.length ?? 0;

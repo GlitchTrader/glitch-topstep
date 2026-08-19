@@ -621,7 +621,11 @@ async function main() {
     proof_failures: cases.flatMap((entry) => entry.proof_failures ?? []),
   };
 
-  const outDir = path.join(ROOT, "tests", "fixtures", "projectx", "live");
+  const outDir = path.resolve(
+    process.env.GLITCH_KILL_MATRIX_OUTPUT_DIR
+      ?? path.join(ROOT, "tests", "fixtures", "projectx", "live"),
+  );
+  fs.mkdirSync(outDir, { recursive: true });
   fs.mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, "r1_04_kill_matrix_proof.json");
   fs.writeFileSync(outPath, `${JSON.stringify(proof, null, 2)}\n`);
