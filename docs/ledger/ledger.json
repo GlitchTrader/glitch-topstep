@@ -1313,8 +1313,20 @@
     },
     "next": [
       "add per-contract reconnect and rate-budget evidence",
-      "pair the complete candidate ledger with Hermes before any selected-contract execution work"
+      "pair the complete candidate ledger with Hermes before any selected-contract execution work",
+      "complete TS-MULTI-03 account-wide execution admission and simulated MES/MCL sessions"
     ],
+    "ts_multi_03_foundation": {
+      "status": "admission_wired_pending_acceptance",
+      "execution_admission": "wired_to_account_snapshot_before_provider_mutation",
+      "selection_contract": "glitch.topstep.account_selection.v1",
+      "single_contract_default": true,
+      "foreign_exposure_requires_simultaneous_opt_in": true,
+      "exact_contract_allowlist_required": true,
+      "simulated_contract_matrix": ["MNQ:CON.F.US.MNQ.U26", "MES:CON.F.US.MES.U26", "MCL:CON.F.US.MCLE.V26"],
+      "gateway_check": "270 passed, 0 failed",
+      "paired_profile_check": "177 passed, 1 expected skip"
+    },
     "stop_line": "No strategy ranking, hot contract switching, or simultaneous exposure is enabled by this foundation."
   }
 }

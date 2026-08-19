@@ -88,6 +88,11 @@ describe("decision packet issuance", () => {
     const first = service.current();
     assert.equal(first.schema_version, "glitch.direct.decision_packet.v2");
     assert.equal(first.required_output_template.operator_profile, "glitch-topstep");
+    assert.equal(first.account_selection.schema_version, "glitch.topstep.account_selection.v1");
+    assert.equal(first.account_selection.selected_instrument, "MNQ");
+    assert.equal(first.account_selection.selected_contract_id, "CON.F.US.MNQ.U26");
+    assert.equal(first.account_selection.mode, "single_contract");
+    assert.equal(first.account_selection.simultaneous_exposure_enabled, false);
     assert.equal(first.data_quality.state_complete, true);
     assert.equal(first.data_quality.quote_age_ms, 1_000);
     current.quote = { ...current.quote!, bestAsk: 20_001.25, timestamp: "2026-07-21T12:00:05Z" };

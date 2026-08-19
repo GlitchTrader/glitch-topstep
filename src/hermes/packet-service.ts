@@ -78,6 +78,7 @@ export class DecisionPacketService {
       bracketVerification,
       this.decisionScope(),
       dailyCaptureLocked,
+      this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
     );
     this.store.recordIssuedPacket(packet);
     return packet;

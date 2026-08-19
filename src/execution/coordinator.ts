@@ -34,6 +34,8 @@ import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { evaluatePortfolioAdmission } from "../risk/portfolio-risk.js";
+import { validatePortfolioSelection } from "../risk/portfolio-selection.js";
+import type { InstrumentUniverse } from "../domain/instrument-universe.js";
 
 export interface ExecutionReceipt {
   schema_version: "glitch.direct.execution_receipt.v1";
@@ -71,6 +73,7 @@ export class ExecutionCoordinator {
       mode: config.tradingMode,
     }),
     private readonly dailyCaptureLocked: () => boolean = () => false,
+    private readonly instrumentUniverse: () => InstrumentUniverse | null = () => null,
   ) {}
 
   private currentMode(): TradingMode {
@@ -248,6 +251,26 @@ export class ExecutionCoordinator {
       ) || currentSnapshot.openOrders.some(
         (order) => order.contractId !== this.config.scope.contractId,
       );
+      const resolvedUniverse = this.instrumentUniverse();
+      if (resolvedUniverse) {
+        const selection = validatePortfolioSelection({
+          universe: resolvedUniverse,
+          selected_contract_id: this.config.scope.contractId,
+          open_contract_ids: [
+            ...currentSnapshot.positions.map((position) => position.contractId),
+            ...currentSnapshot.openOrders.map((order) => order.contractId),
+          ],
+          simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+        });
+        if (!selection.allowed) {
+          return this.record({
+            intentId: intent.intentId,
+            status: "rejected",
+            code: selection.code,
+            detail: `selected_contract_id=${selection.selected_contract_id};selected_instrument=${selection.selected_instrument ?? "unknown"}`,
+          });
+        }
+      }
       // Venue snapshots do not carry the exact protective stop geometry needed to
       // price existing downside. Treat every existing position as unproven until
       // the ownership/reconciliation layer supplies that geometry; never model it
