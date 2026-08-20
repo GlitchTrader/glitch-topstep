@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
-import type { MarketObservationState } from "../domain/market-observation.js";
+import type {
+  MarketObservationState,
+  MarketObservationTimeframeMinutes,
+  TimeframeMarketObservation,
+} from "../domain/market-observation.js";
 import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
 import type {
   AccountVenueSnapshot,
@@ -109,12 +113,20 @@ export interface DirectDecisionPacket {
     session_low: number | null;
     session_levels_reliable: boolean;
     session_levels_note?: string;
+    session_levels: {
+      available: boolean;
+      reliable: boolean;
+      high: number | null;
+      low: number | null;
+      reason?: string;
+    };
     volume: number | null;
   };
   market_observation: MarketObservationState;
   order_flow: ProjectXOrderFlowState;
   structural_levels: StructuralLevelsPacket;
   price_delta_relationship: PriceDeltaRelationshipPacket;
+  market_alignment: MarketAlignmentPacket;
   data_quality: {
     /** Venue/execution-critical completeness (streams, quote/state age). Matches execution gate state_complete. */
     state_complete: boolean;
@@ -185,6 +197,158 @@ export interface DirectDecisionPacket {
   required_output_template: Record<string, unknown>;
 }
 
+/** Advisory only — must never appear in data_quality.issues or execution gates. */
+export const MARKET_ALIGNMENT_SYNCHRONIZED_MAX_LAG_MS = 90_000;
+
+export type MarketAlignmentTimeframeKey = "1" | "5" | "15" | "60";
+
+export interface MarketAlignmentBarSummary {
+  latest_bar_open_utc: string | null;
+  latest_bar_partial: boolean;
+  observation_succeeded_utc: string | null;
+  features_reference: "partial_bar" | "completed_bar" | null;
+}
+
+export interface MarketAlignmentPacket {
+  packet_created_utc: string;
+  quote_timestamp: string | null;
+  order_flow_generated_utc: string | null;
+  order_flow_last_trade_utc: string | null;
+  bars: Partial<Record<MarketAlignmentTimeframeKey, MarketAlignmentBarSummary>>;
+  lags_ms: {
+    quote_vs_1m_bar_open: number | null;
+    quote_vs_order_flow: number | null;
+    packet_vs_observation_1m: number | null;
+  };
+  timing_reference: {
+    price_for_timing: "quote";
+    features_reference_1m: "partial_bar" | "completed_bar" | null;
+  };
+  synchronized: boolean;
+  notes: string[];
+}
+
+const ALIGNMENT_TIMEFRAMES: MarketObservationTimeframeMinutes[] = [1, 5, 15, 60];
+
+function alignmentTimeframeKey(
+  minutes: MarketObservationTimeframeMinutes,
+): MarketAlignmentTimeframeKey {
+  return String(minutes) as MarketAlignmentTimeframeKey;
+}
+
+function timestampLagMs(laterMs: number, earlierUtc: string | null | undefined): number | null {
+  if (!earlierUtc) {
+    return null;
+  }
+  const earlierMs = Date.parse(earlierUtc);
+  if (!Number.isFinite(earlierMs)) {
+    return null;
+  }
+  return laterMs - earlierMs;
+}
+
+function summarizeAlignmentBar(
+  timeframe: TimeframeMarketObservation | undefined,
+  observationSucceededUtc: string | null,
+): MarketAlignmentBarSummary | undefined {
+  if (!timeframe) {
+    return undefined;
+  }
+  return {
+    latest_bar_open_utc: timeframe.latest_bar_utc,
+    latest_bar_partial: timeframe.latest_bar_partial,
+    observation_succeeded_utc: observationSucceededUtc,
+    features_reference: timeframe.latest_bar_utc === null
+      ? null
+      : (timeframe.latest_bar_partial ? "partial_bar" : "completed_bar"),
+  };
+}
+
+export function buildMarketAlignment(
+  now: Date,
+  quote: QuoteInfo | null | undefined,
+  marketObservation: MarketObservationState,
+  orderFlow: ProjectXOrderFlowState,
+  quality: SnapshotDataQuality,
+  risk: RiskSettings,
+): MarketAlignmentPacket {
+  const nowMs = now.getTime();
+  const quoteTimestamp = quote?.timestamp ?? null;
+  const observation = marketObservation.observation;
+  const timeframes = observation?.timeframes ?? [];
+  const tf1 = timeframes.find((row) => row.timeframe_minutes === 1);
+  const observationSucceededUtc = marketObservation.last_succeeded_utc;
+  const orderFlowGeneratedUtc = orderFlow.observation?.generated_utc ?? null;
+  const orderFlowLastTradeUtc = orderFlow.observation?.last_trade_utc ?? null;
+
+  const bars: Partial<Record<MarketAlignmentTimeframeKey, MarketAlignmentBarSummary>> = {};
+  for (const minutes of ALIGNMENT_TIMEFRAMES) {
+    const summary = summarizeAlignmentBar(
+      timeframes.find((row) => row.timeframe_minutes === minutes),
+      observationSucceededUtc,
+    );
+    if (summary) {
+      bars[alignmentTimeframeKey(minutes)] = summary;
+    }
+  }
+
+  const quoteMs = quoteTimestamp ? Date.parse(quoteTimestamp) : null;
+  const barOpenMs = tf1?.latest_bar_utc ? Date.parse(tf1.latest_bar_utc) : null;
+  const quoteVs1mBarOpen = quoteMs !== null && barOpenMs !== null && Number.isFinite(barOpenMs)
+    ? quoteMs - barOpenMs
+    : null;
+  const quoteVsOrderFlow = quoteMs !== null
+    ? timestampLagMs(quoteMs, orderFlowGeneratedUtc)
+    : null;
+  const packetVsObservation1m = timestampLagMs(nowMs, observationSucceededUtc);
+
+  const featuresReference1m = !tf1 || tf1.latest_bar_utc === null
+    ? null
+    : (tf1.latest_bar_partial ? "partial_bar" : "completed_bar");
+
+  const notes = [
+    "market_alignment is cognition evidence only; never an execution gate.",
+  ];
+  if (featuresReference1m === "partial_bar") {
+    notes.push("1m bar timestamps are candle open times; use quote bid/ask/last for executable timing.");
+  }
+  if (
+    quoteVs1mBarOpen !== null
+    && (quoteVs1mBarOpen < 0 || quoteVs1mBarOpen > MARKET_ALIGNMENT_SYNCHRONIZED_MAX_LAG_MS)
+  ) {
+    notes.push(
+      "advisory_only: bar features may lag live quote; reduce timing confidence, not structural thesis.",
+    );
+  }
+
+  const quoteAgeOk = quality.quoteAgeMs !== null && quality.quoteAgeMs <= risk.maxQuoteAgeMs;
+  const synchronized = quoteAgeOk
+    && marketObservation.last_error === null
+    && quoteVs1mBarOpen !== null
+    && quoteVs1mBarOpen >= 0
+    && quoteVs1mBarOpen <= MARKET_ALIGNMENT_SYNCHRONIZED_MAX_LAG_MS
+    && tf1?.latest_bar_utc !== null;
+
+  return {
+    packet_created_utc: now.toISOString(),
+    quote_timestamp: quoteTimestamp,
+    order_flow_generated_utc: orderFlowGeneratedUtc,
+    order_flow_last_trade_utc: orderFlowLastTradeUtc,
+    bars,
+    lags_ms: {
+      quote_vs_1m_bar_open: quoteVs1mBarOpen,
+      quote_vs_order_flow: quoteVsOrderFlow,
+      packet_vs_observation_1m: packetVsObservation1m,
+    },
+    timing_reference: {
+      price_for_timing: "quote",
+      features_reference_1m: featuresReference1m,
+    },
+    synchronized,
+    notes,
+  };
+}
+
 export function emptyMarketObservationState(): MarketObservationState {
   return {
     last_attempt_utc: null,
@@ -204,7 +368,7 @@ export function emptyOrderFlowState(): ProjectXOrderFlowState {
 }
 
 /** Max |depth BBO − quote BBO| in ticks before reconstructed depth is treated as unusable. */
-const DEPTH_QUOTE_MAX_DIVERGENCE_TICKS = 8;
+export const DEPTH_QUOTE_MAX_DIVERGENCE_TICKS = 4;
 
 /**
  * Mark reconstructed depth unavailable when its BBO materially disagrees with the live quote.
@@ -217,23 +381,32 @@ export function sanitizeOrderFlowDepthAgainstQuote(
   tickSize: number,
 ): ProjectXOrderFlowState {
   const depth = orderFlow.observation?.depth;
-  if (!depth?.available || !quote || !Number.isFinite(tickSize) || tickSize <= 0) {
-    return orderFlow;
-  }
-  if (depth.best_bid === null || depth.best_ask === null) {
-    return orderFlow;
-  }
-  if (!Number.isFinite(quote.bestBid) || !Number.isFinite(quote.bestAsk)) {
-    return orderFlow;
-  }
-  const bidTicks = Math.abs(depth.best_bid - quote.bestBid) / tickSize;
-  const askTicks = Math.abs(depth.best_ask - quote.bestAsk) / tickSize;
-  if (bidTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS && askTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS) {
+  if (!depth) {
     return orderFlow;
   }
   const next: ProjectXOrderFlowState = structuredClone(orderFlow);
   const nextDepth = next.observation!.depth;
+  nextDepth.raw_available = depth.available;
+  if (!depth.available || !quote || !Number.isFinite(tickSize) || tickSize <= 0) {
+    nextDepth.integrity_valid = depth.available;
+    return next;
+  }
+  if (depth.best_bid === null || depth.best_ask === null) {
+    nextDepth.integrity_valid = false;
+    return next;
+  }
+  if (!Number.isFinite(quote.bestBid) || !Number.isFinite(quote.bestAsk)) {
+    nextDepth.integrity_valid = false;
+    return next;
+  }
+  const bidTicks = Math.abs(depth.best_bid - quote.bestBid) / tickSize;
+  const askTicks = Math.abs(depth.best_ask - quote.bestAsk) / tickSize;
+  if (bidTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS && askTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS) {
+    nextDepth.integrity_valid = true;
+    return next;
+  }
   nextDepth.available = false;
+  nextDepth.integrity_valid = false;
   nextDepth.unavailable_reason = "depth_bbo_diverges_from_quote";
   nextDepth.imbalance_ratio = null;
   const issues = next.observation!.issues;
@@ -527,6 +700,14 @@ export function buildDecisionPacket(
     orderFlow: publishedOrderFlow,
   });
   const priceDeltaRelationship = buildPriceDeltaRelationship(publishedOrderFlow, createdUtc);
+  const marketAlignment = buildMarketAlignment(
+    now,
+    quote,
+    marketObservation,
+    publishedOrderFlow,
+    quality,
+    risk,
+  );
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -585,12 +766,14 @@ export function buildDecisionPacket(
       session_low: sessionLevels.session_low,
       session_levels_reliable: sessionLevels.reliable,
       ...(sessionLevels.note === undefined ? {} : { session_levels_note: sessionLevels.note }),
+      session_levels: sessionLevels.session_levels,
       volume: quote?.volume ?? null,
     },
     market_observation: structuredClone(marketObservation),
     order_flow: structuredClone(publishedOrderFlow),
     structural_levels: structuralLevels,
     price_delta_relationship: priceDeltaRelationship,
+    market_alignment: marketAlignment,
     data_quality: {
       state_complete: requiredIssues.length === 0,
       issues: requiredIssues,
@@ -685,35 +868,56 @@ function resolveSessionMarketLevels(quote: QuoteInfo | null): {
   session_high: number | null;
   session_low: number | null;
   reliable: boolean;
+  session_levels: DirectDecisionPacket["market"]["session_levels"];
   note?: string;
 } {
+  const mirrorNote =
+    "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features";
   if (!quote) {
     return {
       session_open: null,
       session_high: null,
       session_low: null,
       reliable: false,
+      session_levels: {
+        available: false,
+        reliable: false,
+        high: null,
+        low: null,
+        reason: "quote_missing",
+      },
     };
   }
   const last = quote.lastPrice;
   const open = quote.open;
   const high = quote.high;
   const low = quote.low;
-  let reliable = true;
-  if (high === low && high === last) {
-    reliable = false;
-  } else if (high === low && high === open && open === last) {
-    reliable = false;
+  const available = high !== null && low !== null;
+  let mirrorHeuristic = false;
+  if (available && high === low && high === last) {
+    mirrorHeuristic = true;
+  } else if (available && high === low && high === open && open === last) {
+    mirrorHeuristic = true;
   }
+  const reliable = available && !mirrorHeuristic;
+  const publishedHigh = reliable ? high : null;
+  const publishedLow = reliable ? low : null;
   return {
     session_open: open,
-    session_high: reliable ? high : null,
-    session_low: reliable ? low : null,
+    session_high: publishedHigh,
+    session_low: publishedLow,
     reliable,
-    ...(reliable
-      ? {}
-      : {
-          note: "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features",
-        }),
+    session_levels: {
+      available,
+      reliable,
+      high: available ? high : null,
+      low: available ? low : null,
+      ...(reliable
+        ? {}
+        : {
+            reason: available ? "mirror_last_open_heuristic" : "session_high_low_missing",
+          }),
+    },
+    ...(reliable ? {} : { note: mirrorNote }),
   };
 }

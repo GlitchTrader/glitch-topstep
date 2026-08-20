@@ -64,6 +64,15 @@ export class MultiInstrumentMarketDataPlane {
     return this.current();
   }
 
+  /** Coalesced refresh for the armed/selected contract only (packet-time freshness). */
+  public refreshSelected(contractId: string): Promise<MarketObservationState> {
+    const service = this.observations.get(contractId);
+    if (!service) {
+      throw new Error(`market_observation_service_missing:${contractId}`);
+    }
+    return service.refresh();
+  }
+
   public current(): MultiInstrumentMarketPacket {
     return {
       schema_version: "glitch.topstep.market_universe.v1",
