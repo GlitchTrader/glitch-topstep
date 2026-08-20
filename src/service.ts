@@ -11,6 +11,10 @@ import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
 import { ProjectXOrderFlowService } from "./market/projectx-order-flow-service.js";
 import { ProjectXApiClient, ProjectXApiError } from "./projectx/client.js";
+import {
+  EvidenceWriteQueue,
+  type EvidenceQueueMetrics,
+} from "./projectx/evidence-write-queue.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
@@ -78,6 +82,7 @@ export class GlitchTopstepService {
   private readonly tradeOutcomeStore: TradeOutcomeStore;
   private readonly tradeOutcomePublisher: TradeOutcomePublisher;
   private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
+  private readonly evidenceQueue: EvidenceWriteQueue;
   private readonly controlStore: DurableControlStore;
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private readonly historySync: ProjectXHistorySyncService;
@@ -135,6 +140,25 @@ export class GlitchTopstepService {
         marketPruneInterval: config.providerEvidence.marketPruneInterval,
       },
     );
+    this.evidenceQueue = new EvidenceWriteQueue(this.providerEvidenceStore, {
+      onDegraded: (metrics) => {
+        this.handleEvidenceQueueDegraded(metrics);
+      },
+      onRecovered: () => {
+        this.state.markEvidenceBacklog(false);
+        this.packets?.invalidateAll();
+      },
+      onWriteError: (error, pending) => {
+        console.error("Provider evidence batch write failed", { pending }, error);
+      },
+      onApplyError: (error, event) => {
+        this.state.markPayloadFault(
+          event.source === "projectx_user_stream" ? "user" : "market",
+          error,
+        );
+        console.error("Provider evidence apply failed after durable commit", error);
+      },
+    });
     this.controlStore = new DurableControlStore(join(config.dataDir, "glitch-topstep-controls.sqlite"));
     this.restEvidenceRecorder = new ProviderRestSnapshotRecorder(this.providerEvidenceStore);
     const history = config.providerHistory ?? DEFAULT_PROVIDER_HISTORY;
@@ -356,7 +380,7 @@ export class GlitchTopstepService {
         depthContractIds: this.instrumentUniverse.contracts
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
-        evidence: this.providerEvidenceStore,
+        evidence: this.evidenceQueue,
         onReconnected: async () => {
           this.packets?.invalidateAll();
           await Promise.all([
@@ -502,6 +526,7 @@ export class GlitchTopstepService {
           },
           execution_recovery: executionRecovery,
           provider_evidence: this.providerEvidenceStore.status(),
+          provider_evidence_queue: this.evidenceQueue.metrics(),
           provider_history: providerHistory,
           market_observation: marketObservation,
           order_flow: orderFlow,
@@ -643,6 +668,11 @@ export class GlitchTopstepService {
     this.realtime = null;
     this.packets = null;
     if (!this.storesClosed) {
+      // Queued evidence is durable before the handle closes; a failed drain reports the
+      // resumable cursor instead of discarding what is still pending.
+      await this.evidenceQueue.close().catch((error: unknown) => {
+        console.error("Provider evidence queue drain failed", error);
+      });
       this.providerEvidenceStore.close();
       await this.tradeOutcomeStore.close();
       this.controlStore.close();
@@ -650,6 +680,23 @@ export class GlitchTopstepService {
       this.storesClosed = true;
     }
     await this.runtimeLock.release();
+  }
+
+  /**
+   * Overflow is a state gap, not a performance detail: degrading the market stream fails the
+   * `state_complete` gate (no new exposure) while EXIT, reconcile and user-stream events stay
+   * live under `degraded_armed`.
+   */
+  private handleEvidenceQueueDegraded(metrics: EvidenceQueueMetrics): void {
+    this.state.markEvidenceBacklog(true);
+    this.state.markPayloadFault(
+      "market",
+      new Error(`evidence_queue_high_water:depth=${metrics.depth}`),
+    );
+    this.packets?.invalidateAll();
+    void this.reconcile().catch((error: unknown) => {
+      console.error("ProjectX reconciliation failed after evidence queue overflow", error);
+    });
   }
 
   private clearTimer(

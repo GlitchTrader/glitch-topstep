@@ -121,6 +121,7 @@ export class VenueStateStore {
   private positionSnapshotAt = new Date(0).toISOString();
   private orderSnapshotAt = new Date(0).toISOString();
   private generation = 1;
+  private evidenceBacklogDegraded = false;
   private userStream = initialStream(this.generation);
   private marketStream = initialStream(this.generation);
   private reconciliation: VenueOperationalStatus["reconciliation"] = {
@@ -221,6 +222,15 @@ export class VenueStateStore {
 
   public markPayloadFault(kind: VenueStreamKind, error: unknown, at = nowUtc()): void {
     this.setStream(kind, "degraded", error, at, true);
+  }
+
+  /**
+   * Evidence the persistence queue could not accept is state we do not have. The flag stays
+   * raised until the queue drains, because the next stream event would otherwise mark the
+   * stream connected again and hide a backlog that is still shedding market evidence.
+   */
+  public markEvidenceBacklog(degraded: boolean): void {
+    this.evidenceBacklogDegraded = degraded;
   }
 
   /**
@@ -344,6 +354,7 @@ export class VenueStateStore {
     if (!quote) issues.push("quote_missing");
     if (operational.userStream.state !== "connected") issues.push(`user_stream_${operational.userStream.state}`);
     if (operational.marketStream.state !== "connected") issues.push(`market_stream_${operational.marketStream.state}`);
+    if (this.evidenceBacklogDegraded) issues.push("provider_evidence_backlog");
     if (!isReconciliationCurrent(operational)) {
       issues.push("reconciliation_not_current");
     }

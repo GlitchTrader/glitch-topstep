@@ -106,6 +106,19 @@ export class SqliteProviderEvidenceStore {
     return stored;
   }
 
+  /** One transaction per batch: the queue writer amortizes commit cost over a burst. */
+  public appendBatch(events: readonly ProviderEvidenceEvent[]): StoredProviderEvidenceEvent[] {
+    if (events.length === 0) {
+      return [];
+    }
+    const prepared = events.map(prepareEvidence);
+    const stored = this.inTransaction(() => prepared.map((item) => this.insertPrepared(item)));
+    for (const event of events) {
+      this.maybePruneMarketEvent(event.source);
+    }
+    return stored;
+  }
+
   public appendIfChanged(
     identityKey: string,
     event: ProviderEvidenceEvent,
