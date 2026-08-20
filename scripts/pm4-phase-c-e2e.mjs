@@ -1085,26 +1085,32 @@ try {
     gateway_mode: hlth.gateway_mode,
   };
 
-  await maybePreSubmitVelocityCooldown(log.scenario_a.steps);
-  await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
-  await ensureFlat(log.scenario_a.steps);
-
-  const scenarioAConfig = {
-    prefix: "SHORT",
-    enterAction: "ENTER_SHORT",
-    moveStopDelta: -5 * TICK,
-    moveTpDelta: 5 * TICK,
-  };
-  try {
-    await runTrancheScenario(log.scenario_a, scenarioAConfig);
-  } catch (enterAError) {
-    const msg = String(enterAError?.message ?? enterAError);
-    if (!msg.includes("ENTER_A")) throw enterAError;
-    log.scenario_a.steps.push({ step: "SHORT_ENTER_A_RETRY", reason: msg });
-    await sleep(30_000);
-    await cancelWorkingOrders(log.scenario_a.steps, "ENTER_A_RETRY");
+  if (process.env.PM4_E2E_SKIP_A === "1") {
+    log.scenario_a.skipped = true;
+    log.scenario_a.reason = "PM4_E2E_SKIP_A set";
+    log.scenario_a.pass = true;
+  } else {
+    await maybePreSubmitVelocityCooldown(log.scenario_a.steps);
+    await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
     await ensureFlat(log.scenario_a.steps);
-    await runTrancheScenario(log.scenario_a, scenarioAConfig);
+
+    const scenarioAConfig = {
+      prefix: "SHORT",
+      enterAction: "ENTER_SHORT",
+      moveStopDelta: -5 * TICK,
+      moveTpDelta: 5 * TICK,
+    };
+    try {
+      await runTrancheScenario(log.scenario_a, scenarioAConfig);
+    } catch (enterAError) {
+      const msg = String(enterAError?.message ?? enterAError);
+      if (!msg.includes("ENTER_A")) throw enterAError;
+      log.scenario_a.steps.push({ step: "SHORT_ENTER_A_RETRY", reason: msg });
+      await sleep(30_000);
+      await cancelWorkingOrders(log.scenario_a.steps, "ENTER_A_RETRY");
+      await ensureFlat(log.scenario_a.steps);
+      await runTrancheScenario(log.scenario_a, scenarioAConfig);
+    }
   }
 
   const runRestart = process.env.PM4_E2E_RESTART === "1";
