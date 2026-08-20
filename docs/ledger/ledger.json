@@ -16,8 +16,8 @@
       156,
       157
     ],
-    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Housekeeping: ledger reconciliation synced 2026-08-20.",
-    "stream_validation": "351 gateway tests; Hermes 195 profile tests including frozen cognition, trigger lifecycle, learning defer."
+    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Production audit follow-ups TS-AUDIT-05 through TS-AUDIT-14 opened on 2026-08-20; P0 items block live promotion.",
+    "stream_validation": "363 gateway tests passed; Hermes 199 profile tests passed with 1 expected skip; production audit reproduced a stale Hermes decision index and identified uncovered gateway protection/auth/flatten paths."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -1075,6 +1075,193 @@
       ],
       "implementation_note": "Portfolio admission fail-closed tests + account-wide lock; simultaneous_exposure_enabled default false. Proof: docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
       "last_verified_utc": "2026-08-20T22:40:00Z"
+    },
+    {
+      "id": "TS-AUDIT-05",
+      "title": "Correct protection rearm latch after partial stop or target failure",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_safety",
+      "issue": 160,
+      "depends_on": ["TS-PROD-01"],
+      "resolution": [
+        "Replace the boolean latch with explicit per-tranche pending, partially_protected, confirmed, retry_wait, and terminal states.",
+        "Confirm rearm only after authoritative stop and target ownership, quantity, and working-state verification; retry partial protection with bounded backoff."
+      ],
+      "acceptance": [
+        "A failed target after stop creation is never recorded as completed and the next reconciliation repairs the missing leg.",
+        "Fault, restart, partial-fill, and concurrent-repeat tests prove convergence without touching manual or foreign orders."
+      ],
+      "deployment": [
+        "Ship default-off, pass deterministic fault injection and simulation soak, then capture approved PRAC evidence.",
+        "Block live while either protective leg can be falsely declared complete."
+      ],
+      "sources": ["src/execution/coordinator.ts", "https://github.com/GlitchTrader/glitch-topstep/issues/160"]
+    },
+    {
+      "id": "TS-AUDIT-06",
+      "title": "Implement resilient single-flight ProjectX authentication lifecycle",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "projectx_integration",
+      "issue": 161,
+      "depends_on": [],
+      "resolution": [
+        "Introduce one ProjectXAuthManager with proactive renewal, exponential backoff, jitter, and single-flight refresh.",
+        "Handle 401/403 with one coordinated renewal; retry only safe requests and reconcile ambiguous mutations by identity."
+      ],
+      "acceptance": [
+        "Concurrent expired-token requests cause at most one auth call and transient failure recovers without restart.",
+        "Fake-clock tests cover expiry, 401, 403, timeout, 429, and token replacement without blind mutation retry."
+      ],
+      "deployment": [
+        "Run fake-provider tests, shadow comparison, 24-hour simulation soak, and approved forced-renewal PRAC evidence.",
+        "Rollback may pause but must never restore an expired-token path."
+      ],
+      "sources": ["src/projectx/client.ts", "src/service.ts", "https://github.com/GlitchTrader/glitch-topstep/issues/161"]
+    },
+    {
+      "id": "TS-AUDIT-07",
+      "title": "Complete flatten only after authoritative venue-flat confirmation",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "control_plane",
+      "issue": 162,
+      "depends_on": ["TS-CTRL-01"],
+      "resolution": [
+        "Model requested, submitted, waiting_for_flat, venue_flat_confirmed, completed, and manual_intervention_required states.",
+        "Complete only after net position zero, no owned pending orders, and a complete reconciliation snapshot; resume ambiguity read-only after restart."
+      ],
+      "acceptance": [
+        "Submitted and partial-fill receipts remain pending and restart at every transition converges without duplicate EXIT.",
+        "Tests cover residual orders, incomplete snapshots, stream loss, late rejection, and timeout."
+      ],
+      "deployment": [
+        "Apply a compatible schema migration, pass local fault matrix and soak, then approved PRAC flatten evidence.",
+        "Enable only with flatten_pending_seconds alerting; block live until completion is truthful."
+      ],
+      "sources": ["src/service.ts", "https://github.com/GlitchTrader/glitch-topstep/issues/162"]
+    },
+    {
+      "id": "TS-AUDIT-08",
+      "title": "Make evidence-queue shutdown drain recoverable",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "persistence",
+      "issue": 163,
+      "depends_on": ["TS-PROD-05"],
+      "resolution": [
+        "Persist a recoverable spool before enqueue acknowledgement and separate stop-accepting, drain, checkpoint, and store-close phases.",
+        "Mark incomplete shutdown on deadline and resume ordered deduplicated spool processing on startup."
+      ],
+      "acceptance": [
+        "Crash during drain loses no identity event and restart reapplies every logical event at most once.",
+        "Backlog, oldest-item age, checkpoint, and drain failures remain bounded and health-visible."
+      ],
+      "deployment": ["Introduce behind a flag and require kill-point plus burst-soak evidence before default enablement."],
+      "sources": ["src/service.ts", "https://github.com/GlitchTrader/glitch-topstep/issues/163"]
+    },
+    {
+      "id": "TS-AUDIT-09",
+      "title": "Finish service and coordinator decomposition by workflows and effects",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "architecture",
+      "issue": 164,
+      "depends_on": ["TS-PROD-06"],
+      "resolution": [
+        "Extract ProtectionSupervisor, FlattenWorkflow, AuthManager, ReconciliationEngine, and LifecycleSupervisor behind narrow ports.",
+        "Separate pure transitions from effects and centralize retry and error classification."
+      ],
+      "acceptance": [
+        "Each workflow has state-machine and adapter tests with no dependency cycles or unauthorized mutation owner.",
+        "Replay remains equivalent while complexity and orchestrator size decrease against a recorded baseline."
+      ],
+      "deployment": ["Land small workflow-specific PRs with receipt/event replay comparison; no big-bang rewrite."],
+      "sources": ["src/service.ts", "src/execution/coordinator.ts", "https://github.com/GlitchTrader/glitch-topstep/issues/164"]
+    },
+    {
+      "id": "TS-AUDIT-10",
+      "title": "Eliminate v2/v3 contract drift and obsolete operational scripts",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "release_architecture",
+      "issue": 165,
+      "depends_on": ["TS-PROD-07", "glitch-topstep-hermes-profile:GTHP-AUDIT-05"],
+      "resolution": [
+        "Use one machine-readable compatibility manifest for protocol, profile, and capabilities.",
+        "Remove personal paths and unsupported setup parameters; make CI reject active docs or defaults that drift from the manifest."
+      ],
+      "acceptance": [
+        "Active files consistently declare v3 and Windows install works for another user and paths containing spaces.",
+        "Clean install, upgrade, and rollback preserve auth/operator state while rejecting incompatible pairs."
+      ],
+      "deployment": ["Validate temporary, clean-install, in-place-upgrade, and rollback paths; publish only with the profile companion."],
+      "sources": ["update-glitch-hermes.ps1", "https://github.com/GlitchTrader/glitch-topstep/issues/165", "https://github.com/GlitchTrader/glitch-topstep-hermes-profile/issues/125"]
+    },
+    {
+      "id": "TS-AUDIT-11",
+      "title": "Add systemic production-regression gates",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "quality_engineering",
+      "issue": 166,
+      "depends_on": ["TS-AUDIT-05", "TS-AUDIT-06", "TS-AUDIT-07", "TS-AUDIT-08", "glitch-topstep-hermes-profile:GTHP-AUDIT-01", "glitch-topstep-hermes-profile:GTHP-AUDIT-03", "glitch-topstep-hermes-profile:GTHP-AUDIT-06"],
+      "resolution": [
+        "Add paired fixtures for decision indexing, partial rearm, auth expiry, flatten-to-flat, evidence drain, ambiguous outbox, and protocol drift.",
+        "Introduce branch-coverage thresholds and deterministic credential-free fault tests."
+      ],
+      "acceptance": ["Every audit regression is red before its fix, green after it, and tested against the exact paired commits."],
+      "deployment": ["Start non-blocking, remove flakiness, then require the matrix for merge and paired release."],
+      "sources": ["tests", "https://github.com/GlitchTrader/glitch-topstep/issues/166", "https://github.com/GlitchTrader/glitch-topstep-hermes-profile/issues/126"]
+    },
+    {
+      "id": "TS-AUDIT-12",
+      "title": "Create a deterministic safety supervisor independent of cognition",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "safety_architecture",
+      "issue": 167,
+      "depends_on": ["TS-AUDIT-05", "TS-AUDIT-06", "TS-AUDIT-07"],
+      "resolution": [
+        "Centralize factual invariants for exposure, protection, reconciliation freshness, auth, flatten, recovery, and operating mode.",
+        "Keep direction and geometry under human/Hermes authority; the supervisor only fails factual invalidity closed and coordinates recovery."
+      ],
+      "acceptance": ["Invariants are attributable, restart-safe, model-tested, and do not create a second mutation owner."],
+      "deployment": ["Run observation-only, compare with current behavior, then promote one invariant at a time after fault soak."],
+      "sources": ["https://github.com/GlitchTrader/glitch-topstep/issues/167"]
+    },
+    {
+      "id": "TS-AUDIT-13",
+      "title": "Require paired soak and chaos evidence before armed promotion",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "release_engineering",
+      "issue": 168,
+      "depends_on": ["TS-PROD-08", "TS-AUDIT-11", "TS-AUDIT-14"],
+      "resolution": [
+        "Bind immutable paired commits, schemas, capabilities, hashes, soak results, and evidence IDs in one release manifest.",
+        "Exercise reconnect, 429, auth expiry, disk pressure, restart, and partial failure for 24 to 72 hours."
+      ],
+      "acceptance": ["Chaos produces no duplicate entry, silent unprotected position, or falsely completed flatten; rollback is never more permissive."],
+      "deployment": ["Begin as a report, require for beta, then require for human-approved armed releases."],
+      "sources": ["https://github.com/GlitchTrader/glitch-topstep/issues/168"]
+    },
+    {
+      "id": "TS-AUDIT-14",
+      "title": "Publish invariant-based trading observability",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "operations",
+      "issue": 169,
+      "depends_on": ["TS-AUDIT-05", "TS-AUDIT-06", "TS-AUDIT-07", "TS-AUDIT-08"],
+      "resolution": [
+        "Publish bounded-cardinality metrics for unprotected duration, flatten pending, auth, reconciliation, outbox, evidence backlog, REST-stream divergence, disk, and nonterminal controls.",
+        "Attach severity, owner, SLO, and runbook without secrets or sensitive payloads."
+      ],
+      "acceptance": ["P0 alerts fire in fault tests and health separates availability, integrity, and protection without unbounded labels."],
+      "deployment": ["Collect without paging, calibrate in soak, then enable P0/P1 alerts after known false positives are removed."],
+      "sources": ["https://github.com/GlitchTrader/glitch-topstep/issues/169"]
     }
   ],
   "roadmap_only": [
