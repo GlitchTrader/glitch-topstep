@@ -13,6 +13,8 @@ export interface PortfolioAdmissionInput {
   pending: readonly ProtectedExposure[];
   candidate: ProtectedExposure;
   simultaneous_exposure_enabled: boolean;
+  /** Foreign exposure the caller observed but could not price; keeps the gate honest. */
+  foreign_exposure_present?: boolean;
   unprotected_existing_exposure?: boolean;
 }
 
@@ -44,8 +46,9 @@ export function protectedExposureUsd(exposure: ProtectedExposure): number {
 }
 
 export function evaluatePortfolioAdmission(input: PortfolioAdmissionInput): PortfolioAdmissionResult {
-  const foreignOpen = [...input.existing, ...input.pending]
-    .some((row) => row.contract_id !== input.candidate.contract_id);
+  const foreignOpen = input.foreign_exposure_present === true
+    || [...input.existing, ...input.pending]
+      .some((row) => row.contract_id !== input.candidate.contract_id);
   const protectedDownsideUsd = [...input.existing, ...input.pending, input.candidate]
     .reduce((total, row) => total + protectedExposureUsd(row), 0);
   const remainingBufferUsd = input.hard_loss_buffer_usd - protectedDownsideUsd;

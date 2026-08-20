@@ -6,12 +6,21 @@ export interface LifecycleStatus {
   detail: string | null;
 }
 
+export type LifecycleDisposer = () => Promise<void> | void;
+
+interface Disposable {
+  name: string;
+  dispose: LifecycleDisposer;
+}
+
 export class LifecycleSupervisor {
   private currentStatus: LifecycleStatus = {
     state: "stopped",
     changed_utc: new Date(0).toISOString(),
     detail: null,
   };
+
+  private readonly disposables: Disposable[] = [];
 
   public transition(state: LifecycleState, detail: string | null = null): LifecycleStatus {
     this.currentStatus = {
@@ -25,5 +34,47 @@ export class LifecycleSupervisor {
   public status(): LifecycleStatus {
     return { ...this.currentStatus };
   }
-}
 
+  /** Records a resource so partial startups and shutdowns unwind in reverse acquisition order. */
+  public register(name: string, dispose: LifecycleDisposer): void {
+    this.disposables.push({ name, dispose });
+  }
+
+  public registeredNames(): string[] {
+    return this.disposables.map((entry) => entry.name);
+  }
+
+  /** Unwinds every registered resource; a failing disposer never blocks the ones acquired before it. */
+  private async disposeAll(): Promise<string[]> {
+    const failed: string[] = [];
+    while (this.disposables.length > 0) {
+      const entry = this.disposables.pop() as Disposable;
+      try {
+        await entry.dispose();
+      } catch (error: unknown) {
+        failed.push(entry.name);
+        console.error(`lifecycle dispose failed for ${entry.name}`, error);
+      }
+    }
+    return failed;
+  }
+
+  /** Startup aborted: release whatever was already acquired and park in failed_startup. */
+  public async rollbackAfterFailure(reason: string): Promise<LifecycleStatus> {
+    const failed = await this.disposeAll();
+    return this.transition(
+      "failed_startup",
+      failed.length > 0 ? `${reason};dispose_failed:${failed.join(",")}` : reason,
+    );
+  }
+
+  /**
+   * Shutdown: enter draining and unwind resources. The caller owns the terminal
+   * transition (stopped / failed_shutdown) because it also closes what it opened
+   * outside this stack.
+   */
+  public async drain(detail: string | null = null): Promise<string[]> {
+    this.transition("draining", detail);
+    return this.disposeAll();
+  }
+}
