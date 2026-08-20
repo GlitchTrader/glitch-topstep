@@ -46,6 +46,8 @@ export interface EvidenceQueueMetrics {
   apply_failures: number;
   resume_cursor: number | null;
   closed: boolean;
+  /** True when shutdown drain failed with recoverable backlog (TS-AUDIT-08). */
+  incomplete_shutdown: boolean;
 }
 
 export interface EvidenceWriteQueueOptions {
@@ -99,6 +101,7 @@ export class EvidenceWriteQueue {
   private consecutiveWriteFailures = 0;
   private applyFailures = 0;
   private resumeCursor: number | null = null;
+  private incompleteShutdown = false;
   private readonly coalesced: Record<EvidenceQueueClass, number> = emptyCounters();
   private readonly dropped: Record<EvidenceQueueClass, number> = emptyCounters();
 
@@ -201,6 +204,7 @@ export class EvidenceWriteQueue {
       apply_failures: this.applyFailures,
       resume_cursor: this.resumeCursor,
       closed: this.closed,
+      incomplete_shutdown: this.incompleteShutdown,
     };
   }
 
@@ -224,10 +228,12 @@ export class EvidenceWriteQueue {
     }
     try {
       await this.drain();
-    } finally {
-      this.closed = true;
-      this.clearTimer();
+    } catch (error) {
+      this.incompleteShutdown = true;
+      throw error;
     }
+    this.closed = true;
+    this.clearTimer();
   }
 
   private schedule(): void {
