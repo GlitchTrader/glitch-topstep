@@ -16,7 +16,7 @@
       156,
       157
     ],
-    "implementation_note": "Steps 1–26 closed except PROD-06 (step 11) and MULTI-04 (step 27 blocked). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Housekeeping: ledger reconciliation synced 2026-08-20.",
+    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Housekeeping: ledger reconciliation synced 2026-08-20.",
     "stream_validation": "351 gateway tests; Hermes 195 profile tests including frozen cognition, trigger lifecycle, learning defer."
   },
   "authority": {
@@ -739,7 +739,7 @@
     {
       "id": "TS-PROD-06",
       "title": "Decompose coordinator and service into explicit state-machine modules",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "architect",
       "issue": 114,
@@ -755,10 +755,15 @@
         "Automated architecture checks reject cycles and forbidden adapter imports."
       ],
       "stop_line": "No big-bang rewrite, generic microservice framework, or premature venue-neutral abstraction.",
+      "implementation_note": "Domain ports, TRANSITION_GRAPHS, IntentAdmission + ReconciliationService extractions, architecture/transition tests. Proof: docs/evidence/PROD-06-state-machines-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T19:15:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
-        "src/execution/coordinator.ts",
-        "src/service.ts",
+        "src/domain/ports/",
+        "src/domain/state-machines.ts",
+        "src/execution/intent-admission.ts",
+        "src/service/reconciliation-service.ts",
+        "docs/evidence/PROD-06-state-machines-proof-2026-08-20.md",
         "https://github.com/GlitchTrader/glitch-topstep/issues/114"
       ]
     },
@@ -1424,7 +1429,6 @@
       "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd"
     },
     "next": [
-      "TS-PROD-06 incremental state-machine extraction",
       "TS-MULTI-04 blocked until portfolio risk simulation proves simultaneous exposure"
     ],
     "ts_multi_03_foundation": {

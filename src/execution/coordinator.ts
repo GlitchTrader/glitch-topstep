@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { AppConfig } from "../config.js";
-import { parseTradeIntent, IntentParseError } from "../domain/intents.js";
 import type { AccountVenueSnapshot, TradeIntent, TradingMode } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import {
@@ -30,7 +29,8 @@ import {
   gatewayModePermitsRiskReduction,
 } from "./gateway-mode.js";
 import { maybeKill } from "./kill-hook.js";
-import { admissionDiagnostics, receiptLifecycleFact } from "./lifecycle-facts.js";
+import { evaluateIntentAdmissionEarly } from "./intent-admission.js";
+import { receiptLifecycleFact } from "./lifecycle-facts.js";
 import {
   partialExitFailClosedEnabled,
   type ProtectedReductionHealth,
@@ -193,151 +193,38 @@ export class ExecutionCoordinator {
   }
 
   private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
-    let intent: TradeIntent;
-    try {
-      intent = parseTradeIntent(input);
-    } catch (error) {
-      if (error instanceof IntentParseError) {
-        return this.record({
-          intentId: null,
-          status: "rejected",
-          code: "intent_schema_invalid",
-          detail: error.message,
-          field: error.field,
-          error: error.errorCode,
-          path: error.path,
-        });
-      }
-      return this.record({
-        intentId: null,
-        status: "rejected",
-        code: "intent_schema_invalid",
-        detail: error instanceof Error ? error.message : String(error),
-      });
-    }
-
-    const receivedUtc = new Date().toISOString();
-    const registration = this.store.registerIntent(intent, receivedUtc);
-    if (registration.status === "conflict") {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "intent_body_conflict",
-        detail: "The same intent_id was already registered with a different body hash.",
-      });
-    }
-    if (registration.status === "duplicate") {
-      const existing = this.store.receiptForIntent<ExecutionReceipt>(intent.intentId);
-      return existing ?? this.ephemeral({
-        intentId: intent.intentId,
-        status: "ambiguous",
-        code: "intent_already_processing_or_recovery_required",
-      });
-    }
-    this.store.recordExecutionFact({
-      intentId: intent.intentId,
-      phase: "intent_admitted",
-      recordedUtc: receivedUtc,
-      detail: {
-        action: intent.action,
-        decision_latency_ms: Math.max(0, Date.parse(receivedUtc) - Date.parse(intent.createdUtc)),
-      },
-      diagnostics: admissionDiagnostics(intent.createdUtc, receivedUtc),
+    const early = evaluateIntentAdmissionEarly(input, {
+      registerIntent: (intent, receivedUtc) => this.store.registerIntent(intent, receivedUtc),
+      receiptForIntent: <T,>(intentId: string) => this.store.receiptForIntent<T>(intentId),
+      recordExecutionFact: (fact) => this.store.recordExecutionFact(fact),
+      resolveIssuedPacket: (snapshotHash) => this.resolveIssuedPacket(snapshotHash),
+      currentMode: () => this.currentMode(),
+      controlPaused: () => this.controlState().paused,
+      ledgerIsDurable: () => this.ledger.isDurable(),
+      ledgerStatus: () => this.ledger.status(),
+      recoveryStatus: () => this.store.recoveryStatus(),
     });
 
-    maybeKill("after_intent_before_outbox");
-
-    const issuedPacket = intent.action === "NOTHING" || intent.action === "HOLD"
-      ? null
-      : this.resolveIssuedPacket(intent.snapshotHash);
-    if (issuedPacket === null && intent.action !== "NOTHING" && intent.action !== "HOLD") {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "decision_packet_unknown_or_expired",
-      });
+    if (early.kind === "reject" || early.kind === "ignore") {
+      return this.record(early.receipt);
+    }
+    if (early.kind === "ambiguous") {
+      const existing = early.receipt.intentId
+        ? this.store.receiptForIntent<ExecutionReceipt>(early.receipt.intentId)
+        : null;
+      return existing ?? this.ephemeral(early.receipt);
+    }
+    if (early.kind === "handoff") {
+      if (early.action === "EXIT") {
+        return this.handleExit(early.intent, early.issuedPacket);
+      }
+      if (early.action === "MOVE_STOP") {
+        return this.handleMoveStop(early.intent, early.issuedPacket);
+      }
+      return this.handleMoveTp(early.intent, early.issuedPacket);
     }
 
-    if (this.currentMode() === "disabled") {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "trading_disabled_by_operator",
-      });
-    }
-
-    if (intent.action === "NOTHING" || intent.action === "HOLD") {
-      return this.record({
-        intentId: intent.intentId,
-        status: "ignored",
-        code: "no_execution_action",
-      });
-    }
-
-    if (!issuedPacket) {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "decision_packet_unknown_or_expired",
-      });
-    }
-
-    if (intent.action === "EXIT") {
-      return this.handleExit(intent, issuedPacket);
-    }
-
-    if (intent.action === "MOVE_STOP") {
-      return this.handleMoveStop(intent, issuedPacket);
-    }
-
-    if (intent.action === "MOVE_TP") {
-      return this.handleMoveTp(intent, issuedPacket);
-    }
-
-    if (intent.action !== "ENTER_LONG" && intent.action !== "ENTER_SHORT") {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "action_not_implemented",
-        detail: `Unsupported action: ${intent.action}`,
-      });
-    }
-
-    if (this.controlState().paused) {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "new_exposure_paused_by_operator",
-      });
-    }
-
-    if (!this.ledger.isDurable()) {
-      // Evidence for the prior mutation is not provably on disk, so execution truth is
-      // uncertain. The rejection receipt below retries the ledger write and clears the
-      // block once it lands.
-      const ledger = this.ledger.status();
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: "execution_evidence_persistence_degraded",
-        detail: `The execution evidence ledger has ${ledger.consecutive_failures} consecutive failed writes; new exposure is blocked until an append is durable.`,
-        ...(ledger.last_write_error === null ? {} : { error: ledger.last_write_error }),
-      });
-    }
-
-    const recovery = this.store.recoveryStatus();
-    if (recovery.blockingNewExposure) {
-      return this.record({
-        intentId: intent.intentId,
-        status: "rejected",
-        code: recovery.blockingAmbiguity
-          ? "execution_recovery_required"
-          : "entry_submission_pending",
-        detail: recovery.blockingAmbiguity
-          ? "A prior ProjectX mutation remains ambiguous; new exposure is blocked until provider reconciliation proves its outcome."
-          : "A prior entry submission has not yet appeared in authoritative ProjectX order or position state.",
-      });
-    }
+    const { intent, issuedPacket } = early;
 
     try {
       const currentSnapshot = this.snapshot();
