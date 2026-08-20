@@ -18,7 +18,7 @@ export interface OutcomeRevision {
 }
 
 export interface OutcomeRevisionPage {
-  schema_version: "glitch.topstep.outcome_feed.v1";
+  schema_version: "glitch.topstep.outcome_feed.v2";
   retention_floor_sequence: number;
   high_water_sequence: number;
   after_sequence: number;
@@ -221,7 +221,7 @@ export class SqliteOutcomeFeed {
       outcome: JSON.parse(row.payload_json) as TradeOutcomeV1,
     }));
     return {
-      schema_version: "glitch.topstep.outcome_feed.v1",
+      schema_version: "glitch.topstep.outcome_feed.v2",
       retention_floor_sequence: floor,
       high_water_sequence: Number(bounds.high),
       after_sequence: afterSequence,

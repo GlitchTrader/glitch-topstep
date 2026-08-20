@@ -24,7 +24,7 @@ import {
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
 import { validateProtectiveAmendment } from "./amendment-safety.js";
-import { instrumentNetSignedLots } from "../state/venue-state.js";
+import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
   gatewayModePermitsLiveOrders,
   gatewayModePermitsRiskReduction,
@@ -37,7 +37,7 @@ import {
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
-import { evaluatePortfolioAdmission } from "../risk/portfolio-risk.js";
+import { evaluatePortfolioAdmission, type ProtectedExposure } from "../risk/portfolio-risk.js";
 import { validatePortfolioSelection } from "../risk/portfolio-selection.js";
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
 
@@ -56,6 +56,36 @@ export interface ExecutionReceipt {
   path?: string;
   /** ISO timestamp when an open position was first observed for this entry. */
   fill_observed_utc?: string;
+}
+
+const STOP_ORDER_TYPE = 4;
+
+/**
+ * Worst-case stop distance in ticks for one contract, read from the stop orders actually
+ * resting at the venue. Returns null when no stop geometry is observable, which forces the
+ * caller to treat that position as unprotected.
+ */
+function observedStopDistanceTicks(
+  snapshot: AccountVenueSnapshot,
+  contractId: string,
+  tickSize: number,
+): number | null {
+  if (!(tickSize > 0)) {
+    return null;
+  }
+  const stops = snapshot.openOrders.filter((order) => (
+    order.contractId === contractId && order.type === STOP_ORDER_TYPE && order.stopPrice !== null
+  ));
+  const legs = snapshot.positions.filter((position) => (
+    position.contractId === contractId && position.type !== 0 && position.size !== 0
+  ));
+  if (stops.length === 0 || legs.length === 0) {
+    return null;
+  }
+  const worst = Math.max(...legs.flatMap((leg) => stops.map(
+    (stop) => Math.abs(leg.averagePrice - stop.stopPrice!) / tickSize,
+  )));
+  return worst > 0 ? Math.ceil(worst) : null;
 }
 
 export class ExecutionCoordinator {
@@ -84,6 +114,65 @@ export class ExecutionCoordinator {
     return this.controlState().mode;
   }
 
+  /**
+   * Account-wide exposure that already exists when a new entry is admitted. Exposure whose
+   * stop geometry or tick economics we cannot observe is reported as unprotected instead of
+   * being priced at zero, so admission stays fail-closed rather than optimistic.
+   */
+  private existingProtectedExposure(
+    snapshot: AccountVenueSnapshot,
+    universe: InstrumentUniverse | null,
+    packet: DirectDecisionPacket,
+    candidateStopTicks: number,
+  ): { existing: ProtectedExposure[]; unprotected: boolean } {
+    const existing: ProtectedExposure[] = [];
+    let unprotected = false;
+    const openContractIds = new Set(
+      snapshot.positions
+        .filter((position) => position.type !== 0 && position.size !== 0)
+        .map((position) => position.contractId),
+    );
+    for (const contractId of openContractIds) {
+      const quantity = sumInstrumentNetContracts(snapshot.positions, contractId);
+      if (quantity < 1) {
+        continue;
+      }
+      const own = contractId === this.config.scope.contractId;
+      // Same-contract size is admissible only where ownership already proved protection;
+      // scale-in itself is gated earlier by validateScaleIn.
+      if (own && packet.protection.status !== "proven") {
+        unprotected = true;
+        continue;
+      }
+      const economics = own
+        ? { tick_size: snapshot.contract.tickSize, tick_value: snapshot.contract.tickValue }
+        : universe?.contracts.find((candidate) => candidate.contract_id === contractId);
+      const observedTicks = economics
+        ? observedStopDistanceTicks(snapshot, contractId, economics.tick_size)
+        : null;
+      const stopTicks = own
+        ? Math.max(candidateStopTicks, observedTicks ?? 0)
+        : observedTicks;
+      if (!economics || stopTicks === null) {
+        unprotected = true;
+        continue;
+      }
+      existing.push({
+        contract_id: contractId,
+        quantity,
+        stop_distance_ticks: stopTicks,
+        tick_value: economics.tick_value,
+        fees_usd: this.config.risk.estimatedRoundTurnFeesUsd,
+        slippage_ticks: this.config.risk.slippageReserveTicks,
+      });
+    }
+    // A working order on a contract that carries no open position is exposure we cannot size.
+    const unsizedWorkingOrder = snapshot.openOrders.some(
+      (order) => !openContractIds.has(order.contractId),
+    );
+    return { existing, unprotected: unprotected || unsizedWorkingOrder };
+  }
+
   public handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
     const result = this.executionQueue.then(() => this.handleWireIntentSerial(input));
     this.executionQueue = result.then(
@@ -91,6 +180,11 @@ export class ExecutionCoordinator {
       () => undefined,
     );
     return result;
+  }
+
+  /** Waits for work already queued to settle; new work queued after this call is not awaited. */
+  public async drainExecutionQueue(): Promise<void> {
+    await this.executionQueue;
   }
 
   public receiptForIntent(intentId: string): ExecutionReceipt | null {
@@ -275,18 +369,15 @@ export class ExecutionCoordinator {
           });
         }
       }
-      // Venue snapshots do not carry stop geometry, so foreign or unproven
-      // positions stay fail-closed. Same-contract scale-in is already gated by
-      // validateScaleIn; consult ownership on the issued packet and admit only
-      // when that layer has already proven protection.
-      const unprotectedExistingExposure = foreignExposure
-        || (
-          currentSnapshot.positions.length > 0
-          && issuedPacket.protection.status !== "proven"
-        );
+      const existingExposure = this.existingProtectedExposure(
+        currentSnapshot,
+        resolvedUniverse,
+        issuedPacket,
+        validated.stopTicks,
+      );
       const portfolio = evaluatePortfolioAdmission({
         hard_loss_buffer_usd: validated.riskBudget.currentBuffer,
-        existing: [],
+        existing: existingExposure.existing,
         pending: [],
         candidate: {
           contract_id: validated.contract.id,
@@ -297,7 +388,8 @@ export class ExecutionCoordinator {
           slippage_ticks: this.config.risk.slippageReserveTicks,
         },
         simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
-        unprotected_existing_exposure: unprotectedExistingExposure,
+        foreign_exposure_present: foreignExposure,
+        unprotected_existing_exposure: existingExposure.unprotected,
       });
       if (!portfolio.allowed) {
         return this.record({
@@ -1192,6 +1284,126 @@ export class ExecutionCoordinator {
       }
     }
     return changed;
+  }
+
+  /**
+   * Pull owned stops to breakeven once the daily capture objective latched (TS-CAP-02).
+   *
+   * Tighten-only and best effort: amendment safety rejects any widening, nothing is flattened
+   * for the objective, and a stop already at or past entry is left untouched so repeated calls
+   * — including one per restart — converge on the same venue state.
+   */
+  public tightenOwnedStopsAfterCaptureLock(): Promise<number> {
+    const result = this.executionQueue.then(() => this.tightenOwnedStopsAfterCaptureLockSerial());
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async tightenOwnedStopsAfterCaptureLockSerial(): Promise<number> {
+    const snapshot = this.snapshot();
+    if (this.currentMode() !== "armed" || snapshot.instrumentOpenContracts === 0) {
+      return 0;
+    }
+    const tickSize = snapshot.contract.tickSize;
+    const position = snapshot.positions.find(
+      (candidate) => candidate.accountId === this.config.scope.accountId
+        && candidate.contractId === this.config.scope.contractId
+        && candidate.type !== 0
+        && Math.abs(candidate.size) > 0,
+    );
+    const scaleInAction = position ? scaleInActionForPosition(position) : null;
+    if (!position || !scaleInAction || !(tickSize > 0)) {
+      return 0;
+    }
+    const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
+    const breakeven = Math.round(position.averagePrice / tickSize) * tickSize;
+
+    let tightened = 0;
+    for (const tranche of this.attributableTranches()) {
+      const protection = bindProtection(
+        tranche.intent_id,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+        tranche.entry_order_id,
+      );
+      const stop = protection.stop;
+      if (protection.status !== "proven" || stop.providerOrderId === null || stop.price === breakeven) {
+        continue;
+      }
+      const stopQty = Math.abs(stop.observedOrder?.size ?? 0);
+      const trancheQty = Math.abs(tranche.remaining_qty);
+      if (trancheQty > 0 && stopQty < trancheQty) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "capture_lock_stop_coverage_incomplete",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            provider_order_id: stop.providerOrderId,
+            stop_qty: stopQty,
+            tranche_qty: trancheQty,
+          },
+        });
+        continue;
+      }
+      const safety = validateProtectiveAmendment({
+        side,
+        leg: "stop",
+        currentPrice: stop.price,
+        newPrice: breakeven,
+        averageEntry: position.averagePrice,
+        bestBid: snapshot.quote?.bestBid ?? null,
+        bestAsk: snapshot.quote?.bestAsk ?? null,
+      });
+      if (!safety.ok) {
+        continue;
+      }
+      // ponytail: no outbox row — this amendment carries no intent_id, so the JSONL event is
+      // its only evidence. Upgrade path is a synthetic operator intent if replay needs it.
+      try {
+        await this.api.modifyOrder({
+          accountId: this.config.scope.accountId,
+          orderId: stop.providerOrderId,
+          stopPrice: breakeven,
+        });
+        tightened += 1;
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "capture_lock_stop_tightened",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            provider_order_id: stop.providerOrderId,
+            previous_stop_price: stop.price,
+            new_stop_price: breakeven,
+          },
+        });
+      } catch (error) {
+        await this.ledger.append({
+          schema_version: "glitch.direct.event.v1",
+          event_id: randomUUID(),
+          recorded_utc: new Date().toISOString(),
+          event: "capture_lock_stop_tighten_failed",
+          payload: {
+            tranche_intent_id: tranche.intent_id,
+            provider_order_id: stop.providerOrderId,
+            new_stop_price: breakeven,
+            detail: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+    if (tightened > 0) {
+      this.invalidateIssuedPackets();
+    }
+    return tightened;
   }
 
   public protectedReductionHealth(snapshot: AccountVenueSnapshot = this.snapshot()): ProtectedReductionHealth {

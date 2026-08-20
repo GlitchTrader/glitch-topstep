@@ -29,6 +29,8 @@ export class DecisionPacketService {
     private readonly tradeOutcomesLoaded: () => boolean = () => false,
     private readonly decisionScope: () => { generation: number; scopeHash: string } | undefined = () => undefined,
     private readonly effectiveTradingMode: () => "disabled" | "shadow" | "armed" = () => this.config.tradingMode,
+    /** Fires once per trading day, right after the capture lock becomes durable. */
+    private readonly onDailyCaptureLatched: () => void = () => {},
   ) {}
 
   public current(): DirectDecisionPacket {
@@ -56,7 +58,11 @@ export class DecisionPacketService {
       && dailyEconomics.daily_capture.new_exposure_lock_configured
       && dailyEconomics.trading_day_id
     ) {
+      const alreadyLatched = this.store.isDailyCaptureLocked(dailyEconomics.trading_day_id);
       this.store.latchDailyCapture(dailyEconomics.trading_day_id, now.toISOString());
+      if (!alreadyLatched) {
+        this.onDailyCaptureLatched();
+      }
     }
     const dailyCaptureLocked = this.store.isDailyCaptureLocked(
       dailyEconomics?.trading_day_id ?? null,

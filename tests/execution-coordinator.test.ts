@@ -7,7 +7,7 @@ import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { ExecutionCoordinator } from "../src/execution/coordinator.js";
 import { buildDecisionPacket } from "../src/hermes/packet-builder.js";
-import type { ProjectXApiClient, PlaceOrderRequest } from "../src/projectx/client.js";
+import type { ProjectXApiClient, ModifyOrderRequest, PlaceOrderRequest } from "../src/projectx/client.js";
 import type { TrancheView } from "../src/ownership/tranches.js";
 import { JsonlEventStore } from "../src/storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
@@ -623,6 +623,306 @@ describe("execution coordinator serialization", () => {
       assert.equal(receipt.code, "intent_schema_invalid");
       assert.equal(receipt.field, "prompt_version");
       assert.equal(receipt.error, "prompt_version_mismatch");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("daily capture lock (TS-CAP-02)", () => {
+  const trancheIntentId = "00000000-0000-4000-8000-00000000b001";
+
+  /** One owned short lot at 20_000 with a proven bracket resting 10 points away. */
+  function ownedShortSnapshot(appConfig: AppConfig, now: Date) {
+    const current = snapshot();
+    current.capturedAt = now.toISOString();
+    current.quote = { ...current.quote!, timestamp: now.toISOString() };
+    current.instrumentOpenContracts = 1;
+    current.totalOpenContracts = 1;
+    current.positions = [{
+      id: 1,
+      accountId: appConfig.scope.accountId,
+      contractId: appConfig.scope.contractId,
+      creationTimestamp: now.toISOString(),
+      type: 2,
+      size: 1,
+      averagePrice: 20_000,
+    }];
+    current.openOrders = [{
+      id: 9201,
+      accountId: appConfig.scope.accountId,
+      contractId: appConfig.scope.contractId,
+      creationTimestamp: now.toISOString(),
+      updateTimestamp: now.toISOString(),
+      status: 1,
+      type: 4,
+      side: 0,
+      size: 1,
+      limitPrice: null,
+      stopPrice: 20_010,
+      customTag: `glt-${trancheIntentId}-SL`,
+    }, {
+      id: 9202,
+      accountId: appConfig.scope.accountId,
+      contractId: appConfig.scope.contractId,
+      creationTimestamp: now.toISOString(),
+      updateTimestamp: now.toISOString(),
+      status: 1,
+      type: 1,
+      side: 0,
+      size: 1,
+      limitPrice: 19_980,
+      stopPrice: null,
+      customTag: `glt-${trancheIntentId}-TP`,
+    }];
+    return current;
+  }
+
+  function ownedTranche(now: Date): TrancheView {
+    return {
+      intent_id: trancheIntentId,
+      entry_order_id: 9001,
+      filled_qty: 1,
+      remaining_qty: 1,
+      created_utc: now.toISOString(),
+      protection: {
+        status: "proven",
+        reason: "provider_child_orders_bound_by_custom_tag",
+        stop: { provider_order_id: 9201, custom_tag: `glt-${trancheIntentId}-SL`, price: 20_010 },
+        target: { provider_order_id: 9202, custom_tag: `glt-${trancheIntentId}-TP`, price: 19_980 },
+      },
+    };
+  }
+
+  it("keeps the latch across a store reopen and scoped to its trading day", () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-capture-latch-"));
+    const path = join(directory, "execution.sqlite");
+    let store = new SqliteExecutionStore(path);
+    try {
+      store.latchDailyCapture("2026-08-20", "2026-08-20T18:00:00.000Z");
+      assert.equal(store.isDailyCaptureLocked("2026-08-20"), true);
+      store.close();
+
+      store = new SqliteExecutionStore(path);
+      assert.equal(store.isDailyCaptureLocked("2026-08-20"), true);
+      assert.equal(store.isDailyCaptureLocked("2026-08-21"), false);
+      // Re-latching the same day stays a no-op rather than raising on the primary key.
+      store.latchDailyCapture("2026-08-20", "2026-08-20T19:00:00.000Z");
+      assert.equal(store.isDailyCaptureLocked("2026-08-20"), true);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks new exposure while the latch is held", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-capture-enter-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let placeOrderCalls = 0;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => {
+            placeOrderCalls += 1;
+            return 9001;
+          },
+          closePosition: async () => undefined,
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [],
+        () => ({ paused: false, mode: "armed" }),
+        () => true,
+      );
+      const receipt = await coordinator.handleWireIntent(intent(
+        "00000000-0000-4000-8000-00000000b101",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+        packet,
+      ));
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "daily_capture_new_exposure_locked");
+      assert.equal(placeOrderCalls, 0);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a widening stop amendment on latched owned exposure", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-capture-widen-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const now = new Date();
+      const current = ownedShortSnapshot(appConfig, now);
+      const tranche = ownedTranche(now);
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+        [tranche],
+        appConfig.session,
+        null,
+        null,
+        undefined,
+        true,
+      );
+      assert.equal(packet.execution.daily_capture_locked, true);
+      assert.equal(packet.execution.supported_actions.includes("ENTER_SHORT"), false);
+      assert.equal(packet.execution.supported_actions.includes("MOVE_STOP"), true);
+      assert.equal(packet.execution.supported_actions.includes("EXIT"), true);
+      store.recordIssuedPacket(packet);
+      let modifyCalls = 0;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => 9003,
+          closePosition: async () => undefined,
+          modifyOrder: async () => {
+            modifyCalls += 1;
+          },
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [tranche],
+        () => ({ paused: false, mode: "armed" }),
+        () => true,
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v3",
+        intent_id: "00000000-0000-4000-8000-00000000b201",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "MOVE_STOP",
+        confidence: 0.6,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v9",
+        reason: "Widen the stop after capture.",
+        decision_audit: {
+          bull_case: "Bull case.",
+          bear_case: "Bear case.",
+          flat_case: "Flat case.",
+          aggressive_case: "Aggressive case.",
+          conservative_case: "Conservative case.",
+          decisive_evidence: "Evidence.",
+          disconfirming_evidence: "Counter evidence.",
+          change_condition: "Change condition.",
+          final_choice: "MOVE_STOP",
+        },
+        new_stop_price: 20_020,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "stop_would_widen");
+      assert.equal(modifyCalls, 0);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("tightens owned stops to breakeven after the latch without forcing an exit", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-capture-tighten-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const now = new Date();
+      const current = ownedShortSnapshot(appConfig, now);
+      const tranche = ownedTranche(now);
+      const modified: ModifyOrderRequest[] = [];
+      let closeCalls = 0;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => 9003,
+          closePosition: async () => {
+            closeCalls += 1;
+          },
+          modifyOrder: async (request: ModifyOrderRequest) => {
+            modified.push(request);
+          },
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        () => null,
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [tranche],
+        () => ({ paused: false, mode: "armed" }),
+        () => true,
+      );
+
+      assert.equal(await coordinator.tightenOwnedStopsAfterCaptureLock(), 1);
+      assert.deepEqual(modified, [{ accountId: 101, orderId: 9201, stopPrice: 20_000 }]);
+
+      // Venue now reflects the tightened stop: repeating the sweep converges instead of re-amending.
+      current.openOrders[0]!.stopPrice = 20_000;
+      assert.equal(await coordinator.tightenOwnedStopsAfterCaptureLock(), 0);
+
+      // A stop already past breakeven is left alone rather than widened back to entry.
+      current.openOrders[0]!.stopPrice = 19_990;
+      assert.equal(await coordinator.tightenOwnedStopsAfterCaptureLock(), 0);
+
+      current.positions = [];
+      current.openOrders = [];
+      current.instrumentOpenContracts = 0;
+      current.totalOpenContracts = 0;
+      assert.equal(await coordinator.tightenOwnedStopsAfterCaptureLock(), 0);
+
+      assert.equal(modified.length, 1);
+      assert.equal(closeCalls, 0);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

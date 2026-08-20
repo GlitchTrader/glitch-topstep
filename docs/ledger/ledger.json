@@ -1,13 +1,21 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-19",
+  "updated": "2026-08-20",
   "release_target": "beta",
   "reconciliation": {
-    "date": "2026-08-19",
-    "merged_prs": [128, 129, 131, 132, 133, 134, 135],
-    "implementation_note": "Roadmap 1-27 implementation and dependency workflow updates are merged. Open roadmap issues remain open when they still require live ProjectX acceptance, operational evidence, or future enablement; simultaneous multi-instrument exposure remains disabled by default.",
-    "stream_validation": "262 Gateway tests passed, including SignalR supervisor, reconnect, liveness, stream payload, and ProjectX fixture proofs."
+    "date": "2026-08-20",
+    "merged_prs": [
+      128,
+      129,
+      131,
+      132,
+      133,
+      134,
+      135
+    ],
+    "implementation_note": "P0 close-out: PROD-02/03, CAP-02, CTRL-01 done with tests. MULTI-03 admission wired but not closed. PROD-08 enforce_admins+break-glass partial. P1 items remain open pending Hermes shared fixtures / BIG_BUILD work. TS-MULTI-04 stays blocked.",
+    "stream_validation": "298 gateway tests passed including outcome-feed soak, lifecycle drain, CAP-02 latch/tighten, CTRL-01 stress."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -45,7 +53,11 @@
     "TS-BRACKET-01",
     "TS-R3-03",
     "TS-R4-07",
-    "TS-AUDIT-04"
+    "TS-AUDIT-04",
+    "TS-PROD-02",
+    "TS-PROD-03",
+    "TS-CAP-02",
+    "TS-CTRL-01"
   ],
   "items": [
     {
@@ -597,7 +609,7 @@
     {
       "id": "TS-PROD-02",
       "title": "Publish a single-writer revisioned outcome feed with cursor replay",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "learning_architecture",
       "issue": 110,
@@ -612,8 +624,8 @@
         "Shared contract fixtures pass against glitch-topstep-hermes-profile:GTHP-PROD-01."
       ],
       "stop_line": "Do not deduplicate corrections forever by intent_id and do not share a mutable JSONL file between processes.",
-      "implementation_note": "SQLite revision feed is present and now exposes integrity, current-count, revision-count, and high-water status in health; restart replay is covered by tests. Keep open until the paired Profile consumer contract and >10000-record live/replay evidence are recorded.",
-      "last_verified_utc": "2026-08-19T18:00:00Z",
+      "implementation_note": "Gateway sole-writer SQLite feed v2 + 10001-record soak replay (tests/outcome-feed-soak.test.ts). Hermes consumer pairing remains TS-PROD-07/GTHP-PROD-01.",
+      "last_verified_utc": "2026-08-20T16:43:09Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/trade-outcome-store.ts",
@@ -626,7 +638,7 @@
     {
       "id": "TS-PROD-03",
       "title": "Make service startup rollback and shutdown drain transactional",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "runtime_architecture",
       "issue": 111,
@@ -644,7 +656,9 @@
         "src/service.ts",
         "src/index.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/111"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T16:43:09Z",
+      "implementation_note": "LifecycleSupervisor reverse-order disposables, failed_startup/failed_shutdown, drainExecutionQueue before store close; tests/lifecycle-supervisor.test.ts."
     },
     {
       "id": "TS-PROD-04",
@@ -778,7 +792,9 @@
         ".github/workflows/ci.yml",
         "glitch-topstep-hermes-profile:GTHP-PROD-03",
         "https://github.com/GlitchTrader/glitch-topstep/issues/116"
-      ]
+      ],
+      "implementation_note": "main enforce_admins=true; break-glass runbook in docs/OPERATIONS.md (4h audited). Keep open: paired Hermes repo gates, armed promotion human evidence, and release attestation ops proof.",
+      "last_verified_utc": "2026-08-20T16:43:09Z"
     },
     {
       "id": "TS-CAP-01",
@@ -810,7 +826,7 @@
     {
       "id": "TS-CAP-02",
       "title": "Protect daily capture with tighten-only owned stops and a realized-PnL entry lock",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "execution_architecture",
       "issue": 119,
@@ -833,7 +849,9 @@
         "src/risk/risk-engine.ts",
         "src/service.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/119"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T16:43:09Z",
+      "implementation_note": "Durable daily_capture latch, ENTER blocked, tighten-only breakeven on latch with coverage gate, widen rejected; reductions/EXIT remain available."
     },
     {
       "id": "TS-MKT-01",
@@ -891,7 +909,7 @@
     {
       "id": "TS-CTRL-01",
       "title": "Make pause, resume, mode, and flatten controls durable and content-bound",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "control_plane",
       "issue": 122,
@@ -911,7 +929,9 @@
         "src/server/local-gateway.ts",
         "src/service.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/122"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T16:43:09Z",
+      "implementation_note": "DurableControlStore identity/content-bound + stress/restart/flatten lifecycle tests; health controls status counts."
     },
     {
       "id": "TS-EXEC-01",
@@ -1008,7 +1028,9 @@
         "https://gateway.docs.projectx.com/docs/api-reference/positions/search-open-positions/",
         "https://gateway.docs.projectx.com/docs/realtime/",
         "https://github.com/GlitchTrader/glitch-topstep/issues/125"
-      ]
+      ],
+      "implementation_note": "Portfolio admission now builds existing ProtectedExposure from venue snapshot (foreign fail-closed). Keep open: depends on MULTI-02/PROD-07/ENTRY-01 and live multi-contract armed proof.",
+      "last_verified_utc": "2026-08-20T16:43:09Z"
     }
   ],
   "roadmap_only": [
@@ -1243,7 +1265,35 @@
     "operator_symbol": "MCL",
     "provider_family": "MCLE",
     "code_status": "implemented_on_paired_clean_branches",
-    "implemented_orders": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
+    "implemented_orders": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27
+    ],
     "safe_defaults": {
       "partial_exit": "armed_via_protected_reduction_saga_with_fail_closed_rollback",
       "simultaneous_multi_instrument": "disabled_unless_explicitly_enabled",
@@ -1308,12 +1358,30 @@
     "live_validation": {
       "gateway_status": "ok",
       "state_complete": true,
-      "streams": ["user:connected", "market:connected"],
+      "streams": [
+        "user:connected",
+        "market:connected"
+      ],
       "reconciliation": "succeeded",
       "candidates": [
-        {"instrument": "MNQ", "contract_id": "CON.F.US.MNQ.U26", "execution_mode": "selected", "observation_ready": true},
-        {"instrument": "MES", "contract_id": "CON.F.US.MES.U26", "execution_mode": "observation_only", "observation_ready": true},
-        {"instrument": "MCL", "contract_id": "CON.F.US.MCLE.V26", "execution_mode": "observation_only", "observation_ready": true}
+        {
+          "instrument": "MNQ",
+          "contract_id": "CON.F.US.MNQ.U26",
+          "execution_mode": "selected",
+          "observation_ready": true
+        },
+        {
+          "instrument": "MES",
+          "contract_id": "CON.F.US.MES.U26",
+          "execution_mode": "observation_only",
+          "observation_ready": true
+        },
+        {
+          "instrument": "MCL",
+          "contract_id": "CON.F.US.MCLE.V26",
+          "execution_mode": "observation_only",
+          "observation_ready": true
+        }
       ],
       "simultaneous_exposure_enabled": false,
       "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd"
@@ -1330,7 +1398,11 @@
       "single_contract_default": true,
       "foreign_exposure_requires_simultaneous_opt_in": true,
       "exact_contract_allowlist_required": true,
-      "simulated_contract_matrix": ["MNQ:CON.F.US.MNQ.U26", "MES:CON.F.US.MES.U26", "MCL:CON.F.US.MCLE.V26"],
+      "simulated_contract_matrix": [
+        "MNQ:CON.F.US.MNQ.U26",
+        "MES:CON.F.US.MES.U26",
+        "MCL:CON.F.US.MCLE.V26"
+      ],
       "gateway_check": "270 passed, 0 failed",
       "paired_profile_check": "177 passed, 1 expected skip",
       "stop_line": "No strategy ranking, hot contract switching, or simultaneous exposure is enabled by this foundation."

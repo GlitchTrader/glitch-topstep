@@ -29,7 +29,7 @@ Do this **every** time you reset epoch state or switch to a new Topstep/PRAC acc
 
 1. **Enable Auto OCO Brackets** on the account in TopstepX (disable Position Brackets if both appear).
 2. Confirm account ID / name / contract / loss-floor fields in gateway `.env`.
-3. Confirm `GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH` points at Hermes `state/outcomes.jsonl`.
+3. Leave `GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH` unset (see [Outcome feed ownership](#outcome-feed-ownership)).
 4. Restart gateway; prove `/health` is `armed` or `shadow` as intended and `state_complete=true`.
 5. Run one protected round-trip (ENTER → fill → flat) before trusting learning/outcomes.
 
@@ -48,6 +48,12 @@ Before any armed test, prove:
 - valid entries are journaled as shadowed
 - stop-aware risk matches an independent spreadsheet
 - MLL floor matches the Topstep dashboard
+
+## Outcome feed ownership
+
+The gateway SQLite revision feed (`trade-outcomes.sqlite`) is the **sole canonical writer** of trade outcomes. Hermes must consume `GET /outcomes/feed?after_sequence=<cursor>&limit=<n>` (`glitch.topstep.outcome_feed.v2`) and keep its own cursor; it must not read or write the gateway JSONL.
+
+`GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH` is **deprecated and emergency-only**. It mirrors outcomes into the Hermes profile `state/outcomes.jsonl`, which creates a second mutable writer for the same records. Set it only to bridge a Hermes outage that blocks the HTTP feed, and unset it as soon as the feed is reachable again.
 
 ## Armed partial EXIT (ProtectedReductionSaga)
 
@@ -89,6 +95,22 @@ Keep the server bound to `127.0.0.1`. Do not expose port 8790 to the LAN or inte
 Topstep flatten (`GLITCH_SESSION_MUST_FLAT_LOCAL_TIME`, default 15:10 CT) closes `session.entry_window_open` until the trading-day reset (17:00 CT). Quotes may still flow; ProjectX order mutations can fail with "instrument is not in an active trading status". Hermes skips flat ENTER when the window is closed.
 
 Inspect sanitized REST reconciliation envelopes with `GET /evidence?source=projectx_rest` (Bearer `GLITCH_LOCAL_TOKEN`).
+
+## Break-glass (main branch protection)
+
+`main` enforces admin rulesets (`enforce_admins=true`), required checks (`test`, `dependency-review`, `codeql`), CODEOWNERS review, conversation resolution, and no force-push/deletion.
+
+Break-glass is only for restoring a broken production path when CI or review would strand the trader. It is not a shortcut for ordinary merges.
+
+1. Record the reason, start UTC, and expected end UTC in the PR / incident note (max **4 hours**).
+2. Disable admin enforcement temporarily:
+   `gh api -X DELETE repos/GlitchTrader/glitch-topstep/branches/main/protection/enforce_admins`
+3. Land the minimal fix via PR when possible; direct push only if the PR path is itself broken.
+4. Re-enable immediately:
+   `gh api -X POST repos/GlitchTrader/glitch-topstep/branches/main/protection/enforce_admins`
+5. Verify `enforce_admins.enabled` is `true` and open a follow-up issue if any required check was bypassed.
+
+Never leave `enforce_admins` disabled overnight. Profile repo break-glass follows the same time box and audit note.
 
 ## Secret handling
 

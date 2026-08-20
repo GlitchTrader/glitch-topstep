@@ -175,6 +175,19 @@ export class GlitchTopstepService {
   private async startSerial(): Promise<void> {
     this.lifecycle.transition("starting");
     await this.runtimeLock.acquire();
+    try {
+      await this.startResources();
+    } catch (error: unknown) {
+      // The lock is released by stop(); rollback only unwinds what this start acquired,
+      // so a half-built service never reports ready.
+      await this.lifecycle.rollbackAfterFailure(
+        error instanceof Error ? error.message : String(error),
+      );
+      throw error;
+    }
+  }
+
+  private async startResources(): Promise<void> {
     await this.api.login();
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;
@@ -296,6 +309,10 @@ export class GlitchTopstepService {
           instrument: ownershipConfig.instrument,
         },
       );
+      this.lifecycle.register("order_ownership", () => {
+        this.ownershipService?.close();
+        this.ownershipService = null;
+      });
     }
 
     const snapshot = () => this.state.buildSnapshot(
@@ -323,6 +340,9 @@ export class GlitchTopstepService {
         ? undefined
         : { generation: this.instrumentUniverse.generation, scopeHash: this.instrumentUniverse.scope_hash },
       () => this.runtimeTradingMode,
+      () => {
+        void this.coordinator?.tightenOwnedStopsAfterCaptureLock();
+      },
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -366,6 +386,10 @@ export class GlitchTopstepService {
       this.state,
     );
     await this.realtime.start();
+    this.lifecycle.register("realtime", async () => {
+      await this.realtime?.stop();
+      this.realtime = null;
+    });
     try {
       await this.reconcile();
     } catch (error: unknown) {
@@ -378,6 +402,9 @@ export class GlitchTopstepService {
       });
     }, this.config.reconcileIntervalMs);
     this.reconciliationTimer.unref();
+    this.lifecycle.register("reconciliation_timer", () => {
+      this.clearTimer("reconciliationTimer");
+    });
 
     this.historySyncTimer = setInterval(() => {
       void this.historySync.sync().catch((error: unknown) => {
@@ -385,6 +412,9 @@ export class GlitchTopstepService {
       });
     }, this.historySyncIntervalMs);
     this.historySyncTimer.unref();
+    this.lifecycle.register("history_sync_timer", () => {
+      this.clearTimer("historySyncTimer");
+    });
 
     // Refreshing observation data does not retract a packet: it feeds the snapshot hash, so a
     // stale packet already fails to resolve. Invalidating here only killed packets a client
@@ -393,11 +423,17 @@ export class GlitchTopstepService {
       void this.refreshMarketObservations();
     }, MARKET_OBSERVATION_REFRESH_MS);
     this.marketObservationTimer.unref();
+    this.lifecycle.register("market_observation_timer", () => {
+      this.clearTimer("marketObservationTimer");
+    });
 
     this.orderFlowTimer = setInterval(() => {
       void this.orderFlow?.refresh();
     }, ORDER_FLOW_REFRESH_MS);
     this.orderFlowTimer.unref();
+    this.lifecycle.register("order_flow_timer", () => {
+      this.clearTimer("orderFlowTimer");
+    });
 
     const coordinator = new ExecutionCoordinator(
       this.config,
@@ -509,6 +545,10 @@ export class GlitchTopstepService {
     this.restoreEffectiveControlState();
     await this.resumePendingControls();
     await this.gateway.start();
+    this.lifecycle.register("local_gateway", async () => {
+      await this.gateway?.stop();
+      this.gateway = null;
+    });
 
     this.tokenRefreshTimer = setInterval(() => {
       void this.api.validateSession().catch((error: unknown) => {
@@ -516,6 +556,9 @@ export class GlitchTopstepService {
       });
     }, 12 * 60 * 60 * 1000);
     this.tokenRefreshTimer.unref();
+    this.lifecycle.register("token_refresh_timer", () => {
+      this.clearTimer("tokenRefreshTimer");
+    });
 
     await this.ledger.append({
       schema_version: "glitch.direct.event.v1",
@@ -552,42 +595,36 @@ export class GlitchTopstepService {
   }
 
   private async stopSerial(): Promise<void> {
-    this.lifecycle.transition("draining");
-    if (this.orderFlowTimer) {
-      clearInterval(this.orderFlowTimer);
-      this.orderFlowTimer = null;
+    this.lifecycle.transition("draining", "stop_requested");
+    try {
+      // Intents already queued must settle before the stores they write to close.
+      await this.coordinator?.drainExecutionQueue();
+      await this.lifecycle.drain("disposing_runtime_resources");
+      await Promise.all([
+        this.historySync.waitForIdle(),
+        this.marketObservation.waitForIdle(),
+        this.scannerMarketData?.waitForIdle() ?? Promise.resolve(),
+        this.orderFlow?.waitForIdle() ?? Promise.resolve(),
+        this.ledger.waitForIdle(),
+      ]);
+      await this.tradeOutcomePublication;
+      await this.ledger.waitForIdle();
+      await this.closeStores();
+      this.lifecycle.transition("stopped");
+    } catch (error: unknown) {
+      this.lifecycle.transition(
+        "failed_shutdown",
+        error instanceof Error ? error.message : String(error),
+      );
+      // An aborted drain must still not leak the runtime lock or the sqlite handles.
+      await this.closeStores().catch((cleanupError: unknown) => {
+        console.error("shutdown cleanup failed", cleanupError);
+      });
+      throw error;
     }
-    if (this.marketObservationTimer) {
-      clearInterval(this.marketObservationTimer);
-      this.marketObservationTimer = null;
-    }
-    if (this.historySyncTimer) {
-      clearInterval(this.historySyncTimer);
-      this.historySyncTimer = null;
-    }
-    if (this.reconciliationTimer) {
-      clearInterval(this.reconciliationTimer);
-      this.reconciliationTimer = null;
-    }
-    if (this.tokenRefreshTimer) {
-      clearInterval(this.tokenRefreshTimer);
-      this.tokenRefreshTimer = null;
-    }
-    await Promise.allSettled([
-      this.gateway?.stop() ?? Promise.resolve(),
-      this.realtime?.stop() ?? Promise.resolve(),
-    ]);
-    this.ownershipService?.close();
-    this.ownershipService = null;
-    await Promise.all([
-      this.historySync.waitForIdle(),
-      this.marketObservation.waitForIdle(),
-      this.scannerMarketData?.waitForIdle() ?? Promise.resolve(),
-      this.orderFlow?.waitForIdle() ?? Promise.resolve(),
-      this.ledger.waitForIdle(),
-    ]);
-    await this.tradeOutcomePublication;
-    await this.ledger.waitForIdle();
+  }
+
+  private async closeStores(): Promise<void> {
     this.orderFlow?.close();
     this.orderFlow = null;
     this.gateway = null;
@@ -601,7 +638,20 @@ export class GlitchTopstepService {
       this.storesClosed = true;
     }
     await this.runtimeLock.release();
-    this.lifecycle.transition("stopped");
+  }
+
+  private clearTimer(
+    key: "tokenRefreshTimer"
+      | "reconciliationTimer"
+      | "historySyncTimer"
+      | "marketObservationTimer"
+      | "orderFlowTimer",
+  ): void {
+    const timer = this[key];
+    if (timer) {
+      clearInterval(timer);
+      this[key] = null;
+    }
   }
 
   private async resumePendingControls(): Promise<void> {

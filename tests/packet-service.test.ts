@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
 import { DecisionPacketService } from "../src/hermes/packet-service.js";
+import type { TradeOutcomeV1 } from "../src/learning/trade-outcome.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { snapshot, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 
@@ -179,6 +180,58 @@ describe("decision packet issuance", () => {
     assert.equal(packet.execution.entry_submission_pending, true);
     assert.equal(packet.execution.recovery_blocked, true);
     assert.equal(packet.execution.new_exposure_technically_supported, false);
+    store.close();
+  });
+
+  it("latches the daily capture lock once and keeps it across a restart", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const outcomes: TradeOutcomeV1[] = [{
+      schema_version: "glitch.topstep.trade_outcome.v1",
+      outcome_id: "outcome:capture",
+      intent_id: "intent:capture",
+      account: "TEST_ACCOUNT",
+      instrument: "MNQ",
+      entry_utc: "2026-07-21T11:00:00Z",
+      exit_utc: "2026-07-21T12:00:00Z",
+      realized_pnl_usd: 400,
+      fees_usd: 0,
+      learning_eligible: true,
+    }];
+    const service = (onLatched: () => void) => new DecisionPacketService(
+      config(),
+      snapshot,
+      store,
+      healthyRecovery,
+      () => CURRENT_TIME_MS,
+      undefined,
+      undefined,
+      undefined,
+      () => outcomes,
+      () => true,
+      undefined,
+      undefined,
+      onLatched,
+    );
+
+    let latched = 0;
+    const first = service(() => {
+      latched += 1;
+    });
+    const packet = first.current();
+    assert.equal(packet.daily_economics?.daily_capture.reached, true);
+    assert.equal(packet.execution.daily_capture_locked, true);
+    assert.equal(packet.execution.supported_actions.includes("ENTER_LONG"), false);
+    assert.equal(latched, 1);
+    first.current();
+    assert.equal(latched, 1);
+
+    // Restart: a fresh service over the same durable store sees the lock, and does not re-fire.
+    let relatched = 0;
+    const restarted = service(() => {
+      relatched += 1;
+    }).current();
+    assert.equal(restarted.execution.daily_capture_locked, true);
+    assert.equal(relatched, 0);
     store.close();
   });
 });

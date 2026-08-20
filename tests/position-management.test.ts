@@ -1643,9 +1643,90 @@ describe("position management coordinator", () => {
         reason: "Flatten after amendments.",
         decision_audit: audit("EXIT"),
       });
-      assert.equal(receipt.status, "closed");
-      assert.equal(receipt.code, "close_contract_submitted");
+    assert.equal(receipt.status, "closed");
+    assert.equal(receipt.code, "close_contract_submitted");
       assert.equal(store.mutationForIntent(exitIntentId)?.state, "submitted");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks a new entry while a foreign contract is open and simultaneous exposure is disabled", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-foreign-exposure-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      current.positions = [{
+        id: 7,
+        accountId: 101,
+        contractId: "CON.F.US.MES.U26",
+        creationTimestamp: "2026-07-21T12:00:08Z",
+        type: 1,
+        size: 1,
+        averagePrice: 5_000,
+      }];
+      current.totalOpenContracts = 1;
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      const api = {
+        placeOrder: async () => {
+          throw new Error("place_order_must_not_be_called");
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v3",
+        intent_id: "00000000-0000-4000-8000-00000000b010",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "ENTER_LONG",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v9",
+        reason: "Enter MNQ while MES exposure is open.",
+        decision_audit: audit("ENTER_LONG"),
+        quantity: 1,
+        order_type: "MARKET",
+        stop_loss: 19_990.25,
+        take_profit_1: 20_020.25,
+        packet_id: packet.packet_id,
+        contract_id: packet.contract.id,
+        scope_hash: packet.decision_scope.scope_hash,
+        scope_generation: packet.decision_scope.generation,
+        expires_utc: packet.expires_utc,
+        entry_price_min: packet.market.bid ?? packet.market.ask,
+        entry_price_max: packet.market.ask ?? packet.market.bid,
+      });
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "simultaneous_exposure_disabled");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
