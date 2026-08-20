@@ -149,4 +149,29 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
     assert.equal(byInstrument.get("MNQ")!.observation_quality.status, "ready");
     assert.equal(byInstrument.get("MCL")!.observation_quality.status, "ready");
   });
+
+  it("refreshSelected refreshes only the requested contract", async () => {
+    const universe = resolveInstrumentUniverse(["MNQ", "MES"], AVAILABLE, 1);
+    const time = clock();
+    const calls: string[] = [];
+    const dataPlane = new MultiInstrumentMarketDataPlane(
+      {
+        retrieveBars: async (request) => {
+          calls.push(request.contractId);
+          return bars(request.contractId, request.unitNumber);
+        },
+      },
+      universe,
+      60,
+      "CON.F.US.MNQ.U26",
+      false,
+      time.now,
+      time.sleep,
+    );
+
+    await dataPlane.refreshSelected("CON.F.US.MNQ.U26");
+
+    assert.ok(calls.length >= 4);
+    assert.ok(calls.every((contractId) => contractId === "CON.F.US.MNQ.U26"));
+  });
 });

@@ -42,7 +42,7 @@ export class LocalGatewayServer {
     private readonly options: LocalGatewayOptions,
     private readonly health: () => Record<string, unknown>,
     private readonly snapshot: () => AccountVenueSnapshot,
-    private readonly packet: () => DirectDecisionPacket,
+    private readonly packet: () => DirectDecisionPacket | Promise<DirectDecisionPacket>,
     private readonly evidence: (
       limit: number,
       query?: { source?: ProviderEvidenceSource; eventType?: string },
@@ -124,7 +124,7 @@ export class LocalGatewayServer {
         return;
       }
       if (request.method === "GET" && url.pathname === "/packet") {
-        this.json(response, 200, this.packet());
+        this.json(response, 200, await Promise.resolve(this.packet()));
         return;
       }
       if (request.method === "GET" && url.pathname === "/evidence") {

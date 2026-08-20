@@ -16,7 +16,7 @@
       156,
       157
     ],
-    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Housekeeping: ledger reconciliation synced 2026-08-20.",
+    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). TS-DATA-01 phase A in progress on feat/data-alignment-phase-a (issue #171): on-demand selected-contract bar refresh, market_alignment advisory block, no execution vetoes. Housekeeping: ledger reconciliation synced 2026-08-20.",
     "stream_validation": "351 gateway tests; Hermes 195 profile tests including frozen cognition, trigger lifecycle, learning defer."
   },
   "authority": {
@@ -1110,6 +1110,107 @@
       ],
       "implementation_note": "Portfolio admission fail-closed tests + account-wide lock; simultaneous_exposure_enabled default false. Proof: docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
       "last_verified_utc": "2026-08-20T22:40:00Z"
+    },
+    {
+      "id": "TS-DATA-01",
+      "title": "Data temporal alignment and evidence hygiene without participation vetoes",
+      "status": "in_progress",
+      "priority": "P1",
+      "owner_role": "market_data_architecture",
+      "issue": 171,
+      "depends_on": [
+        "TS-MKT-01",
+        "TS-MULTI-02",
+        "TS-AUDIT-03",
+        "TS-AUDIT-04",
+        "glitch-topstep-hermes-profile:GTHP-MKT-01"
+      ],
+      "acceptance": [
+        "Selected-contract bar refresh coalesces before packet build; 1m latest_bar_utc is not two or more minutes behind quote during RTH under normal rate limits.",
+        "Decision packet v2 exposes market_alignment with quote/bar/order-flow lags, features_reference, and advisory synchronized flag that never appears in data_quality.issues.",
+        "DEPTH_QUOTE_MAX_DIVERGENCE_TICKS is 4 and identical in gateway packet-builder and Hermes packet_model sanitize_depth_for_model.",
+        "Depth publishes raw_available and integrity_valid; unavailable depth remains optional_issues only and never blocks state_complete.",
+        "Session levels separate available from reliable; session_high/low null with session_levels_reliable true is impossible.",
+        "Hermes prompt states lag reduces timing confidence only; flat NOTHING solely for bar lag is forbidden; symmetric scanner ranking uses evidence common to all candidates.",
+        "Flat NOTHING rate and gateway ENTER rejection rate do not regress beyond agreed thresholds after Phase A–C (see spec success metrics)."
+      ],
+      "stop_line": "Do not add bar_lag, depth_integrity, or session_levels gaps to execution gates; do not force flat NOTHING or block packets when alignment is imperfect.",
+      "implementation_phases": {
+        "A": {
+          "title": "Reduce lag at source (gateway)",
+          "status": "in_progress",
+          "tasks": [
+            "A1: On-demand coalesced retrieveBars for selected contract before /packet",
+            "A2: market_alignment block on DirectDecisionPacket v2",
+            "A3: features_reference and timing_note on compact 1m observation (gateway + Hermes packet_model)"
+          ],
+          "repos": [
+            "glitch-topstep"
+          ],
+          "pr": "feat/data-alignment-phase-a"
+        },
+        "B": {
+          "title": "Evidence hygiene (gateway + Hermes sanitize)",
+          "status": "planned",
+          "tasks": [
+            "B1: DEPTH_QUOTE_MAX_DIVERGENCE_TICKS 8 to 4 shared constant",
+            "B2: depth raw_available and integrity_valid fields",
+            "B3: session_levels available vs reliable nested object plus backward-compatible top-level fields"
+          ],
+          "repos": [
+            "glitch-topstep",
+            "glitch-topstep-hermes-profile"
+          ],
+          "pr": "feat/data-evidence-hygiene-phase-b"
+        },
+        "C": {
+          "title": "Cognition contract (paired Hermes profile GTHP-DATA-01)",
+          "status": "planned",
+          "tasks": [
+            "C1: Lag-aware timing vs structure rules in CYCLE_OPERATOR_INSTRUCTION and topstep-observe-market skill",
+            "C2: Symmetric market_universe ranking rule (Option B)",
+            "C3: Four-block prompt layout (cognition, evidence, action, output)"
+          ],
+          "repos": [
+            "glitch-topstep-hermes-profile"
+          ],
+          "pr": "feat/data-alignment-cognition-phase-c"
+        },
+        "D": {
+          "title": "Conditional metrics-gated",
+          "status": "planned",
+          "tasks": [
+            "D1: Order flow per scanner candidate (gate: documented MNQ ranking bias from asymmetric flow)",
+            "D2: Native instrument_comparison JSON object (gate: INSTRUMENT_COMPARISON_V1 parse failures in production)"
+          ],
+          "repos": [
+            "glitch-topstep",
+            "glitch-topstep-hermes-profile"
+          ],
+          "gate": "Do not start until Phase A–C stable for five or more sessions"
+        }
+      },
+      "success_metrics": {
+        "flat_nothing_rate_regression_max_relative": 0.05,
+        "gateway_enter_rejection_must_not_increase": true,
+        "median_quote_vs_1m_bar_open_lag_improvement_min_relative": 0.3,
+        "lag_only_abstention_max_fraction": 0.02
+      },
+      "sources": [
+        "docs/specs/TS-DATA-01.md",
+        "docs/ledger/audits/2026-08-20-data-alignment-phases.md",
+        "src/hermes/packet-builder.ts",
+        "src/market/observation.ts",
+        "src/market/projectx-observation-service.ts",
+        "src/market/multi-instrument-data-plane.ts",
+        "src/service.ts",
+        "src/server/local-gateway.ts",
+        "tests/market-alignment.test.ts",
+        "glitch-topstep-hermes-profile:scripts/packet_model.py",
+        "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/171"
+      ],
+      "implementation_note": "Phase A: refreshSelected + market_alignment on feat/data-alignment-phase-a. Phases B–D planned; no execution vetoes."
     }
   ],
   "roadmap_only": [
@@ -1336,6 +1437,20 @@
         "issue": 126,
         "phase": "simultaneous_portfolio",
         "title": "Opt-in simultaneous multi-instrument exposure after proven portfolio risk"
+      },
+      {
+        "order": 28,
+        "id": "TS-DATA-01",
+        "issue": 171,
+        "phase": "data_alignment",
+        "title": "Temporal alignment and evidence hygiene without participation vetoes",
+        "paired_profile": "GTHP-DATA-01",
+        "sub_phases": [
+          "A: gateway freshness + market_alignment",
+          "B: depth threshold + session levels semantics",
+          "C: Hermes cognition rules",
+          "D: conditional order-flow-per-candidate and native instrument_comparison"
+        ]
       }
     ]
   },
@@ -1502,5 +1617,70 @@
       "The historical MCL outcome remains unknown because the active runtime scope is MNQ; the new attribution repair will be verified on the next MCL/MCLE flat session.",
       "OneDrive may lock dist, SQLite, and fixture files; runtime deployment must preserve the writable database attribute and use an output directory outside synchronized fixtures."
     ]
+  },
+  "data_alignment_2026_08_20": {
+    "status": "phase_a_in_progress",
+    "issue": 171,
+    "ledger_item": "TS-DATA-01",
+    "branch": "feat/data-alignment-phase-a",
+    "paired_profile": "GTHP-DATA-01",
+    "operator_constraint": "Reduce quote/bar/order-flow divergence without execution vetoes or mandatory flat NOTHING.",
+    "authority": "TS-AUDIT-03 quiet-tape and mixed-evidence doctrine; lag affects timing confidence only.",
+    "spec": "docs/specs/TS-DATA-01.md",
+    "implementation_plan": "docs/ledger/audits/2026-08-20-data-alignment-phases.md",
+    "phase_a_delivered": [
+      "MultiInstrumentMarketDataPlane.refreshSelected(contractId)",
+      "GET /packet awaits ensureSelectedMarketObservationFresh() before buildDecisionPacket",
+      "market_alignment advisory block on decision packet v2",
+      "tests/market-alignment.test.ts proves synchronized=false does not flip state_complete"
+    ],
+    "phases": {
+      "A": {
+        "scope": "gateway",
+        "status": "in_progress",
+        "deliverables": [
+          "on-demand bar refresh for selected contract",
+          "market_alignment packet block",
+          "features_reference via market_alignment.timing_reference"
+        ],
+        "pr": "feat/data-alignment-phase-a"
+      },
+      "B": {
+        "scope": "gateway + Hermes sanitize",
+        "status": "planned",
+        "deliverables": [
+          "depth divergence 4 ticks",
+          "depth integrity fields",
+          "session_levels available/reliable"
+        ],
+        "pr": "feat/data-evidence-hygiene-phase-b"
+      },
+      "C": {
+        "scope": "Hermes profile",
+        "status": "planned",
+        "deliverables": [
+          "lag cognition rules",
+          "symmetric scanner ranking",
+          "four-block prompt layout"
+        ],
+        "pr": "feat/data-alignment-cognition-phase-c"
+      },
+      "D": {
+        "scope": "conditional",
+        "status": "planned",
+        "gate": "five or more stable sessions after A–C; metric triggers documented in spec",
+        "deliverables": [
+          "optional order flow per scanner candidate",
+          "optional native instrument_comparison object"
+        ]
+      }
+    },
+    "success_metrics": {
+      "flat_nothing_rate_regression_max_relative": 0.05,
+      "gateway_enter_rejection_must_not_increase": true,
+      "median_quote_vs_1m_bar_open_lag_improvement_min_relative": 0.3,
+      "lag_only_abstention_max_fraction": 0.02
+    },
+    "stop_line": "No bar_lag or alignment flags in state_complete; no prompt rule forcing NOTHING on lag alone."
   }
 }
