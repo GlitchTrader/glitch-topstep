@@ -1,34 +1,22 @@
-import { assertTransition, type StateTransition } from "../domain/state-machines.js";
+import {
+  PROTECTED_REDUCTION_STATES,
+  PROTECTED_REDUCTION_TRANSITIONS,
+  transitionProtectedReduction,
+  type ProtectedReductionState,
+  type StateTransition,
+} from "../domain/state-machines.js";
+
+export {
+  PROTECTED_REDUCTION_STATES,
+  PROTECTED_REDUCTION_TRANSITIONS,
+  transitionProtectedReduction,
+  type ProtectedReductionState,
+};
 
 /**
  * Durable protected reduction states (TS-PROD-01 / #109).
  * Stop coverage must remain >= venue open qty except in explicit degraded_stop_only.
  */
-export const PROTECTED_REDUCTION_STATES = [
-  "protected_active",
-  "reduction_prepared",
-  "reduction_submitting",
-  "reduction_ambiguous",
-  "reduced_protected",
-  "degraded_stop_only",
-  "flat",
-  "failed",
-] as const;
-
-export type ProtectedReductionState = (typeof PROTECTED_REDUCTION_STATES)[number];
-
-export const PROTECTED_REDUCTION_TRANSITIONS: Readonly<
-  Record<ProtectedReductionState, readonly ProtectedReductionState[]>
-> = {
-  protected_active: ["reduction_prepared", "flat"],
-  reduction_prepared: ["reduction_submitting", "failed", "flat"],
-  reduction_submitting: ["reduction_ambiguous", "reduced_protected", "failed", "flat"],
-  reduction_ambiguous: ["reduced_protected", "degraded_stop_only", "failed", "flat"],
-  reduced_protected: ["degraded_stop_only", "reduction_prepared", "flat"],
-  degraded_stop_only: ["reduced_protected", "failed", "flat"],
-  flat: [],
-  failed: ["flat"],
-};
 
 export interface ProtectedReductionRecord {
   reduction_id: string;
@@ -56,20 +44,9 @@ export interface ProtectedReductionHealth {
   fail_closed_rollback: boolean;
 }
 
-export function transitionProtectedReduction(
-  from: ProtectedReductionState | null,
-  to: ProtectedReductionState,
-  entityId: string,
-  reason: string,
-  occurredUtc = new Date().toISOString(),
-): StateTransition<ProtectedReductionState> {
-  return assertTransition(
-    { entity_id: entityId, from, to, occurred_utc: occurredUtc, reason },
-    PROTECTED_REDUCTION_TRANSITIONS,
-  );
-}
-
 /** Rollback switch: restores armed fail-closed without redeploy. */
 export function partialExitFailClosedEnabled(): boolean {
   return process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1";
 }
+
+export type { StateTransition };

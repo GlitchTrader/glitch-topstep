@@ -7,7 +7,6 @@ import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
 import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
-import { reconcilePendingReceipts } from "./execution/receipt-reconciliation.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
 import { ProjectXOrderFlowService } from "./market/projectx-order-flow-service.js";
@@ -57,6 +56,7 @@ import {
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "./domain/operator.js";
 import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
+import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
@@ -923,153 +923,42 @@ export class GlitchTopstepService {
       return;
     }
     this.reconciliationInFlight = true;
-    this.state.markReconciliationStarted();
     try {
-      const beforeOpen = this.state.buildSnapshot(
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-      ).instrumentOpenContracts;
-      const openTranches = this.resolveClosedTranchesForFlat(beforeOpen);
-      const [accountsCol, positionsCol, ordersCol] = await Promise.all([
-        this.api.searchAccountsCollection(true),
-        this.api.searchOpenPositionsCollection(this.config.scope.accountId),
-        this.api.searchOpenOrdersCollection(this.config.scope.accountId),
-      ]);
-      const accounts = accountsCol.items;
-      const positions = positionsCol.items;
-      const orders = ordersCol.items;
-      const account = accounts.find((candidate) => candidate.id === this.config.scope.accountId);
-      if (!account || account.name !== this.config.scope.accountName) {
-        throw new Error("configured_account_disappeared_or_changed");
-      }
-
-      const receivedAt = new Date().toISOString();
-      this.recordRestSnapshot(
-        "accounts_snapshot",
-        receivedAt,
-        sortedById(accounts),
-        this.config.scope.accountId,
-        null,
-        accountsCol.envelope,
-      );
-      this.recordRestSnapshot(
-        "positions_snapshot",
-        receivedAt,
-        sortedById(positions),
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-        positionsCol.envelope,
-      );
-      this.recordRestSnapshot(
-        "open_orders_snapshot",
-        receivedAt,
-        sortedById(orders),
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-        ordersCol.envelope,
-      );
-
-      this.state.replaceAccounts(accounts, receivedAt);
-      this.state.replacePositions(positions, receivedAt);
-      this.state.replaceOrders(orders, receivedAt);
-      this.state.markReconciliationSucceeded(receivedAt);
-
-      const afterOpen = this.state.buildSnapshot(
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-      ).instrumentOpenContracts;
-      if (shouldPublishTradeOutcomesOnFlat({
-        beforeOpen,
-        afterOpen,
+      await runReconciliationCycle({
+        scope: {
+          accountId: this.config.scope.accountId,
+          accountName: this.config.scope.accountName,
+          contractId: this.config.scope.contractId,
+          instrument: this.config.scope.instrument,
+        },
+        api: this.api,
+        state: this.state,
+        executionStore: this.executionStore,
+        ledger: this.ledger,
+        coordinator: this.coordinator,
         lastReconciledOpenContracts: this.lastReconciledOpenContracts,
-        tranches: openTranches,
-      })) {
-        await this.publishTradeOutcomesOnFlat(openTranches, receivedAt, "reconcile");
-      }
-      this.lastReconciledOpenContracts = afterOpen;
-      if (afterOpen > 0) {
-        this.refreshCachedOpenTranches(afterOpen);
-        this.tradeExcursion.observe(afterOpen, this.state.buildSnapshot(
-          this.config.scope.accountId,
-          this.config.scope.contractId,
-        ).unrealizedPnl);
-      } else {
-        this.cachedOpenTranches = [];
-        await this.retryIncompleteTradeOutcomes(receivedAt);
-      }
-
-      const latchCleared = this.reconcileEntrySubmissionLatch(positions, orders, receivedAt);
-      const positionOpen = positions.some(
-        (position) => position.accountId === this.config.scope.accountId
-          && position.contractId === this.config.scope.contractId
-          && position.type !== 0
-          && Math.abs(position.size) > 0,
-      );
-      const receiptReconciliation = reconcilePendingReceipts(
-        this.executionStore,
-        orders,
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-        positionOpen,
-        receivedAt,
-      );
-      const requiresRecovery = this.executionStore.recoveryStatus().unresolvedMutations > 0
-        || this.executionStore.terminalMutationsWithoutReceipts().length > 0
-        || this.executionStore.intentsWithoutReceiptsOrMutations().length > 0;
-      if (requiresRecovery) {
-        const before = JSON.stringify(this.executionStore.recoveryStatus());
-        const recovery = await recoverExecutionMutations(
-          this.executionStore,
-          this.api,
-          this.config.scope.accountId,
-          this.config.scope.contractId,
-          positions,
-          undefined,
-          {
-            accountName: this.config.scope.accountName,
-            instrument: this.config.scope.instrument,
-            openOrders: orders,
-          },
-        );
-        await this.persistRecoveryResolutions(recovery.resolutions);
-        if (JSON.stringify(this.executionStore.recoveryStatus()) !== before) {
+        setLastReconciledOpenContracts: (value) => {
+          this.lastReconciledOpenContracts = value;
+        },
+        resolveClosedTranchesForFlat: (beforeOpen) => this.resolveClosedTranchesForFlat(beforeOpen),
+        recordRestSnapshot: (...args) => this.recordRestSnapshot(...args),
+        publishTradeOutcomesOnFlat: (...args) => this.publishTradeOutcomesOnFlat(...args),
+        refreshCachedOpenTranches: (openContracts) => this.refreshCachedOpenTranches(openContracts),
+        clearCachedOpenTranches: () => {
+          this.cachedOpenTranches = [];
+        },
+        observeTradeExcursion: (openContracts, unrealizedPnl) => {
+          this.tradeExcursion.observe(openContracts, unrealizedPnl);
+        },
+        retryIncompleteTradeOutcomes: (exitUtc) => this.retryIncompleteTradeOutcomes(exitUtc),
+        reconcileEntrySubmissionLatch: (positions, orders, receivedUtc) => (
+          this.reconcileEntrySubmissionLatch(positions, orders, receivedUtc)
+        ),
+        persistRecoveryResolutions: (resolutions) => this.persistRecoveryResolutions(resolutions),
+        invalidateIssuedPackets: () => {
           this.packets?.invalidateAll();
-        }
-      }
-      if (latchCleared || receiptReconciliation.changed) {
-        this.packets?.invalidateAll();
-      }
-      for (const event of receiptReconciliation.events) {
-        await this.ledger.append({
-          schema_version: "glitch.direct.event.v1",
-          event_id: randomUUID(),
-          recorded_utc: receivedAt,
-          event: event.event,
-          payload: event,
-        });
-      }
-      if (afterOpen > 0) {
-        // Bracket confirmation updates ownership; refresh cache after receipts so stream-flat
-        // can keep proven SL/TP ids when Auto OCO removes working brackets on exit.
-        this.refreshCachedOpenTranches(afterOpen);
-      }
-      const liveSnapshot = this.state.buildSnapshot(
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-      );
-      if (this.coordinator) {
-        if (liveSnapshot.instrumentOpenContracts === 0) {
-          const swept = await this.coordinator.sweepOrphanProtectiveOrders(liveSnapshot);
-          if (swept) {
-            this.packets?.invalidateAll();
-          }
-        } else {
-          const rearmed = await this.coordinator.rearmTrancheProtection(liveSnapshot);
-          if (rearmed) {
-            this.packets?.invalidateAll();
-          }
-        }
-      }
+        },
+      });
     } catch (error) {
       this.state.markReconciliationFailed(error);
       throw error;
