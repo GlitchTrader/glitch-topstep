@@ -58,7 +58,12 @@
     "TS-PROD-03",
     "TS-CAP-02",
     "TS-CTRL-01",
-    "TS-PROD-08"
+    "TS-PROD-08",
+    "TS-PROD-07",
+    "TS-CAP-01",
+    "TS-MKT-01",
+    "TS-ENTRY-01",
+    "TS-PROD-04"
   ],
   "items": [
     {
@@ -665,7 +670,7 @@
     {
       "id": "TS-PROD-04",
       "title": "Make append and rewrite writers durable, recoverable, and health-visible",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "storage",
       "issue": 112,
@@ -680,8 +685,8 @@
         "Persistence backlog and failure state are visible and block new exposure when execution truth is uncertain."
       ],
       "stop_line": "Do not skip corrupt records silently or treat a successful in-memory update as a successful commit.",
-      "implementation_note": "Outcome persistence now reports SQLite integrity and feed backlog counters through the existing health surface; restart durability is covered by tests. Remaining fault-injection and export atomicity acceptance stays open.",
-      "last_verified_utc": "2026-08-19T18:00:00Z",
+      "implementation_note": "Atomic exports, corrupt-tail quarantine, write-queue survives failure, persistence health gate (PR #150).",
+      "last_verified_utc": "2026-08-20T17:43:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/storage/jsonl-event-store.ts",
@@ -747,7 +752,7 @@
     {
       "id": "TS-PROD-07",
       "title": "Version and test the paired gateway and profile protocol contract",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "release_architecture",
       "issue": 115,
@@ -769,7 +774,9 @@
         "src/release/compatibility.ts",
         "glitch-topstep-hermes-profile:GTHP-PROD-03",
         "https://github.com/GlitchTrader/glitch-topstep/issues/115"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T17:43:00Z",
+      "implementation_note": "Paired contract locked: Hermes PR #116 fixtures + tests/test_paired_contracts.py + gateway tests/paired-compatibility.test.ts mirror PROFILE_COMPATIBILITY (saga, outcome_feed.v2). Release via paired-release-candidate/profile-release-candidate with evidence_ref."
     },
     {
       "id": "TS-PROD-08",
@@ -805,7 +812,7 @@
     {
       "id": "TS-CAP-01",
       "title": "Publish a configurable 0.5% daily-capture objective and progress contract",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "risk_architecture",
       "issue": 118,
@@ -827,7 +834,9 @@
         "src/risk/risk-engine.ts",
         "glitch-topstep-hermes-profile:GTHP-CAP-01",
         "https://github.com/GlitchTrader/glitch-topstep/issues/118"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T17:43:00Z",
+      "implementation_note": "Packet daily_capture contract + Hermes paired fixtures Cap01DailyCaptureFixtures (issue 102). Objective is context-only; quantity from valid_entry_quantities."
     },
     {
       "id": "TS-CAP-02",
@@ -862,7 +871,7 @@
     {
       "id": "TS-MKT-01",
       "title": "Publish the current partial bar and prior completed one-minute bar explicitly",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "market_data_architecture",
       "issue": 120,
@@ -883,12 +892,14 @@
         "src/hermes/packet-builder.ts",
         "glitch-topstep-hermes-profile:GTHP-MKT-01",
         "https://github.com/GlitchTrader/glitch-topstep/issues/120"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T17:43:00Z",
+      "implementation_note": "Explicit current_partial_bar/prior_completed_bar + Hermes Mkt01 fixtures (issue 103)."
     },
     {
       "id": "TS-ENTRY-01",
       "title": "Add bounded entry ranges and delivery-time supersession semantics",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "intent_protocol",
       "issue": 121,
@@ -910,7 +921,9 @@
         "src/execution/coordinator.ts",
         "glitch-topstep-hermes-profile:GTHP-ENTRY-01",
         "https://github.com/GlitchTrader/glitch-topstep/issues/121"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T17:43:00Z",
+      "implementation_note": "Bounded entry range + entry_range_superseded + Hermes Entry01 fixtures (issue 105)."
     },
     {
       "id": "TS-CTRL-01",
