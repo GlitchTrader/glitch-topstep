@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-20",
+  "updated": "2026-08-20T22:15:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -14,10 +14,25 @@
       153,
       155,
       156,
-      157
+      157,
+      173,
+      174,
+      175,
+      176,
+      177,
+      178,
+      179,
+      180,
+      181
     ],
-    "implementation_note": "Steps 1–26 closed except MULTI-04 (step 27 blocked). TS-PROD-06 closed with domain ports + state-machine extraction (PR feat/prod-06-state-machines). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). TS-DATA-01 phase A in progress on feat/data-alignment-phase-a (issue #171): on-demand selected-contract bar refresh, market_alignment advisory block, no execution vetoes. Housekeeping: ledger reconciliation synced 2026-08-20.",
-    "stream_validation": "351 gateway tests; Hermes 195 profile tests including frozen cognition, trigger lifecycle, learning defer."
+    "profile_merged_prs": [
+      131,
+      133,
+      134,
+      135
+    ],
+    "implementation_note": "Audit remediation waves 0–4 merged 2026-08-20: TS-AUDIT-05/06/07 (P0), TS-AUDIT-08/10/11, TS-DATA-01 phases A–C, paired-contract manifest v3. Wave 5 foundation: safety supervisor (observe), invariant metrics on /health, soak evidence gate script. Wave 6: DATA-01 Phase D env gate (default off), GTHP-AUDIT-06 profile quality check. Remaining: TS-AUDIT-09 decomposition (#164), TS-MULTI-04 (#126 gateway), profile decomposition (#124).",
+    "stream_validation": "390 gateway tests; Hermes 217 profile tests including audit regression matrix and quality gate."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -66,7 +81,21 @@
     "TS-MKT-01",
     "TS-ENTRY-01",
     "TS-PROD-04",
-    "TS-R4-09"
+    "TS-R4-09",
+    "TS-AUDIT-05",
+    "TS-AUDIT-06",
+    "TS-AUDIT-07",
+    "TS-AUDIT-08",
+    "TS-AUDIT-10",
+    "TS-AUDIT-11",
+    "TS-AUDIT-12",
+    "TS-AUDIT-13",
+    "TS-AUDIT-14",
+    "glitch-topstep-hermes-profile:GTHP-AUDIT-01",
+    "glitch-topstep-hermes-profile:GTHP-AUDIT-02",
+    "glitch-topstep-hermes-profile:GTHP-AUDIT-03",
+    "glitch-topstep-hermes-profile:GTHP-AUDIT-05",
+    "glitch-topstep-hermes-profile:GTHP-AUDIT-06"
   ],
   "items": [
     {
@@ -1112,6 +1141,135 @@
       "last_verified_utc": "2026-08-20T22:40:00Z"
     },
     {
+      "id": "TS-AUDIT-05",
+      "title": "Fix rearm latch after partial protection failure",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "execution",
+      "issue": 160,
+      "pull_request": 174,
+      "evidence": [
+        "src/execution/coordinator.ts rearm latch on stop_placed/confirmed",
+        "tests/rearm-latch-regression.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-06",
+      "title": "ProjectX auth single-flight with validate and 401 retry",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "integration",
+      "issue": 161,
+      "pull_request": 173,
+      "evidence": [
+        "src/projectx/auth-manager.ts",
+        "tests/projectx-auth-manager.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-07",
+      "title": "Flatten control completes only after authoritative flat",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "control",
+      "issue": 162,
+      "pull_request": 175,
+      "evidence": [
+        "src/control/flatten-control-saga.ts",
+        "tests/flatten-saga.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-08",
+      "title": "Recoverable evidence queue drain on shutdown",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "evidence",
+      "issue": 163,
+      "pull_request": 178,
+      "evidence": [
+        "src/projectx/evidence-write-queue.ts incomplete_shutdown + resume_cursor",
+        "tests/evidence-write-queue.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-10",
+      "title": "Paired contract manifest eliminates v2/v3 drift",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "release_architecture",
+      "issue": 165,
+      "pull_request": 180,
+      "evidence": [
+        "release/paired-contract.json",
+        "src/release/compatibility.ts",
+        "tests/paired-contract-authority.test.ts",
+        "glitch-topstep-hermes-profile:paired-contract.json (#135)"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-11",
+      "title": "Paired regression matrix for critical audit findings",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "quality",
+      "issue": 166,
+      "pull_request": 179,
+      "evidence": [
+        "docs/ledger/audits/2026-08-20-regression-matrix.md",
+        "tests/audit-regression-matrix.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:00:00Z"
+    },
+    {
+      "id": "TS-AUDIT-12",
+      "title": "Safety supervisor in observe mode with executable invariants",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 167,
+      "implementation_note": "Wave 5 foundation: src/safety/safety-supervisor.ts exposed on /health; promotion to enforcement deferred until soak parity.",
+      "evidence": [
+        "src/safety/safety-supervisor.ts",
+        "tests/safety-supervisor.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:15:00Z"
+    },
+    {
+      "id": "TS-AUDIT-13",
+      "title": "Soak and chaos evidence gate before armed promotion",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "release_architecture",
+      "issue": 168,
+      "implementation_note": "Report-stage gate: scripts/validate-soak-evidence.mjs + tests/soak-evidence-gate.test.ts; armed promotion still requires human approval on paired_release manifest.",
+      "evidence": [
+        "scripts/validate-soak-evidence.mjs",
+        "docs/ledger/audits/2026-08-20-soak-chaos-gate.md",
+        "tests/soak-evidence-gate.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:15:00Z"
+    },
+    {
+      "id": "TS-AUDIT-14",
+      "title": "Trading invariant metrics on health without pager",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "operations",
+      "issue": 169,
+      "evidence": [
+        "src/observability/invariant-metrics.ts",
+        "src/service.ts health invariant_metrics block",
+        "tests/invariant-metrics.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:15:00Z"
+    },
+    {
       "id": "TS-DATA-01",
       "title": "Data temporal alignment and evidence hygiene without participation vetoes",
       "status": "in_progress",
@@ -1138,7 +1296,7 @@
       "implementation_phases": {
         "A": {
           "title": "Reduce lag at source (gateway)",
-          "status": "in_progress",
+          "status": "done",
           "tasks": [
             "A1: On-demand coalesced retrieveBars for selected contract before /packet",
             "A2: market_alignment block on DirectDecisionPacket v2",
@@ -1147,11 +1305,11 @@
           "repos": [
             "glitch-topstep"
           ],
-          "pr": "feat/data-alignment-phase-a"
+          "pull_request": 176
         },
         "B": {
           "title": "Evidence hygiene (gateway + Hermes sanitize)",
-          "status": "planned",
+          "status": "done",
           "tasks": [
             "B1: DEPTH_QUOTE_MAX_DIVERGENCE_TICKS 8 to 4 shared constant",
             "B2: depth raw_available and integrity_valid fields",
@@ -1161,11 +1319,11 @@
             "glitch-topstep",
             "glitch-topstep-hermes-profile"
           ],
-          "pr": "feat/data-evidence-hygiene-phase-b"
+          "pull_request": 177
         },
         "C": {
           "title": "Cognition contract (paired Hermes profile GTHP-DATA-01)",
-          "status": "planned",
+          "status": "done",
           "tasks": [
             "C1: Lag-aware timing vs structure rules in CYCLE_OPERATOR_INSTRUCTION and topstep-observe-market skill",
             "C2: Symmetric market_universe ranking rule (Option B)",
@@ -1174,7 +1332,7 @@
           "repos": [
             "glitch-topstep-hermes-profile"
           ],
-          "pr": "feat/data-alignment-cognition-phase-c"
+          "pull_request": 135
         },
         "D": {
           "title": "Conditional metrics-gated",
@@ -1210,7 +1368,7 @@
         "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
-      "implementation_note": "Phase A: refreshSelected + market_alignment on feat/data-alignment-phase-a. Phases B–D planned; no execution vetoes."
+      "implementation_note": "Phases A–C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off."
     }
   ],
   "roadmap_only": [
@@ -1619,10 +1777,10 @@
     ]
   },
   "data_alignment_2026_08_20": {
-    "status": "phase_a_in_progress",
+    "status": "phases_a_c_done_phase_d_gated",
     "issue": 171,
     "ledger_item": "TS-DATA-01",
-    "branch": "feat/data-alignment-phase-a",
+    "branch": "main",
     "paired_profile": "GTHP-DATA-01",
     "operator_constraint": "Reduce quote/bar/order-flow divergence without execution vetoes or mandatory flat NOTHING.",
     "authority": "TS-AUDIT-03 quiet-tape and mixed-evidence doctrine; lag affects timing confidence only.",
@@ -1637,38 +1795,38 @@
     "phases": {
       "A": {
         "scope": "gateway",
-        "status": "in_progress",
+        "status": "done",
         "deliverables": [
           "on-demand bar refresh for selected contract",
           "market_alignment packet block",
           "features_reference via market_alignment.timing_reference"
         ],
-        "pr": "feat/data-alignment-phase-a"
+        "pull_request": 176
       },
       "B": {
         "scope": "gateway + Hermes sanitize",
-        "status": "planned",
+        "status": "done",
         "deliverables": [
           "depth divergence 4 ticks",
           "depth integrity fields",
           "session_levels available/reliable"
         ],
-        "pr": "feat/data-evidence-hygiene-phase-b"
+        "pull_request": 177
       },
       "C": {
         "scope": "Hermes profile",
-        "status": "planned",
+        "status": "done",
         "deliverables": [
           "lag cognition rules",
           "symmetric scanner ranking",
           "four-block prompt layout"
         ],
-        "pr": "feat/data-alignment-cognition-phase-c"
+        "pull_request": 135
       },
       "D": {
         "scope": "conditional",
-        "status": "planned",
-        "gate": "five or more stable sessions after A–C; metric triggers documented in spec",
+        "status": "gated",
+        "gate": "GLITCH_DATA_PHASE_D=1 and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC after five stable sessions",
         "deliverables": [
           "optional order flow per scanner candidate",
           "optional native instrument_comparison object"

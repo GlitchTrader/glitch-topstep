@@ -178,6 +178,31 @@ export class DurableControlStore {
     return result;
   }
 
+  /** Age of the oldest pending/applying flatten control, or null when none. */
+  public oldestPendingFlattenAgeMs(nowMs = Date.now()): number | null {
+    const row = this.database.prepare(`
+      SELECT MIN(created_utc) AS oldest
+      FROM control_commands
+      WHERE status IN ('pending', 'applying')
+        AND json_extract(payload_json, '$.action') = 'flatten'
+    `).get() as { oldest: string | null } | undefined;
+    if (!row?.oldest) {
+      return null;
+    }
+    return Math.max(0, nowMs - Date.parse(row.oldest));
+  }
+
+  public hasPendingFlatten(): boolean {
+    const row = this.database.prepare(`
+      SELECT 1 AS present
+      FROM control_commands
+      WHERE status IN ('pending', 'applying')
+        AND json_extract(payload_json, '$.action') = 'flatten'
+      LIMIT 1
+    `).get() as { present: number } | undefined;
+    return Boolean(row);
+  }
+
   private inTransaction<T>(action: () => T): T {
     this.database.exec("BEGIN IMMEDIATE");
     try {
