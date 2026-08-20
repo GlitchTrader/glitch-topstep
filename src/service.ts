@@ -559,7 +559,8 @@ export class GlitchTopstepService {
         };
       },
       snapshot,
-      () => {
+      async () => {
+        await this.ensureSelectedMarketObservationFresh();
         if (!this.packets) {
           throw new Error("packet_service_unavailable");
         }
@@ -782,6 +783,15 @@ export class GlitchTopstepService {
 
   private refreshMarketObservations(): Promise<unknown> {
     return this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
+  }
+
+  /** ponytail: one coalesced refresh per /packet; scanner background timer unchanged. */
+  private async ensureSelectedMarketObservationFresh(): Promise<void> {
+    if (this.scannerMarketData) {
+      await this.scannerMarketData.refreshSelected(this.config.scope.contractId);
+      return;
+    }
+    await this.marketObservation.refresh();
   }
 
   private currentMarketObservation(): MarketObservationState {

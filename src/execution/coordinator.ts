@@ -91,8 +91,8 @@ function observedStopDistanceTicks(
 
 export class ExecutionCoordinator {
   private executionQueue: Promise<void> = Promise.resolve();
-  /** ponytail: in-memory latch; restart clears and may re-place once per tranche */
-  private readonly rearmLatched = new Set<string>();
+  /** ponytail: in-memory rearm progress; restart clears partial state and may retry once */
+  private readonly rearmStates = new Map<string, "stop_placed" | "confirmed">();
 
   public constructor(
     private readonly config: AppConfig,
@@ -949,7 +949,7 @@ export class ExecutionCoordinator {
     }
     const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
     const candidates = this.attributableTranches().filter((tranche) => {
-      if (this.rearmLatched.has(tranche.intent_id) || exitTargets.has(tranche.intent_id)) {
+      if (this.rearmStates.get(tranche.intent_id) === "confirmed" || exitTargets.has(tranche.intent_id)) {
         return false;
       }
       const protection = bindProtection(
@@ -961,7 +961,7 @@ export class ExecutionCoordinator {
         tranche.entry_order_id,
       );
       if (protection.status === "proven") {
-        this.rearmLatched.delete(tranche.intent_id);
+        this.rearmStates.delete(tranche.intent_id);
         return false;
       }
       return true;
@@ -1045,8 +1045,9 @@ export class ExecutionCoordinator {
       const targetPrice = historicalTarget === null ? null : sanitized.targetPrice;
       const size = tranche.remaining_qty;
       let activeReduction = this.store.activeProtectedReduction();
+      let targetRearmFailed = false;
       try {
-        if (!protection.stop.providerOrderId) {
+        if (!protection.stop.providerOrderId && this.rearmStates.get(tranche.intent_id) !== "stop_placed") {
           await this.api.placeOrder({
             accountId: this.config.scope.accountId,
             contractId: this.config.scope.contractId,
@@ -1070,6 +1071,7 @@ export class ExecutionCoordinator {
             activeReduction = this.store.activeProtectedReduction();
           }
           maybeKill("rearm_after_stop_before_tp");
+          this.rearmStates.set(tranche.intent_id, "stop_placed");
         }
         if (targetPrice !== null && !protection.target.providerOrderId) {
           try {
@@ -1094,6 +1096,7 @@ export class ExecutionCoordinator {
               );
             }
           } catch (tpError) {
+            targetRearmFailed = true;
             activeReduction = this.store.activeProtectedReduction();
             if (activeReduction && activeReduction.state === "reduction_ambiguous") {
               try {
@@ -1136,22 +1139,26 @@ export class ExecutionCoordinator {
             );
           }
         }
-        this.rearmLatched.add(tranche.intent_id);
-        changed = true;
-        await this.ledger.append({
-          schema_version: "glitch.direct.event.v1",
-          event_id: randomUUID(),
-          recorded_utc: new Date().toISOString(),
-          event: "tranche_protection_rearmed",
-          payload: {
-            tranche_intent_id: tranche.intent_id,
-            remaining_qty: size,
-            stop_price: stopPrice,
-            target_price: targetPrice,
-            custom_tag_generation: generation,
-            prices_adjusted_for_market: sanitized.adjusted,
-          },
-        });
+        if (targetRearmFailed) {
+          changed = true;
+        } else {
+          this.rearmStates.set(tranche.intent_id, "confirmed");
+          changed = true;
+          await this.ledger.append({
+            schema_version: "glitch.direct.event.v1",
+            event_id: randomUUID(),
+            recorded_utc: new Date().toISOString(),
+            event: "tranche_protection_rearmed",
+            payload: {
+              tranche_intent_id: tranche.intent_id,
+              remaining_qty: size,
+              stop_price: stopPrice,
+              target_price: targetPrice,
+              custom_tag_generation: generation,
+              prices_adjusted_for_market: sanitized.adjusted,
+            },
+          });
+        }
       } catch (error) {
         activeReduction = this.store.activeProtectedReduction();
         if (activeReduction) {
