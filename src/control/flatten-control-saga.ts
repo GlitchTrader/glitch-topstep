@@ -12,15 +12,30 @@ export interface FlattenVenueSnapshot {
   stateComplete: boolean;
 }
 
-/** ponytail: mirrors current service.ts optimistic completion — TS-AUDIT-07 replaces this. */
 export function flattenControlPhaseAfterReceipt(
   receiptStatus: string,
-  _venue: FlattenVenueSnapshot,
+  venue: FlattenVenueSnapshot,
 ): FlattenControlPhase {
   if (["rejected", "shadowed", "ambiguous"].includes(receiptStatus)) {
     return "manual_intervention_required";
   }
-  return "completed";
+  if (
+    venue.instrumentOpenContracts === 0
+    && venue.ownWorkingOrders === 0
+    && venue.stateComplete
+  ) {
+    return "completed";
+  }
+  if (
+    receiptStatus === "submitted"
+    || receiptStatus === "accepted"
+    || receiptStatus === "open_protected"
+  ) {
+    return "waiting_for_flat";
+  }
+  return venue.instrumentOpenContracts === 0 && venue.stateComplete
+    ? "completed"
+    : "waiting_for_flat";
 }
 
 export function flattenControlCanComplete(phase: FlattenControlPhase): boolean {
