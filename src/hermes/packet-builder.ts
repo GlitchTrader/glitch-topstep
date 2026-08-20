@@ -113,6 +113,13 @@ export interface DirectDecisionPacket {
     session_low: number | null;
     session_levels_reliable: boolean;
     session_levels_note?: string;
+    session_levels: {
+      available: boolean;
+      reliable: boolean;
+      high: number | null;
+      low: number | null;
+      reason?: string;
+    };
     volume: number | null;
   };
   market_observation: MarketObservationState;
@@ -361,7 +368,7 @@ export function emptyOrderFlowState(): ProjectXOrderFlowState {
 }
 
 /** Max |depth BBO − quote BBO| in ticks before reconstructed depth is treated as unusable. */
-const DEPTH_QUOTE_MAX_DIVERGENCE_TICKS = 8;
+export const DEPTH_QUOTE_MAX_DIVERGENCE_TICKS = 4;
 
 /**
  * Mark reconstructed depth unavailable when its BBO materially disagrees with the live quote.
@@ -374,23 +381,32 @@ export function sanitizeOrderFlowDepthAgainstQuote(
   tickSize: number,
 ): ProjectXOrderFlowState {
   const depth = orderFlow.observation?.depth;
-  if (!depth?.available || !quote || !Number.isFinite(tickSize) || tickSize <= 0) {
-    return orderFlow;
-  }
-  if (depth.best_bid === null || depth.best_ask === null) {
-    return orderFlow;
-  }
-  if (!Number.isFinite(quote.bestBid) || !Number.isFinite(quote.bestAsk)) {
-    return orderFlow;
-  }
-  const bidTicks = Math.abs(depth.best_bid - quote.bestBid) / tickSize;
-  const askTicks = Math.abs(depth.best_ask - quote.bestAsk) / tickSize;
-  if (bidTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS && askTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS) {
+  if (!depth) {
     return orderFlow;
   }
   const next: ProjectXOrderFlowState = structuredClone(orderFlow);
   const nextDepth = next.observation!.depth;
+  nextDepth.raw_available = depth.available;
+  if (!depth.available || !quote || !Number.isFinite(tickSize) || tickSize <= 0) {
+    nextDepth.integrity_valid = depth.available;
+    return next;
+  }
+  if (depth.best_bid === null || depth.best_ask === null) {
+    nextDepth.integrity_valid = false;
+    return next;
+  }
+  if (!Number.isFinite(quote.bestBid) || !Number.isFinite(quote.bestAsk)) {
+    nextDepth.integrity_valid = false;
+    return next;
+  }
+  const bidTicks = Math.abs(depth.best_bid - quote.bestBid) / tickSize;
+  const askTicks = Math.abs(depth.best_ask - quote.bestAsk) / tickSize;
+  if (bidTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS && askTicks <= DEPTH_QUOTE_MAX_DIVERGENCE_TICKS) {
+    nextDepth.integrity_valid = true;
+    return next;
+  }
   nextDepth.available = false;
+  nextDepth.integrity_valid = false;
   nextDepth.unavailable_reason = "depth_bbo_diverges_from_quote";
   nextDepth.imbalance_ratio = null;
   const issues = next.observation!.issues;
@@ -750,6 +766,7 @@ export function buildDecisionPacket(
       session_low: sessionLevels.session_low,
       session_levels_reliable: sessionLevels.reliable,
       ...(sessionLevels.note === undefined ? {} : { session_levels_note: sessionLevels.note }),
+      session_levels: sessionLevels.session_levels,
       volume: quote?.volume ?? null,
     },
     market_observation: structuredClone(marketObservation),
@@ -851,35 +868,56 @@ function resolveSessionMarketLevels(quote: QuoteInfo | null): {
   session_high: number | null;
   session_low: number | null;
   reliable: boolean;
+  session_levels: DirectDecisionPacket["market"]["session_levels"];
   note?: string;
 } {
+  const mirrorNote =
+    "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features";
   if (!quote) {
     return {
       session_open: null,
       session_high: null,
       session_low: null,
       reliable: false,
+      session_levels: {
+        available: false,
+        reliable: false,
+        high: null,
+        low: null,
+        reason: "quote_missing",
+      },
     };
   }
   const last = quote.lastPrice;
   const open = quote.open;
   const high = quote.high;
   const low = quote.low;
-  let reliable = true;
-  if (high === low && high === last) {
-    reliable = false;
-  } else if (high === low && high === open && open === last) {
-    reliable = false;
+  const available = high !== null && low !== null;
+  let mirrorHeuristic = false;
+  if (available && high === low && high === last) {
+    mirrorHeuristic = true;
+  } else if (available && high === low && high === open && open === last) {
+    mirrorHeuristic = true;
   }
+  const reliable = available && !mirrorHeuristic;
+  const publishedHigh = reliable ? high : null;
+  const publishedLow = reliable ? low : null;
   return {
     session_open: open,
-    session_high: reliable ? high : null,
-    session_low: reliable ? low : null,
+    session_high: publishedHigh,
+    session_low: publishedLow,
     reliable,
-    ...(reliable
-      ? {}
-      : {
-          note: "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features",
-        }),
+    session_levels: {
+      available,
+      reliable,
+      high: available ? high : null,
+      low: available ? low : null,
+      ...(reliable
+        ? {}
+        : {
+            reason: available ? "mirror_last_open_heuristic" : "session_high_low_missing",
+          }),
+    },
+    ...(reliable ? {} : { note: mirrorNote }),
   };
 }
