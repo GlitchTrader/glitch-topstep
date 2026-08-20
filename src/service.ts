@@ -51,10 +51,12 @@ import {
   type StoredControlCommand,
 } from "./control/durable-control-store.js";
 import {
-  flattenControlCanComplete,
-  flattenControlPhaseAfterReceipt,
-  type FlattenVenueSnapshot,
-} from "./control/flatten-control-saga.js";
+  buildFlattenVenueSnapshot,
+  resolveFlattenAfterReceipt,
+  resolveFlattenAfterRestart,
+  shouldCompletePendingFlatten,
+} from "./service/flatten-workflow.js";
+import { fetchWithStartupRetry } from "./service/auth-session-workflow.js";
 import type { TradingMode } from "./domain/models.js";
 import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
@@ -799,19 +801,17 @@ export class GlitchTopstepService {
           }
         } else if (control.action === "flatten") {
           const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
-          const phase = flattenControlPhaseAfterReceipt(
-            "submitted",
-            this.buildFlattenVenueSnapshot(current),
+          const transition = resolveFlattenAfterRestart(
+            control.detail,
+            buildFlattenVenueSnapshot(current, this.config.scope.accountId, this.config.scope.contractId),
           );
-          if (flattenControlCanComplete(phase)) {
-            this.controlStore.transition(control.control_id, "completed", "reconciled_already_flat_after_restart");
-          } else if (control.detail === "waiting_for_flat") {
-            this.controlStore.transition(control.control_id, "applying", "waiting_for_flat");
+          if (transition.status === "completed" || transition.status === "applying") {
+            this.controlStore.transition(control.control_id, transition.status, transition.detail);
           } else {
             this.controlPaused = true;
             this.runtimeTradingMode = "disabled";
             this.packets?.invalidateAll();
-            this.controlStore.transition(control.control_id, "failed", "flatten_application_ambiguous_requires_operator_reconciliation");
+            this.controlStore.transition(control.control_id, transition.status, transition.detail);
           }
         } else {
           this.controlStore.transition(control.control_id, "failed", "control_resume_unsupported_action");
@@ -949,15 +949,12 @@ export class GlitchTopstepService {
           receiptStatus = receipt.status;
         }
         const settled = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
-        const phase = flattenControlPhaseAfterReceipt(
+        const transition = resolveFlattenAfterReceipt(
           receiptStatus,
-          this.buildFlattenVenueSnapshot(settled),
+          buildFlattenVenueSnapshot(settled, this.config.scope.accountId, this.config.scope.contractId),
         );
         this.packets?.invalidateAll();
-        if (flattenControlCanComplete(phase)) {
-          return this.controlStore.transition(stored.control_id, "completed", "venue_flat_confirmed");
-        }
-        return this.controlStore.transition(stored.control_id, "applying", "waiting_for_flat");
+        return this.controlStore.transition(stored.control_id, transition.status, transition.detail);
       }
       this.packets?.invalidateAll();
       return this.controlStore.transition(stored.control_id, "completed");
@@ -976,45 +973,22 @@ export class GlitchTopstepService {
       Awaited<ReturnType<ProjectXApiClient["searchOpenPositionsCollection"]>>,
       Awaited<ReturnType<ProjectXApiClient["searchOpenOrdersCollection"]>>]
   > {
-    const retryDelaysMs = [0, 30_000, 60_000];
-    for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
-      const delayMs = retryDelaysMs[attempt] ?? 0;
-      if (delayMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      }
-      try {
-        return await Promise.all([
-          this.api.searchAccountsCollection(true),
-          this.api.listAvailableContractsCollection(this.config.scope.liveMarketData),
-          this.api.searchOpenPositionsCollection(this.config.scope.accountId),
-          this.api.searchOpenOrdersCollection(this.config.scope.accountId),
-        ]);
-      } catch (error: unknown) {
-        const rateLimited = error instanceof ProjectXApiError && error.status === 429;
-        const nextDelayMs = retryDelaysMs[attempt + 1];
-        if (rateLimited && nextDelayMs !== undefined) {
+    return fetchWithStartupRetry(
+      () => Promise.all([
+        this.api.searchAccountsCollection(true),
+        this.api.listAvailableContractsCollection(this.config.scope.liveMarketData),
+        this.api.searchOpenPositionsCollection(this.config.scope.accountId),
+        this.api.searchOpenOrdersCollection(this.config.scope.accountId),
+      ]),
+      {
+        onRateLimited: (delayMs, error) => {
           console.error(
-            `ProjectX startup fetch rate limited; retrying in ${nextDelayMs / 1000}s`,
+            `ProjectX startup fetch rate limited; retrying in ${delayMs / 1000}s`,
             error,
           );
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw new Error("startup_scope_fetch_exhausted");
-  }
-
-  private buildFlattenVenueSnapshot(snapshot: AccountVenueSnapshot): FlattenVenueSnapshot {
-    const ownWorkingOrders = snapshot.openOrders.filter(
-      (order) => order.accountId === this.config.scope.accountId
-        && order.contractId === this.config.scope.contractId,
-    ).length;
-    return {
-      instrumentOpenContracts: snapshot.instrumentOpenContracts,
-      ownWorkingOrders,
-      stateComplete: snapshot.stateComplete,
-    };
+        },
+      },
+    );
   }
 
   private async completePendingFlattenControls(): Promise<void> {
@@ -1026,11 +1000,9 @@ export class GlitchTopstepService {
         continue;
       }
       const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
-      const phase = flattenControlPhaseAfterReceipt(
-        "submitted",
-        this.buildFlattenVenueSnapshot(current),
-      );
-      if (flattenControlCanComplete(phase)) {
+      if (shouldCompletePendingFlatten(
+        buildFlattenVenueSnapshot(current, this.config.scope.accountId, this.config.scope.contractId),
+      )) {
         this.controlStore.transition(control.control_id, "completed", "venue_flat_confirmed");
       }
     }

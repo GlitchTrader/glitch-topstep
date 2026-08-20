@@ -31,8 +31,8 @@
       134,
       135
     ],
-    "implementation_note": "Audit remediation waves 0–4 merged 2026-08-20: TS-AUDIT-05/06/07 (P0), TS-AUDIT-08/10/11, TS-DATA-01 phases A–C, paired-contract manifest v3. Wave 5 foundation: safety supervisor (observe), invariant metrics on /health, soak evidence gate script. Wave 6: DATA-01 Phase D env gate (default off), GTHP-AUDIT-06 profile quality check. Remaining: TS-AUDIT-09 decomposition (#164), TS-MULTI-04 (#126 gateway), profile decomposition (#124).",
-    "stream_validation": "390 gateway tests; Hermes 217 profile tests including audit regression matrix and quality gate."
+    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. Wave 4 decomposition: TS-AUDIT-09 (#164) flatten/protection/auth-session workflows; GTHP-AUDIT-04 (#124) Hermes workflow modules. Remaining: TS-MULTI-04 (#126 gateway), TS-DATA-01 Phase D (#171 gated).",
+    "stream_validation": "396 gateway tests; Hermes 222 profile tests including workflow decomposition."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -1268,6 +1268,24 @@
         "tests/invariant-metrics.test.ts"
       ],
       "last_verified_utc": "2026-08-20T22:15:00Z"
+    },
+    {
+      "id": "TS-AUDIT-09",
+      "title": "Decompose service/coordinator workflows with pure modules",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 164,
+      "implementation_note": "Incremental extraction: flatten-workflow, protection-supervisor, auth-session-workflow; reconciliation-service and lifecycle-supervisor already extracted.",
+      "evidence": [
+        "docs/ledger/audits/2026-08-20-workflow-decomposition-baseline.md",
+        "src/service/flatten-workflow.ts",
+        "src/execution/protection-supervisor.ts",
+        "tests/flatten-workflow.test.ts",
+        "tests/protection-supervisor.test.ts",
+        "tests/workflow-decomposition.test.ts"
+      ],
+      "last_verified_utc": "2026-08-20T22:25:00Z"
     },
     {
       "id": "TS-DATA-01",
