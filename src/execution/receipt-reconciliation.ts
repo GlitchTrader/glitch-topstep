@@ -6,6 +6,7 @@ import {
 import type { ExecutionReceipt } from "./coordinator.js";
 import type { StoredExecutionMutation } from "../domain/execution-state.js";
 import type { OrderInfo } from "../domain/models.js";
+import { receiptLifecycleFact } from "./lifecycle-facts.js";
 import { bindProtection } from "../ownership/protection.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
@@ -38,10 +39,26 @@ export function reconcilePendingReceipts(
     if (!next) {
       continue;
     }
-    store.recordReceipt({
+    const settled: ExecutionReceipt = {
       ...receipt,
       ...next.receipt,
       recorded_utc: nowUtc,
+    };
+    store.recordReceipt({ ...settled });
+    // Reconciliation is where protection, amendments and entry fills become provable, so the
+    // lifecycle fact for those moments is published here rather than only at receipt time.
+    const fact = receiptLifecycleFact(intentId, settled, nowUtc, {
+      submittedUtc: mutation.resolvedUtc ?? mutation.submittingUtc,
+      fillObservedUtc: settled.fill_observed_utc ?? null,
+      protectionConfirmedUtc: settled.status === "open_protected" ? nowUtc : null,
+    });
+    store.recordExecutionFact({
+      intentId: fact.intentId,
+      phase: fact.phase,
+      factKey: fact.factKey,
+      recordedUtc: fact.recordedUtc,
+      detail: fact.detail,
+      diagnostics: fact.diagnostics,
     });
     changed = true;
     reconciled += 1;

@@ -55,6 +55,12 @@ The gateway SQLite revision feed (`trade-outcomes.sqlite`) is the **sole canonic
 
 `GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH` is **deprecated and emergency-only**. It mirrors outcomes into the Hermes profile `state/outcomes.jsonl`, which creates a second mutable writer for the same records. Set it only to bridge a Hermes outage that blocks the HTTP feed, and unset it as soon as the feed is reachable again.
 
+## Immediate lifecycle facts (TS-EXEC-01)
+
+`GET /execution/facts?after_sequence=<cursor>&limit=<n>` publishes attributable lifecycle facts per `intent_id` — admission, submission, provider acceptance/rejection, fill (partial, full, exit), protection confirmation or failure, amendment and flat — without waiting for the enriched outcome. Each fact carries a stable `fact_id`, a `revision` that increments when the same moment is corrected, and a `diagnostics` block that separates `rejection_code`, fill presence, protection fidelity (`proven`/`pending`/`failed`) and latency fields (null when unmeasured).
+
+Facts stay in the feed with `status: "live"` until the revisioned outcome for the same intent lands; publication then flips them to `superseded_by_outcome` and appends an `outcome_superseded` fact naming the `outcome_id`. Superseded rows are retained for audit, and `GET /health` reports live/superseded counts under `execution_facts`.
+
 ## Armed partial EXIT (ProtectedReductionSaga)
 
 Armed `EXIT` that reduces an open position without flattening it is admitted by default through a durable `ProtectedReductionSaga` (SQLite `protected_reductions`). Compatibility advertises `protected_reduction_saga_v1` and `partial_exit_protection_transition: proven_prac_short_long_with_saga` after SHORT + LONG PRAC fixtures.

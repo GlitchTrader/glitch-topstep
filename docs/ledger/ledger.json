@@ -957,6 +957,7 @@
       ],
       "stop_line": "Do not turn transport, provider, or protection failures into directional trading lessons.",
       "sources": [
+        "src/execution/lifecycle-facts.ts",
         "src/execution/coordinator.ts",
         "src/learning/trade-outcome-publisher.ts",
         "src/storage/projectx-evidence-store.ts",
