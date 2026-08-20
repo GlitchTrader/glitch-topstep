@@ -263,6 +263,28 @@ describe("provider evidence write queue", () => {
     assert.equal(queue.metrics().degraded, false, "a recovered write clears the degraded flag");
   });
 
+  it("keeps the queue open and marks incomplete_shutdown when drain fails on close", async () => {
+    const writer = new RecordingWriter();
+    const queue = new EvidenceWriteQueue(writer);
+    queue.submit(identityEvent("order", 1), null);
+    await queue.drain();
+
+    writer.failuresRemaining = Number.MAX_SAFE_INTEGER;
+    queue.submit(identityEvent("order", 2), null);
+    await assert.rejects(
+      () => queue.close(),
+      /evidence_queue_drain_failed:pending=1:resume_cursor=1/,
+    );
+    assert.equal(queue.metrics().closed, false);
+    assert.equal(queue.metrics().incomplete_shutdown, true);
+    assert.equal(queue.metrics().depth, 1);
+    queue.submit(identityEvent("order", 3), null);
+    writer.failuresRemaining = 0;
+    await queue.close();
+    assert.equal(queue.metrics().closed, true);
+    assert.equal(queue.metrics().incomplete_shutdown, true);
+  });
+
   it("reports the resumable cursor when the drain cannot complete", async () => {
     const writer = new RecordingWriter();
     const queue = new EvidenceWriteQueue(writer);
@@ -275,6 +297,8 @@ describe("provider evidence write queue", () => {
       () => queue.close(),
       /evidence_queue_drain_failed:pending=1:resume_cursor=1/,
     );
-    assert.throws(() => queue.submit(identityEvent("order", 3), null), /evidence_queue_closed/);
+    assert.equal(queue.metrics().closed, false);
+    assert.equal(queue.metrics().incomplete_shutdown, true);
+    assert.doesNotThrow(() => queue.submit(identityEvent("order", 3), null));
   });
 });
