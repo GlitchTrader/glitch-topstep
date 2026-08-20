@@ -1,6 +1,6 @@
 {
   "schema_version": "glitch.projectx.fixture_capture.v1",
-  "captured_utc": "2026-08-19T20:51:31.147Z",
+  "captured_utc": "2026-08-20T15:54:18.184Z",
   "environment": "projectx_shadow_read_only",
   "api_url": "https://api.topstepx.com",
   "scope": {
@@ -70,6 +70,14 @@
     {
       "name": "reconnect_proof",
       "path": "tests\\fixtures\\projectx\\live\\reconnect_proof.json"
+    },
+    {
+      "name": "r1_04_kill_matrix_proof",
+      "path": "tests\\fixtures\\projectx\\live\\r1_04_kill_matrix_proof.json"
+    },
+    {
+      "name": "event_rates_proof",
+      "path": "tests\\fixtures\\projectx\\live\\event_rates_proof.json"
     }
   ],
   "history_search_window_hours": 72,

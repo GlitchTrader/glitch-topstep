@@ -1,24 +1,24 @@
 {
   "schema_version": "glitch.projectx.r1_04_kill_proof.v1",
-  "captured_utc": "2026-08-03T02:38:54.578Z",
+  "captured_utc": "2026-08-20T15:27:12.579Z",
   "mode": "live_prac_acceptance",
   "scope": {
-    "account_id": 26080387,
-    "account_name": "PRAC-V2-645601-15979101",
+    "account_id": 26282486,
+    "account_name": "PRAC-V2-645601-47191819",
     "contract_id": "CON.F.US.MNQ.U26",
     "instrument": "MNQ"
   },
   "database_fingerprints": {
-    "execution_sqlite_bytes": 17092608,
-    "execution_sqlite_sha256": "827d1fa0581c384110d9a9d1f5e8b4f17bfa37063c99e85c347dca6f173e8a0d",
-    "evidence_sqlite_bytes": 531365888,
-    "evidence_sqlite_sha256": "9ab905562b19652815c789c3ea52e68786d43c4c844a09c60dc0cdbb3a2e76b6"
+    "execution_sqlite_bytes": 4096,
+    "execution_sqlite_sha256": "0ab48b25cba617ed3a4acca0161813b314c095ef63544bb4af60769eb1012977",
+    "evidence_sqlite_bytes": 52543488,
+    "evidence_sqlite_sha256": "628a4dbffd718f387165d18739a00185f676ff188289cf668fcf733a68823c1d"
   },
   "cases": [
     {
       "kill_point": "after_intent_before_outbox",
-      "intent_id": "00000000-0000-4000-8000-00000000a041",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a041",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a041",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a041",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -27,6 +27,7 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
         "http": 422,
@@ -38,8 +39,8 @@
     },
     {
       "kill_point": "after_prepared_before_provider",
-      "intent_id": "00000000-0000-4000-8000-00000000a042",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a042",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a042",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a042",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -48,6 +49,7 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
         "http": 422,
@@ -59,8 +61,8 @@
     },
     {
       "kill_point": "after_submitting_before_transport",
-      "intent_id": "00000000-0000-4000-8000-00000000a043",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a043",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a043",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a043",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -69,19 +71,20 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
         "http": 503,
         "status": "ambiguous",
-        "code": "intent_already_processing_or_recovery_required"
+        "code": "projectx_mutation_outcome_ambiguous"
       },
       "provider_entry_orders_after_replay": 0,
       "open_contracts_after_replay": 0
     },
     {
       "kill_point": "after_accept_before_submitted",
-      "intent_id": "00000000-0000-4000-8000-00000000a044",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a044",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a044",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a044",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -90,6 +93,7 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
         "http": 202,
@@ -101,8 +105,8 @@
     },
     {
       "kill_point": "after_submitted_before_receipt",
-      "intent_id": "00000000-0000-4000-8000-00000000a045",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a045",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a045",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a045",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -111,6 +115,7 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
         "http": 202,
@@ -122,8 +127,8 @@
     },
     {
       "kill_point": "after_receipt_before_jsonl",
-      "intent_id": "00000000-0000-4000-8000-00000000a046",
-      "custom_tag": "glt-00000000-0000-4000-8000-00000000a046",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a046",
+      "custom_tag": "glt-00000000-0000-4000-8000-1fc88ec2a046",
       "proof_passed": true,
       "proof_failures": [],
       "kill_submit": {
@@ -132,22 +137,23 @@
         "body": null
       },
       "gateway_killed": true,
+      "kill_marker_observed": true,
       "provider_entry_orders_before_replay": 0,
       "replay_submit": {
-        "http": 202,
-        "status": "open_protected",
-        "code": "entry_open_with_proven_protection"
+        "http": 422,
+        "status": "rejected",
+        "code": "entry_range_superseded"
       },
       "provider_entry_orders_after_replay": 0,
-      "open_contracts_after_replay": 1
+      "open_contracts_after_replay": 0
     },
     {
       "test": "body_conflict",
-      "intent_id": "00000000-0000-4000-8000-00000000a099",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a099",
       "first": {
-        "http": 422,
-        "code": "intent_body_conflict",
-        "status": "rejected"
+        "http": 202,
+        "code": "entry_submitted_pending_reconciliation",
+        "status": "pending"
       },
       "second": {
         "http": 422,
@@ -161,33 +167,36 @@
   "steps": [
     {
       "step": "SESSION_START",
-      "captured_utc": "2026-08-03T02:38:54.578Z",
-      "gateway_version": "0.1.2",
-      "account_id": "26080387",
-      "account_name": "PRAC-V2-645601-15979101",
+      "captured_utc": "2026-08-20T15:27:12.579Z",
+      "gateway_version": "0.2.0",
+      "account_id": "26282486",
+      "account_name": "PRAC-V2-645601-47191819",
       "contract_id": "CON.F.US.MNQ.U26"
     },
     {
       "step": "SESSION_BASELINE_GATEWAY_START",
-      "pid": 19100,
+      "pid": 3552,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:38:54.596Z"
+      "recorded_utc": "2026-08-20T15:27:15.228Z",
+      "listener_pid": 3552
     },
     {
       "step": "after_intent_before_outbox_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:39:01.186Z"
+      "recorded_utc": "2026-08-20T15:27:40.354Z"
     },
     {
       "step": "after_intent_before_outbox_PRE_CLEAR_GATEWAY_START",
-      "pid": 25056,
+      "pid": 29684,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:39:03.780Z"
+      "recorded_utc": "2026-08-20T15:27:42.232Z",
+      "listener_pid": 29684
     },
     {
       "step": "after_intent_before_outbox_GATEWAY_START",
-      "pid": 3220,
+      "pid": 6812,
       "kill_point": "after_intent_before_outbox",
-      "recorded_utc": "2026-08-03T02:39:12.987Z"
+      "recorded_utc": "2026-08-20T15:28:09.200Z",
+      "listener_pid": 6812
     },
     {
       "step": "after_intent_before_outbox_KILL_SUBMIT",
@@ -197,9 +206,10 @@
     },
     {
       "step": "after_intent_before_outbox_RECOVERY_GATEWAY_START",
-      "pid": 24588,
+      "pid": 18616,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:39:17.546Z"
+      "recorded_utc": "2026-08-20T15:28:36.215Z",
+      "listener_pid": 18616
     },
     {
       "step": "after_intent_before_outbox_REPLAY",
@@ -209,29 +219,32 @@
     },
     {
       "step": "after_intent_before_outbox_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:39:27.194Z"
+      "recorded_utc": "2026-08-20T15:29:06.347Z"
     },
     {
       "step": "after_intent_before_outbox_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 26056,
+      "pid": 31132,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:39:29.625Z"
+      "recorded_utc": "2026-08-20T15:29:08.241Z",
+      "listener_pid": 31132
     },
     {
       "step": "after_prepared_before_provider_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:39:36.459Z"
+      "recorded_utc": "2026-08-20T15:29:33.328Z"
     },
     {
       "step": "after_prepared_before_provider_PRE_CLEAR_GATEWAY_START",
-      "pid": 20072,
+      "pid": 16308,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:39:38.855Z"
+      "recorded_utc": "2026-08-20T15:29:35.218Z",
+      "listener_pid": 16308
     },
     {
       "step": "after_prepared_before_provider_GATEWAY_START",
-      "pid": 23660,
+      "pid": 7916,
       "kill_point": "after_prepared_before_provider",
-      "recorded_utc": "2026-08-03T02:39:46.666Z"
+      "recorded_utc": "2026-08-20T15:30:02.151Z",
+      "listener_pid": 7916
     },
     {
       "step": "after_prepared_before_provider_KILL_SUBMIT",
@@ -241,9 +254,10 @@
     },
     {
       "step": "after_prepared_before_provider_RECOVERY_GATEWAY_START",
-      "pid": 20964,
+      "pid": 19700,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:39:51.398Z"
+      "recorded_utc": "2026-08-20T15:30:29.138Z",
+      "listener_pid": 19700
     },
     {
       "step": "after_prepared_before_provider_REPLAY",
@@ -253,29 +267,32 @@
     },
     {
       "step": "after_prepared_before_provider_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:40:02.849Z"
+      "recorded_utc": "2026-08-20T15:30:59.230Z"
     },
     {
       "step": "after_prepared_before_provider_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 25076,
+      "pid": 8464,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:40:05.300Z"
+      "recorded_utc": "2026-08-20T15:31:01.104Z",
+      "listener_pid": 8464
     },
     {
       "step": "after_submitting_before_transport_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:40:16.034Z"
+      "recorded_utc": "2026-08-20T15:31:26.203Z"
     },
     {
       "step": "after_submitting_before_transport_PRE_CLEAR_GATEWAY_START",
-      "pid": 20080,
+      "pid": 29516,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:40:18.542Z"
+      "recorded_utc": "2026-08-20T15:31:28.077Z",
+      "listener_pid": 29516
     },
     {
       "step": "after_submitting_before_transport_GATEWAY_START",
-      "pid": 25908,
+      "pid": 13636,
       "kill_point": "after_submitting_before_transport",
-      "recorded_utc": "2026-08-03T02:40:26.003Z"
+      "recorded_utc": "2026-08-20T15:31:55.003Z",
+      "listener_pid": 13636
     },
     {
       "step": "after_submitting_before_transport_KILL_SUBMIT",
@@ -285,46 +302,50 @@
     },
     {
       "step": "after_submitting_before_transport_RECOVERY_GATEWAY_START",
-      "pid": 17164,
+      "pid": 8776,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:40:30.395Z"
+      "recorded_utc": "2026-08-20T15:32:21.959Z",
+      "listener_pid": 8776
     },
     {
       "step": "after_submitting_before_transport_REPLAY",
       "http": 503,
       "status": "ambiguous",
-      "code": "intent_already_processing_or_recovery_required"
+      "code": "projectx_mutation_outcome_ambiguous"
     },
     {
       "step": "after_submitting_before_transport_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:40:39.969Z"
+      "recorded_utc": "2026-08-20T15:32:52.078Z"
     },
     {
       "step": "after_submitting_before_transport_POST_RESOLVE_AMBIGUITY",
-      "intent_id": "00000000-0000-4000-8000-00000000a043",
-      "recorded_utc": "2026-08-03T02:40:39.988Z"
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a043",
+      "recorded_utc": "2026-08-20T15:32:52.095Z"
     },
     {
       "step": "after_submitting_before_transport_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 14076,
+      "pid": 3308,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:40:42.449Z"
+      "recorded_utc": "2026-08-20T15:32:53.982Z",
+      "listener_pid": 3308
     },
     {
       "step": "after_accept_before_submitted_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:40:47.221Z"
+      "recorded_utc": "2026-08-20T15:33:19.089Z"
     },
     {
       "step": "after_accept_before_submitted_PRE_CLEAR_GATEWAY_START",
-      "pid": 7092,
+      "pid": 9444,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:40:49.732Z"
+      "recorded_utc": "2026-08-20T15:33:20.966Z",
+      "listener_pid": 9444
     },
     {
       "step": "after_accept_before_submitted_GATEWAY_START",
-      "pid": 4976,
+      "pid": 24064,
       "kill_point": "after_accept_before_submitted",
-      "recorded_utc": "2026-08-03T02:40:56.949Z"
+      "recorded_utc": "2026-08-20T15:33:47.947Z",
+      "listener_pid": 24064
     },
     {
       "step": "after_accept_before_submitted_KILL_SUBMIT",
@@ -334,9 +355,10 @@
     },
     {
       "step": "after_accept_before_submitted_RECOVERY_GATEWAY_START",
-      "pid": 21976,
+      "pid": 22140,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:41:03.621Z"
+      "recorded_utc": "2026-08-20T15:34:14.951Z",
+      "listener_pid": 22140
     },
     {
       "step": "after_accept_before_submitted_REPLAY",
@@ -352,33 +374,36 @@
     },
     {
       "step": "after_accept_before_submitted_POST_CANCEL_ORDERS",
-      "recorded_utc": "2026-08-03T02:41:37.961Z"
+      "recorded_utc": "2026-08-20T15:34:46.740Z"
     },
     {
       "step": "after_accept_before_submitted_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:41:40.970Z"
+      "recorded_utc": "2026-08-20T15:34:49.742Z"
     },
     {
       "step": "after_accept_before_submitted_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 13176,
+      "pid": 23444,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:41:43.412Z"
+      "recorded_utc": "2026-08-20T15:34:51.654Z",
+      "listener_pid": 23444
     },
     {
       "step": "after_submitted_before_receipt_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:41:48.287Z"
+      "recorded_utc": "2026-08-20T15:35:18.804Z"
     },
     {
       "step": "after_submitted_before_receipt_PRE_CLEAR_GATEWAY_START",
-      "pid": 16904,
+      "pid": 3496,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:41:50.795Z"
+      "recorded_utc": "2026-08-20T15:35:20.694Z",
+      "listener_pid": 3496
     },
     {
       "step": "after_submitted_before_receipt_GATEWAY_START",
-      "pid": 24800,
+      "pid": 12120,
       "kill_point": "after_submitted_before_receipt",
-      "recorded_utc": "2026-08-03T02:41:57.967Z"
+      "recorded_utc": "2026-08-20T15:35:49.656Z",
+      "listener_pid": 12120
     },
     {
       "step": "after_submitted_before_receipt_KILL_SUBMIT",
@@ -388,9 +413,10 @@
     },
     {
       "step": "after_submitted_before_receipt_RECOVERY_GATEWAY_START",
-      "pid": 464,
+      "pid": 35016,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:42:02.535Z"
+      "recorded_utc": "2026-08-20T15:36:18.690Z",
+      "listener_pid": 35016
     },
     {
       "step": "after_submitted_before_receipt_REPLAY",
@@ -405,34 +431,33 @@
       "code": "close_contract_submitted"
     },
     {
-      "step": "after_submitted_before_receipt_POST_CANCEL_ORDERS",
-      "recorded_utc": "2026-08-03T02:42:14.656Z"
-    },
-    {
       "step": "after_submitted_before_receipt_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:42:17.669Z"
+      "recorded_utc": "2026-08-20T15:36:49.983Z"
     },
     {
       "step": "after_submitted_before_receipt_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 7160,
+      "pid": 5368,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:42:20.184Z"
+      "recorded_utc": "2026-08-20T15:36:51.964Z",
+      "listener_pid": 5368
     },
     {
       "step": "after_receipt_before_jsonl_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:42:24.867Z"
+      "recorded_utc": "2026-08-20T15:37:19.176Z"
     },
     {
       "step": "after_receipt_before_jsonl_PRE_CLEAR_GATEWAY_START",
-      "pid": 25088,
+      "pid": 11452,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:42:27.378Z"
+      "recorded_utc": "2026-08-20T15:37:21.114Z",
+      "listener_pid": 11452
     },
     {
       "step": "after_receipt_before_jsonl_GATEWAY_START",
-      "pid": 2280,
+      "pid": 15724,
       "kill_point": "after_receipt_before_jsonl",
-      "recorded_utc": "2026-08-03T02:42:34.519Z"
+      "recorded_utc": "2026-08-20T15:37:50.225Z",
+      "listener_pid": 15724
     },
     {
       "step": "after_receipt_before_jsonl_KILL_SUBMIT",
@@ -442,54 +467,47 @@
     },
     {
       "step": "after_receipt_before_jsonl_RECOVERY_GATEWAY_START",
-      "pid": 26252,
+      "pid": 10784,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:42:39.158Z"
+      "recorded_utc": "2026-08-20T15:38:19.230Z",
+      "listener_pid": 10784
     },
     {
       "step": "after_receipt_before_jsonl_REPLAY",
-      "http": 202,
-      "status": "open_protected",
-      "code": "entry_open_with_proven_protection"
-    },
-    {
-      "step": "after_receipt_before_jsonl_POST_EXIT",
-      "http": 202,
-      "status": "closed",
-      "code": "close_contract_submitted"
-    },
-    {
-      "step": "after_receipt_before_jsonl_POST_CANCEL_ORDERS",
-      "recorded_utc": "2026-08-03T02:42:51.263Z"
+      "http": 422,
+      "status": "rejected",
+      "code": "entry_range_superseded"
     },
     {
       "step": "after_receipt_before_jsonl_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:42:54.276Z"
+      "recorded_utc": "2026-08-20T15:38:51.331Z"
     },
     {
       "step": "after_receipt_before_jsonl_RECOVERY_CLEAR_GATEWAY_START",
-      "pid": 24088,
+      "pid": 16932,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:42:56.797Z"
+      "recorded_utc": "2026-08-20T15:38:53.233Z",
+      "listener_pid": 16932
     },
     {
       "step": "CONFLICT_PRE_CLEAR_GATEWAY_START",
-      "pid": 9692,
+      "pid": 15960,
       "kill_point": null,
-      "recorded_utc": "2026-08-03T02:43:04.064Z"
+      "recorded_utc": "2026-08-20T15:39:22.244Z",
+      "listener_pid": 15960
     },
     {
       "step": "CONFLICT_PRE_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:43:30.825Z"
+      "recorded_utc": "2026-08-20T15:39:49.338Z"
     },
     {
       "step": "BODY_CONFLICT",
       "test": "body_conflict",
-      "intent_id": "00000000-0000-4000-8000-00000000a099",
+      "intent_id": "00000000-0000-4000-8000-1fc88ec2a099",
       "first": {
-        "http": 422,
-        "code": "intent_body_conflict",
-        "status": "rejected"
+        "http": 202,
+        "code": "entry_submitted_pending_reconciliation",
+        "status": "pending"
       },
       "second": {
         "http": 422,
@@ -500,12 +518,22 @@
       "proof_failures": []
     },
     {
+      "step": "CONFLICT_POST_EXIT",
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    },
+    {
+      "step": "CONFLICT_POST_CANCEL_ORDERS",
+      "recorded_utc": "2026-08-20T15:39:51.143Z"
+    },
+    {
       "step": "CONFLICT_POST_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:43:30.902Z"
+      "recorded_utc": "2026-08-20T15:39:54.153Z"
     },
     {
       "step": "SESSION_END_FLAT_OK",
-      "recorded_utc": "2026-08-03T02:43:30.932Z"
+      "recorded_utc": "2026-08-20T15:39:54.183Z"
     }
   ],
   "proof_passed": true,

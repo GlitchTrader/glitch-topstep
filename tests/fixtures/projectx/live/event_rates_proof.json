@@ -1,16 +1,16 @@
 {
   "schema_version": "glitch.projectx.event_rates_proof.v1",
-  "captured_utc": "2026-08-03T01:36:13.047Z",
+  "captured_utc": "2026-08-20T15:54:18.184Z",
   "mode": "retrospective",
   "scope": {
-    "account_id": 26080387,
-    "account_name": "PRAC-V2-645601-15979101",
+    "account_id": 26282486,
+    "account_name": "PRAC-V2-645601-47191819",
     "contract_id": "CON.F.US.MNQ.U26",
     "instrument": "MNQ"
   },
   "observation": {
-    "window_start_utc": "2026-08-03T01:07:13.648Z",
-    "window_end_utc": "2026-08-03T01:37:13.648Z",
+    "window_start_utc": "2026-08-20T15:24:22.920Z",
+    "window_end_utc": "2026-08-20T15:54:22.920Z",
     "duration_minutes": 30
   },
   "retention_policy": {
@@ -19,245 +19,250 @@
     "maximum_market_events_between_prunes": 509999
   },
   "stream_rates_per_second": {
-    "quote": 13.272777777777778,
-    "market_trade": 4.432777777777778,
-    "depth": 13.280555555555555
+    "quote": 41.74055555555555,
+    "market_trade": 19.595,
+    "depth": 62.36555555555555
   },
   "event_totals": {
-    "quote": 23891,
-    "market_trade": 7979,
-    "depth": 23905
+    "quote": 75133,
+    "market_trade": 35271,
+    "depth": 112258
   },
   "minute_buckets": [
     {
-      "minute_utc": "2026-08-03T01:07:00Z",
-      "quote": 630,
-      "market_trade": 245,
-      "depth": 632,
-      "market_event_total": 1507
+      "minute_utc": "2026-08-20T15:24:00Z",
+      "quote": 1628,
+      "market_trade": 864,
+      "depth": 2516,
+      "market_event_total": 5008
     },
     {
-      "minute_utc": "2026-08-03T01:08:00Z",
-      "quote": 821,
-      "market_trade": 226,
-      "depth": 821,
-      "market_event_total": 1868
+      "minute_utc": "2026-08-20T15:25:00Z",
+      "quote": 2619,
+      "market_trade": 1289,
+      "depth": 4146,
+      "market_event_total": 8054
     },
     {
-      "minute_utc": "2026-08-03T01:09:00Z",
-      "quote": 769,
-      "market_trade": 241,
-      "depth": 769,
-      "market_event_total": 1779
+      "minute_utc": "2026-08-20T15:26:00Z",
+      "quote": 2556,
+      "market_trade": 1175,
+      "depth": 3911,
+      "market_event_total": 7642
     },
     {
-      "minute_utc": "2026-08-03T01:10:00Z",
-      "quote": 765,
-      "market_trade": 249,
-      "depth": 765,
-      "market_event_total": 1779
+      "minute_utc": "2026-08-20T15:27:00Z",
+      "quote": 2608,
+      "market_trade": 1279,
+      "depth": 4061,
+      "market_event_total": 7948
     },
     {
-      "minute_utc": "2026-08-03T01:11:00Z",
-      "quote": 792,
-      "market_trade": 255,
-      "depth": 791,
-      "market_event_total": 1838
+      "minute_utc": "2026-08-20T15:28:00Z",
+      "quote": 2725,
+      "market_trade": 1260,
+      "depth": 3826,
+      "market_event_total": 7811
     },
     {
-      "minute_utc": "2026-08-03T01:12:00Z",
-      "quote": 813,
-      "market_trade": 223,
-      "depth": 815,
-      "market_event_total": 1851
+      "minute_utc": "2026-08-20T15:29:00Z",
+      "quote": 2924,
+      "market_trade": 1178,
+      "depth": 3878,
+      "market_event_total": 7980
     },
     {
-      "minute_utc": "2026-08-03T01:13:00Z",
-      "quote": 852,
-      "market_trade": 369,
-      "depth": 852,
-      "market_event_total": 2073
+      "minute_utc": "2026-08-20T15:30:00Z",
+      "quote": 2704,
+      "market_trade": 1351,
+      "depth": 4041,
+      "market_event_total": 8096
     },
     {
-      "minute_utc": "2026-08-03T01:14:00Z",
-      "quote": 820,
-      "market_trade": 292,
-      "depth": 818,
-      "market_event_total": 1930
+      "minute_utc": "2026-08-20T15:31:00Z",
+      "quote": 2496,
+      "market_trade": 1025,
+      "depth": 3558,
+      "market_event_total": 7079
     },
     {
-      "minute_utc": "2026-08-03T01:15:00Z",
-      "quote": 843,
-      "market_trade": 237,
-      "depth": 846,
-      "market_event_total": 1926
+      "minute_utc": "2026-08-20T15:32:00Z",
+      "quote": 2477,
+      "market_trade": 1118,
+      "depth": 3752,
+      "market_event_total": 7347
     },
     {
-      "minute_utc": "2026-08-03T01:16:00Z",
-      "quote": 833,
-      "market_trade": 322,
-      "depth": 834,
-      "market_event_total": 1989
+      "minute_utc": "2026-08-20T15:33:00Z",
+      "quote": 2633,
+      "market_trade": 1415,
+      "depth": 4230,
+      "market_event_total": 8278
     },
     {
-      "minute_utc": "2026-08-03T01:17:00Z",
-      "quote": 838,
-      "market_trade": 247,
-      "depth": 839,
-      "market_event_total": 1924
+      "minute_utc": "2026-08-20T15:34:00Z",
+      "quote": 2580,
+      "market_trade": 1339,
+      "depth": 4210,
+      "market_event_total": 8129
     },
     {
-      "minute_utc": "2026-08-03T01:18:00Z",
-      "quote": 781,
-      "market_trade": 316,
-      "depth": 782,
-      "market_event_total": 1879
+      "minute_utc": "2026-08-20T15:35:00Z",
+      "quote": 2491,
+      "market_trade": 1194,
+      "depth": 3768,
+      "market_event_total": 7453
     },
     {
-      "minute_utc": "2026-08-03T01:19:00Z",
-      "quote": 729,
-      "market_trade": 267,
-      "depth": 730,
-      "market_event_total": 1726
+      "minute_utc": "2026-08-20T15:36:00Z",
+      "quote": 2484,
+      "market_trade": 1226,
+      "depth": 3900,
+      "market_event_total": 7610
     },
     {
-      "minute_utc": "2026-08-03T01:20:00Z",
-      "quote": 822,
-      "market_trade": 351,
-      "depth": 822,
-      "market_event_total": 1995
+      "minute_utc": "2026-08-20T15:37:00Z",
+      "quote": 2507,
+      "market_trade": 1224,
+      "depth": 3840,
+      "market_event_total": 7571
     },
     {
-      "minute_utc": "2026-08-03T01:21:00Z",
-      "quote": 762,
-      "market_trade": 269,
-      "depth": 762,
-      "market_event_total": 1793
+      "minute_utc": "2026-08-20T15:38:00Z",
+      "quote": 2459,
+      "market_trade": 1211,
+      "depth": 3842,
+      "market_event_total": 7512
     },
     {
-      "minute_utc": "2026-08-03T01:22:00Z",
-      "quote": 763,
-      "market_trade": 278,
-      "depth": 763,
-      "market_event_total": 1804
+      "minute_utc": "2026-08-20T15:39:00Z",
+      "quote": 2425,
+      "market_trade": 1222,
+      "depth": 3800,
+      "market_event_total": 7447
     },
     {
-      "minute_utc": "2026-08-03T01:23:00Z",
-      "quote": 667,
-      "market_trade": 229,
-      "depth": 669,
-      "market_event_total": 1565
+      "minute_utc": "2026-08-20T15:40:00Z",
+      "quote": 2479,
+      "market_trade": 1154,
+      "depth": 3508,
+      "market_event_total": 7141
     },
     {
-      "minute_utc": "2026-08-03T01:24:00Z",
-      "quote": 784,
-      "market_trade": 229,
-      "depth": 783,
-      "market_event_total": 1796
+      "minute_utc": "2026-08-20T15:41:00Z",
+      "quote": 2471,
+      "market_trade": 1095,
+      "depth": 3488,
+      "market_event_total": 7054
     },
     {
-      "minute_utc": "2026-08-03T01:25:00Z",
-      "quote": 803,
-      "market_trade": 362,
-      "depth": 804,
-      "market_event_total": 1969
+      "minute_utc": "2026-08-20T15:42:00Z",
+      "quote": 2499,
+      "market_trade": 1220,
+      "depth": 3760,
+      "market_event_total": 7479
     },
     {
-      "minute_utc": "2026-08-03T01:26:00Z",
-      "quote": 735,
-      "market_trade": 240,
-      "depth": 735,
-      "market_event_total": 1710
+      "minute_utc": "2026-08-20T15:43:00Z",
+      "quote": 2461,
+      "market_trade": 1181,
+      "depth": 3626,
+      "market_event_total": 7268
     },
     {
-      "minute_utc": "2026-08-03T01:27:00Z",
-      "quote": 826,
-      "market_trade": 294,
-      "depth": 826,
-      "market_event_total": 1946
+      "minute_utc": "2026-08-20T15:44:00Z",
+      "quote": 2289,
+      "market_trade": 880,
+      "depth": 2944,
+      "market_event_total": 6113
     },
     {
-      "minute_utc": "2026-08-03T01:28:00Z",
-      "quote": 741,
-      "market_trade": 250,
-      "depth": 741,
-      "market_event_total": 1732
+      "minute_utc": "2026-08-20T15:45:00Z",
+      "quote": 2473,
+      "market_trade": 1117,
+      "depth": 3484,
+      "market_event_total": 7074
     },
     {
-      "minute_utc": "2026-08-03T01:29:00Z",
-      "quote": 756,
-      "market_trade": 192,
-      "depth": 757,
-      "market_event_total": 1705
+      "minute_utc": "2026-08-20T15:46:00Z",
+      "quote": 2504,
+      "market_trade": 1179,
+      "depth": 3675,
+      "market_event_total": 7358
     },
     {
-      "minute_utc": "2026-08-03T01:30:00Z",
-      "quote": 919,
-      "market_trade": 246,
-      "depth": 920,
-      "market_event_total": 2085
+      "minute_utc": "2026-08-20T15:47:00Z",
+      "quote": 2532,
+      "market_trade": 1241,
+      "depth": 3803,
+      "market_event_total": 7576
     },
     {
-      "minute_utc": "2026-08-03T01:31:00Z",
-      "quote": 845,
-      "market_trade": 197,
-      "depth": 845,
-      "market_event_total": 1887
+      "minute_utc": "2026-08-20T15:48:00Z",
+      "quote": 2440,
+      "market_trade": 1149,
+      "depth": 3588,
+      "market_event_total": 7177
     },
     {
-      "minute_utc": "2026-08-03T01:32:00Z",
-      "quote": 810,
-      "market_trade": 261,
-      "depth": 812,
-      "market_event_total": 1883
+      "minute_utc": "2026-08-20T15:49:00Z",
+      "quote": 2374,
+      "market_trade": 983,
+      "depth": 3416,
+      "market_event_total": 6773
     },
     {
-      "minute_utc": "2026-08-03T01:33:00Z",
-      "quote": 785,
-      "market_trade": 258,
-      "depth": 785,
-      "market_event_total": 1828
+      "minute_utc": "2026-08-20T15:50:00Z",
+      "quote": 2378,
+      "market_trade": 1043,
+      "depth": 3528,
+      "market_event_total": 6949
     },
     {
-      "minute_utc": "2026-08-03T01:34:00Z",
-      "quote": 779,
-      "market_trade": 201,
-      "depth": 778,
-      "market_event_total": 1758
+      "minute_utc": "2026-08-20T15:51:00Z",
+      "quote": 2336,
+      "market_trade": 1051,
+      "depth": 3525,
+      "market_event_total": 6912
     },
     {
-      "minute_utc": "2026-08-03T01:35:00Z",
-      "quote": 803,
-      "market_trade": 250,
-      "depth": 804,
-      "market_event_total": 1857
+      "minute_utc": "2026-08-20T15:52:00Z",
+      "quote": 2387,
+      "market_trade": 1264,
+      "depth": 3950,
+      "market_event_total": 7601
     },
     {
-      "minute_utc": "2026-08-03T01:36:00Z",
-      "quote": 815,
-      "market_trade": 302,
-      "depth": 815,
-      "market_event_total": 1932
+      "minute_utc": "2026-08-20T15:53:00Z",
+      "quote": 2317,
+      "market_trade": 997,
+      "depth": 3403,
+      "market_event_total": 6717
     },
     {
-      "minute_utc": "2026-08-03T01:37:00Z",
-      "quote": 190,
-      "market_trade": 81,
-      "depth": 190,
-      "market_event_total": 461
+      "minute_utc": "2026-08-20T15:54:00Z",
+      "quote": 879,
+      "market_trade": 347,
+      "depth": 1281,
+      "market_event_total": 2507
     }
   ],
   "disk": {
-    "evidence_db_bytes_start": 460980224,
-    "evidence_db_bytes_end": 462778368,
-    "evidence_db_bytes_delta": 1798144,
-    "event_count_start": 446836,
-    "event_count_end": 448713,
-    "event_count_delta": 1877,
-    "bytes_per_event": 957.9882791688865
+    "evidence_db_bytes_start": 705454080,
+    "evidence_db_bytes_end": 705454080,
+    "evidence_db_bytes_delta": 0,
+    "event_count_start": 510725,
+    "event_count_end": 511145,
+    "event_count_delta": 420,
+    "bytes_per_event": 0,
+    "sequence_start": 32690097,
+    "sequence_end": 32690517,
+    "sequence_delta": 420,
+    "retained_count_delta": 420,
+    "pruning_observed": false
   },
   "retention_observed": {
-    "peak_market_event_count": 448450,
+    "peak_market_event_count": 506355,
     "within_policy": true
   },
   "proof_passed": true,
