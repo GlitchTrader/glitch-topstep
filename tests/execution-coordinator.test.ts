@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -386,6 +386,81 @@ describe("execution coordinator serialization", () => {
       });
       assert.equal(receipt.status, "ignored");
       assert.equal(receipt.code, "no_execution_action");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks new exposure while execution evidence writes are failing", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-persistence-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let placeOrderCalls = 0;
+      const api = {
+        placeOrder: async () => {
+          placeOrderCalls += 1;
+          return 9001;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      // A directory where the ledger file belongs fails every append the way a full or
+      // read-only disk would.
+      mkdirSync(join(directory, "events.jsonl"));
+      const ledger = new JsonlEventStore(directory);
+      await assert.rejects(ledger.append({
+        schema_version: "glitch.direct.event.v1",
+        event_id: "00000000-0000-4000-8000-0000000005f0",
+        recorded_utc: now.toISOString(),
+        event: "service_started",
+        payload: {},
+      }));
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        ledger,
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+
+      const receipt = await coordinator.handleWireIntent(intent(
+        "00000000-0000-4000-8000-000000000601",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+        packet,
+      ));
+      assert.equal(receipt.status, "rejected");
+      assert.equal(receipt.code, "execution_evidence_persistence_degraded");
+      assert.equal(placeOrderCalls, 0);
+      assert.equal(ledger.status().durable, false);
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });

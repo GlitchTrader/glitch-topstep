@@ -470,6 +470,8 @@ export class GlitchTopstepService {
           this.config.risk,
           recordedAt,
         );
+        const eventLedger = this.ledger.status();
+        const outcomeFeed = this.tradeOutcomeStore.status();
         return {
           schema_version: "glitch.direct.health.v2",
           compatibility: GATEWAY_COMPATIBILITY,
@@ -479,6 +481,8 @@ export class GlitchTopstepService {
             && providerHistory.lastError === null
             && marketObservation.last_error === null
             && orderFlow.last_error === null
+            && eventLedger.durable
+            && outcomeFeed.export_backlog === 0
               ? "ok"
               : "degraded",
           trading_mode: this.config.tradingMode,
@@ -501,8 +505,16 @@ export class GlitchTopstepService {
           provider_history: providerHistory,
           market_observation: marketObservation,
           order_flow: orderFlow,
-          outcome_feed: this.tradeOutcomeStore.status(),
-          event_ledger: this.ledger.status(),
+          outcome_feed: outcomeFeed,
+          event_ledger: eventLedger,
+          persistence: {
+            new_exposure_blocked: !eventLedger.durable,
+            event_ledger_backlog: eventLedger.pending,
+            event_ledger_failed_writes: eventLedger.failed_writes,
+            outcome_export_backlog: outcomeFeed.export_backlog,
+            outcome_export_failures: outcomeFeed.export_failures,
+            outcome_export_quarantine: outcomeFeed.quarantine,
+          },
           protected_reduction: this.coordinator?.protectedReductionHealth(current) ?? {
             active_state: null,
             active_reduction_id: null,

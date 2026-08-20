@@ -1,7 +1,18 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+import { quarantineCorruptTail, writeFileAtomic, type QuarantineRecord } from "./atomic-file.js";
 import { SqliteOutcomeFeed, type OutcomeFeedStatus, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
+
+export interface TradeOutcomeStoreStatus {
+  pending: number;
+  last_write_error: string | null;
+  export_backlog: number;
+  export_failures: number;
+  last_export_error: string | null;
+  quarantine: QuarantineRecord | null;
+  feed: OutcomeFeedStatus;
+}
 
 export class TradeOutcomeStore {
   private readonly path: string;
@@ -12,6 +23,10 @@ export class TradeOutcomeStore {
   private writeChain: Promise<void> = Promise.resolve();
   private loaded = false;
   private lastWriteError: string | null = null;
+  private exportBacklog = 0;
+  private exportFailures = 0;
+  private lastExportError: string | null = null;
+  private quarantine: QuarantineRecord | null = null;
 
   public constructor(
     dataDirectory: string,
@@ -36,21 +51,37 @@ export class TradeOutcomeStore {
       }
       return;
     }
+    let text: string;
     try {
-      const text = await readFile(this.path, "utf8");
-      for (const line of text.split(/\r?\n/)) {
-        if (!line.trim()) {
-          continue;
-        }
-        const row = JSON.parse(line) as TradeOutcomeV1;
-        if (typeof row.intent_id === "string") {
-          this.known.set(row.intent_id, row);
-          this.feed.publish(row, "enriched", row.exit_utc);
-        }
-      }
+      text = await readFile(this.path, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw error;
+      }
+      return;
+    }
+    const lines = text.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index] ?? "";
+      if (!line.trim()) {
+        continue;
+      }
+      let row: TradeOutcomeV1;
+      try {
+        row = JSON.parse(line) as TradeOutcomeV1;
+      } catch (error) {
+        // A torn tail is evidence, not noise: park it and keep the readable prefix.
+        this.quarantine = await quarantineCorruptTail(
+          this.path,
+          joinLines(lines.slice(0, index)),
+          joinLines(lines.slice(index)),
+          `outcome_export_parse_failed_line_${index + 1}:${error instanceof Error ? error.message : String(error)}`,
+        );
+        return;
+      }
+      if (typeof row.intent_id === "string") {
+        this.known.set(row.intent_id, row);
+        this.feed.publish(row, "enriched", row.exit_utc);
       }
     }
   }
@@ -76,49 +107,35 @@ export class TradeOutcomeStore {
       return Promise.resolve();
     }
     this.pending.add(outcome.intent_id);
-    const line = `${JSON.stringify(outcome)}\n`;
-    this.writeChain = this.writeChain.catch(() => undefined).then(async () => {
-      try {
-        this.feed.publish(outcome, outcome.learning_eligible ? "enriched" : "provisional");
-        await mkdir(dirname(this.path), { recursive: true });
-        await appendFile(this.path, line, { encoding: "utf8" });
-        if (this.mirrorPath) {
-          await mkdir(dirname(this.mirrorPath), { recursive: true });
-          await appendFile(this.mirrorPath, line, { encoding: "utf8" });
-        }
-        this.known.set(outcome.intent_id, outcome);
-        this.lastWriteError = null;
-      } catch (error) {
-        this.lastWriteError = error instanceof Error ? error.message : String(error);
-        throw error;
-      } finally {
+    return this.schedule(async () => {
+      this.commit(outcome, outcome.learning_eligible ? "enriched" : "provisional", () => {
         this.pending.delete(outcome.intent_id);
-      }
+      });
+      await this.syncExport(outcome);
     });
-    return this.writeChain;
   }
 
   public replace(outcome: TradeOutcomeV1): Promise<void> {
-    this.writeChain = this.writeChain.catch(() => undefined).then(async () => {
-      try {
-        this.feed.publish(outcome, "corrected");
-        await this.rewriteFiles(new Map(this.known).set(outcome.intent_id, outcome));
-        this.known.set(outcome.intent_id, outcome);
-        this.lastWriteError = null;
-      } catch (error) {
-        this.lastWriteError = error instanceof Error ? error.message : String(error);
-        throw error;
-      }
+    return this.schedule(async () => {
+      this.commit(outcome, "corrected");
+      await this.syncExport(null);
     });
-    return this.writeChain;
   }
 
   public revisionPage(afterSequence: number, limit: number): OutcomeRevisionPage {
     return this.feed.afterSequence(afterSequence, limit);
   }
 
-  public status(): { pending: number; last_write_error: string | null; feed: OutcomeFeedStatus } {
-    return { pending: this.pending.size, last_write_error: this.lastWriteError, feed: this.feed.status() };
+  public status(): TradeOutcomeStoreStatus {
+    return {
+      pending: this.pending.size,
+      last_write_error: this.lastWriteError,
+      export_backlog: this.exportBacklog,
+      export_failures: this.exportFailures,
+      last_export_error: this.lastExportError,
+      quarantine: this.quarantine,
+      feed: this.feed.status(),
+    };
   }
 
   public async close(): Promise<void> {
@@ -127,7 +144,7 @@ export class TradeOutcomeStore {
   }
 
   public async waitForIdle(): Promise<void> {
-    await this.writeChain.catch(() => undefined);
+    await this.writeChain;
   }
 
   public async recent(limit: number): Promise<TradeOutcomeV1[]> {
@@ -135,14 +152,68 @@ export class TradeOutcomeStore {
     return [...this.known.values()].slice(-limit);
   }
 
-  private async rewriteFiles(source = this.known): Promise<void> {
-    const body = [...source.values()].map((row) => JSON.stringify(row)).join("\n");
-    const text = body.length > 0 ? `${body}\n` : "";
-    await mkdir(dirname(this.path), { recursive: true });
-    await writeFile(this.path, text, { encoding: "utf8" });
-    if (this.mirrorPath) {
-      await mkdir(dirname(this.mirrorPath), { recursive: true });
-      await writeFile(this.mirrorPath, text, { encoding: "utf8" });
+  private schedule(work: () => Promise<void>): Promise<void> {
+    const write = this.writeChain.then(work);
+    // One failed write must not poison the writes queued behind it.
+    this.writeChain = write.then(() => undefined, () => undefined);
+    return write;
+  }
+
+  /** SQLite is authoritative, so the in-memory index only moves after that transaction commits. */
+  private commit(
+    outcome: TradeOutcomeV1,
+    status: "provisional" | "enriched" | "corrected",
+    onSettled: () => void = () => {},
+  ): void {
+    try {
+      this.feed.publish(outcome, status);
+      this.known.set(outcome.intent_id, outcome);
+      this.lastWriteError = null;
+    } catch (error) {
+      this.lastWriteError = error instanceof Error ? error.message : String(error);
+      throw error;
+    } finally {
+      onSettled();
     }
   }
+
+  /**
+   * The JSONL files mirror committed state. A failed mirror write becomes visible backlog
+   * that the next write heals with a full rewrite; it never rolls back the authoritative commit.
+   */
+  private async syncExport(appended: TradeOutcomeV1 | null): Promise<void> {
+    try {
+      if (appended && this.exportBacklog === 0) {
+        const line = `${JSON.stringify(appended)}\n`;
+        await mkdir(dirname(this.path), { recursive: true });
+        await appendFile(this.path, line, { encoding: "utf8" });
+        if (this.mirrorPath) {
+          await mkdir(dirname(this.mirrorPath), { recursive: true });
+          await appendFile(this.mirrorPath, line, { encoding: "utf8" });
+        }
+      } else {
+        await this.rewriteFiles();
+      }
+      this.exportBacklog = 0;
+      this.lastExportError = null;
+    } catch (error) {
+      this.exportBacklog += 1;
+      this.exportFailures += 1;
+      this.lastExportError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  private async rewriteFiles(): Promise<void> {
+    const body = [...this.known.values()].map((row) => JSON.stringify(row)).join("\n");
+    const text = body.length > 0 ? `${body}\n` : "";
+    await writeFileAtomic(this.path, text);
+    if (this.mirrorPath) {
+      await writeFileAtomic(this.mirrorPath, text);
+    }
+  }
+}
+
+function joinLines(lines: string[]): string {
+  const body = lines.filter((line) => line.trim().length > 0).join("\n");
+  return body.length > 0 ? `${body}\n` : "";
 }
