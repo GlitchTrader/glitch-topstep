@@ -110,7 +110,28 @@ Break-glass is only for restoring a broken production path when CI or review wou
    `gh api -X POST repos/GlitchTrader/glitch-topstep/branches/main/protection/enforce_admins`
 5. Verify `enforce_admins.enabled` is `true` and open a follow-up issue if any required check was bypassed.
 
-Never leave `enforce_admins` disabled overnight. Profile repo break-glass follows the same time box and audit note.
+Never leave `enforce_admins` disabled overnight. Profile repo break-glass follows the same time box and audit note (`GlitchTrader/glitch-topstep-hermes-profile`).
+
+## Armed promotion gate (human + evidence)
+
+Local `.env` flags alone are not a release. Promoting a pair to armed production requires:
+
+1. **Runtime ack** — `GLITCH_TRADING_MODE=armed` plus `GLITCH_ARMED_ACK=I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY` on the trader device.
+2. **GitHub Environment `armed-production`** — required reviewer, `can_admins_bypass=false`, protected branches only. Both `paired-release-candidate` (gateway) and `profile-release-candidate` (Hermes profile) use this environment.
+3. **Evidence** — workflow input `evidence_ref` must point at PRAC/shadow proof (docs path or issue URL). Empty evidence is rejected by process; the paired manifest records `prac_or_shadow_evidence_ref`.
+4. **Immutable pair** — run gateway `paired-release-candidate` with exact profile commit + `SHA256SUMS` hash + prompt version; artifacts include CycloneDX SBOM, `paired-release.json`, checksums, and provenance attestation.
+5. **Ledger** — attach artifact names + evidence ref to `docs/ledger/ledger.json` / issue #116 before claiming a new armed promotion.
+
+Dispatch example (gateway, from `main`):
+
+```powershell
+gh workflow run paired-release-candidate.yml `
+  -f profile_commit=<profile-sha> `
+  -f profile_version=0.2.0 `
+  -f profile_manifest_sha256=<sha256-of-profile-SHA256SUMS> `
+  -f prompt_version=glitch-topstep-v9 `
+  -f evidence_ref=docs/evidence/<prac-or-shadow>.md
+```
 
 ## Secret handling
 

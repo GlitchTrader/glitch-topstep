@@ -43,7 +43,7 @@ const manifest = {
   },
   validation: {
     prac_or_shadow_evidence_ref: argument("evidence-ref"),
-    partial_exit_provider_acceptance: "not_proven_fail_closed",
+    partial_exit_provider_acceptance: "proven_prac_short_long_with_saga",
   },
 };
 writeFileSync(argument("output"), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8" });
