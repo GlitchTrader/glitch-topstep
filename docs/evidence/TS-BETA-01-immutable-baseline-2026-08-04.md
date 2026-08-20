@@ -23,7 +23,7 @@ Supersedes the 2026-08-04 candidate pin (`0.1.3` / `0.1.13` on account `90809185
 | Hermes profile | `glitch-topstep` | **0.1.17** (installed `distribution.yaml`) |
 | Profile source commit | `glitch-topstep-hermes-profile` `origin/main` | `efb8c2245ffb0c8d0e6766475ffa2bcc6827e8b8` (`efb8c22`) |
 | Profile install path | `%LOCALAPPDATA%\hermes\profiles\glitch-topstep` | updated 2026-08-05 |
-| Prompt contract | gateway `GLITCH_TOPSTEP_PROMPT_VERSION` | `glitch-topstep-v9` |
+| Prompt contract | gateway `GLITCH_TOPSTEP_PROMPT_VERSION` | `glitch-topstep-v10` |
 | Health / intent schemas | `glitch.direct.health.v2`, `glitch.intent.v2` | decision packet `v1`/`v2` |
 | Outcome publisher | `TRADE_OUTCOME_PUBLISHER_VERSION` | `0.1.3-r3-03c` |
 | Compatibility | Hermes ↔ gateway | `compatible (profile 0.1.17, gateway 0.1.4)` via `/health` |
