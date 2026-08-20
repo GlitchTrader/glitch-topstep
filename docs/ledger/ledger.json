@@ -6,16 +6,18 @@
   "reconciliation": {
     "date": "2026-08-20",
     "merged_prs": [
-      128,
-      129,
-      131,
-      132,
-      133,
-      134,
-      135
+      148,
+      149,
+      150,
+      151,
+      152,
+      153,
+      155,
+      156,
+      157
     ],
-    "implementation_note": "P0–P1 sprint close-out through step 26 (MULTI-03): PROD-05/EXEC-01/MULTI-01/02/03 done with evidence docs + Hermes paired fixtures. TS-MULTI-04 stays blocked. PROD-06 and EVAL remain open.",
-    "stream_validation": "298 gateway tests passed including outcome-feed soak, lifecycle drain, CAP-02 latch/tighten, CTRL-01 stress."
+    "implementation_note": "Steps 1–26 closed except PROD-06 (step 11) and MULTI-04 (step 27 blocked). TS-EVAL-01 closed with Hermes frozen-cognition workflow + fixture diff (PR #158/#159). Housekeeping: ledger reconciliation synced 2026-08-20.",
+    "stream_validation": "351 gateway tests; Hermes 195 profile tests including frozen cognition, trigger lifecycle, learning defer."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -482,7 +484,7 @@
     {
       "id": "TS-EVAL-01",
       "title": "Comparative cognition evaluation on frozen evidence corpus",
-      "status": "open",
+      "status": "done",
       "priority": "P2",
       "owner_role": "operator_tests",
       "issue": 68,
@@ -496,8 +498,14 @@
       ],
       "sources": [
         "docs/PARITY.md",
-        "docs/OPERATIONS.md"
-      ]
+        "docs/OPERATIONS.md",
+        "docs/evidence/TS-EVAL-01-frozen-cognition-proof-2026-08-20.md",
+        "glitch-topstep-hermes-profile:scripts/run-frozen-cognition.py",
+        "glitch-topstep-hermes-profile:scripts/evaluate-frozen-cognition.py",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/68"
+      ],
+      "implementation_note": "Hermes run-frozen-cognition + evaluate-frozen-cognition; fixture corpus diff; OPERATIONS procedure. evaluation_only, armed_promotion_allowed=false.",
+      "last_verified_utc": "2026-08-20T23:10:00Z"
     },
     {
       "id": "TS-MULTI-01",
@@ -1332,12 +1340,10 @@
       "daily_capture": "context_only_default_0.5_percent_not_a_quota"
     },
     "external_validation_pending": [
-      "capture ProjectX PRAC partial-exit bracket behavior",
-      "run bounded evidence burst and soak above captured TS-R2-07 rates",
-      "run two real prompt artifacts over one frozen cognition corpus",
-      "complete simulated armed sessions for MNQ, MES, and MCL exact contracts",
-      "prove simultaneous portfolio exposure in simulation before enabling it",
-      "publish and attest an immutable paired release manifest"
+      "capture ProjectX PRAC partial-exit bracket behavior (live E2E)",
+      "multi-hour PROD-05 soak SLO dashboards",
+      "live armed trade outcome on MCL/MCLE (PARITY residual)",
+      "prove simultaneous portfolio exposure in simulation before enabling MULTI-04"
     ],
     "github_controls_verified": [
       "main protection on both repositories: PR, one approval, CODEOWNERS, resolved conversations, strict required checks, linear history, admin enforcement, no force-push, no deletion",
@@ -1418,9 +1424,8 @@
       "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd"
     },
     "next": [
-      "add per-contract reconnect and rate-budget evidence",
-      "pair the complete candidate ledger with Hermes before any selected-contract execution work",
-      "complete TS-MULTI-03 account-wide execution admission and simulated MES/MCL sessions"
+      "TS-PROD-06 incremental state-machine extraction",
+      "TS-MULTI-04 blocked until portfolio risk simulation proves simultaneous exposure"
     ],
     "ts_multi_03_foundation": {
       "status": "admission_wired_pending_acceptance",
