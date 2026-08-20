@@ -35,6 +35,7 @@ import {
   partialExitFailClosedEnabled,
   type ProtectedReductionHealth,
 } from "./protected-reduction-saga.js";
+import { evaluateProtectionHealth } from "./protection-supervisor.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -1317,42 +1318,13 @@ export class ExecutionCoordinator {
   }
 
   public protectedReductionHealth(snapshot: AccountVenueSnapshot = this.snapshot()): ProtectedReductionHealth {
-    const active = this.store.activeProtectedReduction();
-    const attributable = this.attributableTranches();
-    let unprotected = 0;
-    for (const tranche of attributable) {
-      const protection = bindProtection(
-        tranche.intent_id,
-        snapshot.openOrders,
-        this.config.scope.accountId,
-        this.config.scope.contractId,
-        snapshot.instrumentOpenContracts > 0,
-        tranche.entry_order_id,
-      );
-      const stopCovered = protection.stop.providerOrderId !== null
-        || (active?.state === "degraded_stop_only" && active.survivor_stop_order_id !== null);
-      if (!stopCovered) {
-        unprotected += tranche.remaining_qty;
-      }
-    }
-    const orphans = snapshot.instrumentOpenContracts === 0
-      ? snapshot.openOrders.filter(
-        (order) => order.accountId === this.config.scope.accountId
-          && order.contractId === this.config.scope.contractId
-          && isProtectiveCustomTag(order.customTag),
-      ).length
-      : 0;
-    const ambiguousAgeMs = active?.state === "reduction_ambiguous"
-      ? Math.max(0, Date.now() - Date.parse(active.updated_utc))
-      : null;
-    return {
-      active_state: active?.state ?? null,
-      active_reduction_id: active?.reduction_id ?? null,
-      unprotected_open_quantity: unprotected,
-      orphan_protective_orders: orphans,
-      ambiguous_age_ms: ambiguousAgeMs,
-      fail_closed_rollback: partialExitFailClosedEnabled(),
-    };
+    return evaluateProtectionHealth({
+      snapshot,
+      tranches: this.attributableTranches(),
+      activeReduction: this.store.activeProtectedReduction(),
+      accountId: this.config.scope.accountId,
+      contractId: this.config.scope.contractId,
+    });
   }
 
   private async cancelTrancheProtectionOrders(
