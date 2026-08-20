@@ -65,7 +65,8 @@
     "TS-CAP-01",
     "TS-MKT-01",
     "TS-ENTRY-01",
-    "TS-PROD-04"
+    "TS-PROD-04",
+    "TS-R4-09"
   ],
   "items": [
     {
@@ -593,6 +594,40 @@
         "src/execution/coordinator.ts",
         "glitch-topstep-hermes-profile:GTHP-020"
       ]
+    },
+    {
+      "id": "TS-R4-09",
+      "title": "Structural levels and price/delta relationship in decision packet",
+      "status": "done",
+      "priority": "P2",
+      "owner_role": "market_evidence",
+      "issue": null,
+      "depends_on": [
+        "TS-R4-07",
+        "TS-MKT-01"
+      ],
+      "acceptance": [
+        "Packet v2 carries structural_levels with PDH/PDL, session open, VWAP 5m, swing bars, tape 60s, and EMA 200 when computable.",
+        "Packet v2 carries price_delta_relationship with 15/60/300s alignment summary.",
+        "Fields are evidence-only; no ENTER_* rejection on structural or delta alignment alone.",
+        "Regression tests and paired profile GTHP-031 consumption."
+      ],
+      "stop_line": "Evidence only — no strategy gates on structural alignment or price/delta conflict.",
+      "evidence": [
+        "src/market/structural-levels.ts",
+        "src/market/price-delta-relationship.ts",
+        "src/hermes/packet-builder.ts structural_levels price_delta_relationship",
+        "tests/structural-levels.test.ts",
+        "tests/price-delta-relationship.test.ts",
+        "docs/evidence/ISSUE-74-structural-packet-proof-2026-08-20.md",
+        "npm run check 365/365 green",
+        "gateway 0.2.1 paired with profile 0.2.1"
+      ],
+      "sources": [
+        "glitch-topstep-hermes-profile:GTHP-031",
+        "glitch-topstep-hermes-profile/issues/74"
+      ],
+      "last_verified_utc": "2026-08-20T20:00:00Z"
     },
     {
       "id": "TS-PROD-01",

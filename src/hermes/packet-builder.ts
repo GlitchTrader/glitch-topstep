@@ -48,6 +48,11 @@ import {
   buildStreamHealthPacket,
   type StreamHealthPacket,
 } from "../policy/stream-health.js";
+import { buildStructuralLevels, type StructuralLevelsPacket } from "../market/structural-levels.js";
+import {
+  buildPriceDeltaRelationship,
+  type PriceDeltaRelationshipPacket,
+} from "../market/price-delta-relationship.js";
 
 export interface DirectDecisionPacket {
   schema_version: "glitch.direct.decision_packet.v2";
@@ -108,6 +113,8 @@ export interface DirectDecisionPacket {
   };
   market_observation: MarketObservationState;
   order_flow: ProjectXOrderFlowState;
+  structural_levels: StructuralLevelsPacket;
+  price_delta_relationship: PriceDeltaRelationshipPacket;
   data_quality: {
     /** Venue/execution-critical completeness (streams, quote/state age). Matches execution gate state_complete. */
     state_complete: boolean;
@@ -510,6 +517,17 @@ export function buildDecisionPacket(
     optionalIssues.push("order_flow_depth_unavailable");
   }
 
+  const structuralLevels = buildStructuralLevels({
+    generatedUtc: createdUtc,
+    sessionHigh: sessionLevels.session_high,
+    sessionLow: sessionLevels.session_low,
+    sessionOpen: sessionLevels.session_open,
+    sessionLevelsReliable: sessionLevels.reliable,
+    marketObservation,
+    orderFlow: publishedOrderFlow,
+  });
+  const priceDeltaRelationship = buildPriceDeltaRelationship(publishedOrderFlow, createdUtc);
+
   return {
     schema_version: "glitch.direct.decision_packet.v2",
     packet_id: packetId,
@@ -571,6 +589,8 @@ export function buildDecisionPacket(
     },
     market_observation: structuredClone(marketObservation),
     order_flow: structuredClone(publishedOrderFlow),
+    structural_levels: structuralLevels,
+    price_delta_relationship: priceDeltaRelationship,
     data_quality: {
       state_complete: requiredIssues.length === 0,
       issues: requiredIssues,
