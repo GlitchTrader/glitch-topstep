@@ -309,6 +309,20 @@ export class ExecutionCoordinator {
       });
     }
 
+    if (!this.ledger.isDurable()) {
+      // Evidence for the prior mutation is not provably on disk, so execution truth is
+      // uncertain. The rejection receipt below retries the ledger write and clears the
+      // block once it lands.
+      const ledger = this.ledger.status();
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "execution_evidence_persistence_degraded",
+        detail: `The execution evidence ledger has ${ledger.consecutive_failures} consecutive failed writes; new exposure is blocked until an append is durable.`,
+        ...(ledger.last_write_error === null ? {} : { error: ledger.last_write_error }),
+      });
+    }
+
     const recovery = this.store.recoveryStatus();
     if (recovery.blockingNewExposure) {
       return this.record({
