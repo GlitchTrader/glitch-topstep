@@ -1,0 +1,101 @@
+﻿{
+  "health_execution_facts": {
+    "live": 90,
+    "superseded": 0,
+    "high_water_sequence": 90
+  },
+  "gateway_commit_hint": "83dc516",
+  "health_provider_evidence_queue": {
+    "depth": 3,
+    "identity_depth": 0,
+    "oldest_age_ms": 420,
+    "degraded": false,
+    "high_water_mark": 5000,
+    "coalesce_watermark": 1000,
+    "high_water_hits": 0,
+    "enqueued": 32414,
+    "persisted": 32373,
+    "coalesced": {
+      "identity": 0,
+      "quote": 21,
+      "depth": 17,
+      "print": 0
+    },
+    "dropped": {
+      "identity": 0,
+      "quote": 0,
+      "depth": 0,
+      "print": 0
+    },
+    "last_batch_size": 3,
+    "last_write_latency_ms": 0,
+    "max_write_latency_ms": 122,
+    "write_failures": 0,
+    "consecutive_write_failures": 0,
+    "apply_failures": 0,
+    "resume_cursor": 33612336,
+    "closed": false
+  },
+  "facts_page": {
+    "schema_version": "glitch.topstep.execution_facts.v1",
+    "after_sequence": 0,
+    "high_water_sequence": 90,
+    "count": 3,
+    "facts": [
+      {
+        "sequence": 1,
+        "fact_id": "fact:3f0435e5-dc64-4838-998b-38b8139dc2b4:intent_admitted",
+        "intent_id": "3f0435e5-dc64-4838-998b-38b8139dc2b4",
+        "phase": "intent_admitted",
+        "revision": 1,
+        "recorded_utc": "2026-08-19T20:48:18.382Z",
+        "status": "live",
+        "superseded_utc": null,
+        "superseded_by": null,
+        "content_hash": "",
+        "detail": {
+          "action": "ENTER_SHORT",
+          "decision_latency_ms": 18
+        },
+        "diagnostics": {}
+      },
+      {
+        "sequence": 2,
+        "fact_id": "fact:3f0435e5-dc64-4838-998b-38b8139dc2b4:intent_rejected",
+        "intent_id": "3f0435e5-dc64-4838-998b-38b8139dc2b4",
+        "phase": "intent_rejected",
+        "revision": 1,
+        "recorded_utc": "2026-08-19T20:48:19.722Z",
+        "status": "live",
+        "superseded_utc": null,
+        "superseded_by": null,
+        "content_hash": "",
+        "detail": {
+          "status": "rejected",
+          "code": "projectx_mutation_rejected",
+          "provider_order_id": null,
+          "transport_or_provider_detail": "ProjectXApiError:Trading is currently unavailable. The instrument is not in an active trading status."
+        },
+        "diagnostics": {}
+      },
+      {
+        "sequence": 3,
+        "fact_id": "fact:33fa8e1e-d19c-422d-ac43-efb12061d97c:intent_admitted",
+        "intent_id": "33fa8e1e-d19c-422d-ac43-efb12061d97c",
+        "phase": "intent_admitted",
+        "revision": 1,
+        "recorded_utc": "2026-08-19T20:49:25.262Z",
+        "status": "live",
+        "superseded_utc": null,
+        "superseded_by": null,
+        "content_hash": "",
+        "detail": {
+          "action": "ENTER_SHORT",
+          "decision_latency_ms": 12
+        },
+        "diagnostics": {}
+      }
+    ]
+  },
+  "captured_utc": "2026-08-20T18:35:40.300Z"
+}
