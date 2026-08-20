@@ -518,7 +518,9 @@
       "sources": [
         "docs/PARITY.md",
         "src/service.ts"
-      ]
+      ],
+      "implementation_note": "docs/PARITY.md instrument row updated to the allowlist + single-armed-contract reality. Tests pin MCL as an operator alias that only arms the exact MCLE contract and prove a second contract stays observation-only while another holds the account. Keep open: the remaining acceptance is a live armed MCL/MCLE session; that historical outcome is still recorded as unknown.",
+      "last_verified_utc": "2026-08-20T18:05:00Z"
     },
     {
       "id": "TS-R4-07",
@@ -1015,7 +1017,9 @@
         "https://gateway.docs.projectx.com/docs/realtime/",
         "https://gateway.docs.projectx.com/docs/getting-started/rate-limits/",
         "https://github.com/GlitchTrader/glitch-topstep/issues/124"
-      ]
+      ],
+      "implementation_note": "Fake-hub tests prove the market supervisor restores every configured subscription exactly once after automatic reconnect and after a hub restart, deduplicating repeated allowlist entries. RateAwareScheduler now measures peak starts per ProjectX 30s history window; warming 4-6 instruments leaves 20 of 50 history requests spare at the maximum configurable rate. MultiInstrumentMarketDataPlane is asserted directly for per-contract partitioning and stale-instrument isolation. Keep open: no live 4-6 instrument soak, and REST 'other' calls (200/60s) still have no dedicated bucket.",
+      "last_verified_utc": "2026-08-20T18:05:00Z"
     },
     {
       "id": "TS-MULTI-03",
@@ -1051,8 +1055,8 @@
         "https://gateway.docs.projectx.com/docs/realtime/",
         "https://github.com/GlitchTrader/glitch-topstep/issues/125"
       ],
-      "implementation_note": "Portfolio admission now builds existing ProtectedExposure from venue snapshot (foreign fail-closed). Keep open: depends on MULTI-02/PROD-07/ENTRY-01 and live multi-contract armed proof.",
-      "last_verified_utc": "2026-08-20T16:43:09Z"
+      "implementation_note": "Portfolio admission builds existing ProtectedExposure from the venue snapshot (foreign fail-closed). Tests now cover the account-wide runtime lock scoped per account, foreign exposure the caller observed but could not price, unpriceable existing exposure rejected even with simultaneous exposure opted in, and additive account-wide downside against the hard loss floor. simultaneous_exposure_enabled stays false by default. Keep open: depends on MULTI-02/PROD-07/ENTRY-01 and live multi-contract armed proof.",
+      "last_verified_utc": "2026-08-20T18:05:00Z"
     }
   ],
   "roadmap_only": [

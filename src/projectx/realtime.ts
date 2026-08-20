@@ -52,9 +52,11 @@ export interface ProjectXRealtimeOptions {
   isMarketExpectedLive?: () => boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
+  /** Test seam: lets a fake hub replace the SignalR transport without changing lifecycle wiring. */
+  connectionFactory?: (kind: VenueStreamKind, url: string) => SignalRConnection;
 }
 
-interface SignalRConnection {
+export interface SignalRConnection {
   start(): Promise<void>;
   stop(): Promise<void>;
   invoke(methodName: string, ...args: unknown[]): Promise<unknown>;
@@ -100,16 +102,15 @@ export class ProjectXRealtimeClient {
       nextRetryDelayInMilliseconds: (context: { previousRetryCount: number }) =>
         nextSignalRReconnectDelayMs(context.previousRetryCount),
     };
-    this.userConnection = new HubConnectionBuilder()
-      .withUrl(options.userHubUrl, signalROptions)
-      .configureLogging(options.logLevel ?? LogLevel.Warning)
-      .withAutomaticReconnect(reconnectPolicy)
-      .build();
-    this.marketConnection = new HubConnectionBuilder()
-      .withUrl(options.marketHubUrl, signalROptions)
-      .configureLogging(options.logLevel ?? LogLevel.Warning)
-      .withAutomaticReconnect(reconnectPolicy)
-      .build();
+    const build = (kind: VenueStreamKind, url: string): SignalRConnection => (
+      options.connectionFactory?.(kind, url) ?? new HubConnectionBuilder()
+        .withUrl(url, signalROptions)
+        .configureLogging(options.logLevel ?? LogLevel.Warning)
+        .withAutomaticReconnect(reconnectPolicy)
+        .build()
+    );
+    this.userConnection = build("user", options.userHubUrl);
+    this.marketConnection = build("market", options.marketHubUrl);
 
     this.registerHandlers();
     this.registerLifecycle("user", this.userConnection, () => this.subscribeUser());

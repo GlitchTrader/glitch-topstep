@@ -60,6 +60,7 @@ import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
+import { buildScannerPacket, type ScannerPacket } from "./market/scanner-packet.js";
 import type { MarketObservationState } from "./domain/market-observation.js";
 
 const DEFAULT_PROVIDER_HISTORY = {
@@ -777,35 +778,19 @@ export class GlitchTopstepService {
       ?? this.marketObservation.current();
   }
 
-  private scannerPacket(): Record<string, unknown> {
+  private scannerPacket(): ScannerPacket {
     if (!this.scannerMarketData || !this.instrumentUniverse) {
       throw new Error("scanner_not_ready");
     }
-    const packet = this.scannerMarketData.current();
-    return {
-      ...packet,
-      account_id: this.config.scope.accountId,
-      simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
-      account_selection: {
-        schema_version: "glitch.topstep.account_selection.v1",
-        mode: "single_contract",
-        selected_instrument: this.config.scope.instrument,
-        selected_contract_id: this.config.scope.contractId,
-        scope_generation: this.instrumentUniverse.generation,
-        scope_hash: this.instrumentUniverse.scope_hash,
-        simultaneous_exposure_enabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
-      },
-      candidates: packet.candidates.map((candidate) => {
-        const snapshot = this.state.buildSnapshot(this.config.scope.accountId, candidate.contract_id);
-        return {
-          ...candidate,
-          quote: snapshot.quote,
-          open_contracts: snapshot.instrumentOpenContracts,
-          state_complete: snapshot.stateComplete,
-          state_issues: snapshot.stateIssues,
-        };
-      }),
-    };
+    return buildScannerPacket({
+      packet: this.scannerMarketData.current(),
+      accountId: this.config.scope.accountId,
+      selectedInstrument: this.config.scope.instrument,
+      selectedContractId: this.config.scope.contractId,
+      universe: this.instrumentUniverse,
+      simultaneousExposureEnabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+      candidateSnapshot: (contractId) => this.state.buildSnapshot(this.config.scope.accountId, contractId),
+    });
   }
 
   private async applyControl(input: unknown): Promise<StoredControlCommand> {
