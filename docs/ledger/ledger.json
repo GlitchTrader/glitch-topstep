@@ -713,8 +713,8 @@
         "Shutdown drains the queue or leaves a durable resumable cursor."
       ],
       "stop_line": "Do not solve event-loop blocking by weakening execution-state durability or silently dropping identity events.",
-      "implementation_note": "Stream evidence now flows through EvidenceWriteQueue: a bounded, priority-classed queue whose batched writer acknowledges the durable commit before apply runs, coalesces quotes per contract and depth per contract/side/price above the coalesce watermark, never drops or coalesces identity evidence, raises a sticky provider_evidence_backlog state issue on high-water overflow (no new exposure until the queue drains, EXIT and reconcile preserved), publishes queue depth, oldest age, batch size, write latency, coalesced and dropped counters through health, and drains on shutdown with a resumable cursor. A synthetic burst test at five times the TS-R2-07 rates covers overflow, determinism, and drain. Remaining: the writer still runs on the main thread (batching amortizes but does not remove DatabaseSync blocking), and the multi-hour live soak with event-loop p50/p95/p99 plus HTTP and heartbeat SLOs is not captured.",
-      "last_verified_utc": "2026-08-20T17:30:00Z",
+      "implementation_note": "PR #151 EvidenceWriteQueue: durable ACK before apply, identity never dropped, high-water degrade + synthetic 5x R2-07 burst. Keep open: live soak SLOs, optional worker_threads.",
+      "last_verified_utc": "2026-08-20T18:03:14Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/projectx/evidence-write-queue.ts",
@@ -979,7 +979,9 @@
         "src/storage/projectx-evidence-store.ts",
         "glitch-topstep-hermes-profile:GTHP-LEARN-02",
         "https://github.com/GlitchTrader/glitch-topstep/issues/123"
-      ]
+      ],
+      "implementation_note": "PR #153 immediate lifecycle facts on GET /execution/facts with stable fact_id/revision. Keep open: GTHP-LEARN-02 + price/slippage enrichment.",
+      "last_verified_utc": "2026-08-20T18:03:14Z"
     },
     {
       "id": "TS-MULTI-02",
