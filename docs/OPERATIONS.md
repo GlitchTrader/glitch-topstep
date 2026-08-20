@@ -135,7 +135,7 @@ gh workflow run paired-release-candidate.yml `
   -f profile_commit=<profile-sha> `
   -f profile_version=0.2.0 `
   -f profile_manifest_sha256=<sha256-of-profile-SHA256SUMS> `
-  -f prompt_version=glitch-topstep-v9 `
+  -f prompt_version=glitch-topstep-v10 `
   -f evidence_ref=docs/evidence/<prac-or-shadow>.md
 ```
 
