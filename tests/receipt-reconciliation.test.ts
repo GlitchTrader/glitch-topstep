@@ -111,6 +111,11 @@ describe("pending receipt reconciliation", () => {
       assert.equal(result.events[0]?.event, "bracket_verification_confirmed");
       assert.equal(receipt?.status, "open_protected");
       assert.equal(receipt?.code, "entry_open_with_proven_protection");
+      const facts = store.executionFactsAfter(0) as unknown as {
+        facts: Array<{ phase: string; diagnostics: { protection: { fidelity: string } } }>;
+      };
+      const confirmation = facts.facts.find((fact) => fact.phase === "protection_confirmed");
+      assert.equal(confirmation?.diagnostics.protection.fidelity, "proven");
     } finally {
       store.close();
     }

@@ -30,6 +30,7 @@ import {
   gatewayModePermitsRiskReduction,
 } from "./gateway-mode.js";
 import { maybeKill } from "./kill-hook.js";
+import { admissionDiagnostics, receiptLifecycleFact } from "./lifecycle-facts.js";
 import {
   partialExitFailClosedEnabled,
   type ProtectedReductionHealth,
@@ -241,6 +242,7 @@ export class ExecutionCoordinator {
         action: intent.action,
         decision_latency_ms: Math.max(0, Date.parse(receivedUtc) - Date.parse(intent.createdUtc)),
       },
+      diagnostics: admissionDiagnostics(intent.createdUtc, receivedUtc),
     });
 
     maybeKill("after_intent_before_outbox");
@@ -1668,16 +1670,19 @@ export class ExecutionCoordinator {
       ...(input.path === undefined ? {} : { path: input.path }),
     };
     if (receipt.intent_id) {
+      const mutation = this.store.mutationForIntent(receipt.intent_id);
+      const fact = receiptLifecycleFact(receipt.intent_id, receipt, receipt.recorded_utc, {
+        submittedUtc: mutation?.resolvedUtc ?? mutation?.submittingUtc ?? null,
+        fillObservedUtc: receipt.fill_observed_utc ?? null,
+        protectionConfirmedUtc: receipt.status === "open_protected" ? receipt.recorded_utc : null,
+      });
       this.store.recordExecutionFact({
-        intentId: receipt.intent_id,
-        phase: executionFactPhase(receipt),
-        recordedUtc: receipt.recorded_utc,
-        detail: {
-          status: receipt.status,
-          code: receipt.code,
-          provider_order_id: receipt.order_id ?? null,
-          transport_or_provider_detail: receipt.detail ?? null,
-        },
+        intentId: fact.intentId,
+        phase: fact.phase,
+        factKey: fact.factKey,
+        recordedUtc: fact.recordedUtc,
+        detail: fact.detail,
+        diagnostics: fact.diagnostics,
       });
     }
     this.store.recordReceipt({ ...receipt });
@@ -1695,23 +1700,4 @@ export class ExecutionCoordinator {
     }
     return receipt;
   }
-}
-
-function executionFactPhase(receipt: ExecutionReceipt): string {
-  if (receipt.code.includes("submitted")) {
-    return "provider_submission_acknowledged";
-  }
-  if (receipt.status === "open_protected") {
-    return "protection_confirmed";
-  }
-  if (receipt.status === "closed") {
-    return "exit_submitted_or_flat";
-  }
-  if (receipt.status === "rejected") {
-    return "intent_rejected";
-  }
-  if (receipt.status === "ambiguous") {
-    return "provider_outcome_ambiguous";
-  }
-  return "execution_receipt";
 }

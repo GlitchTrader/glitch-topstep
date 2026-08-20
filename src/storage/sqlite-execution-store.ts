@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -12,11 +13,20 @@ import { computeIntentBodyHash } from "../domain/intent-body-hash.js";
 import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import { queryExitTargetedIntentIds } from "../ownership/tranches.js";
+import { lifecycleFactId, type LifecycleDiagnostics } from "../execution/lifecycle-facts.js";
 import {
   transitionProtectedReduction,
   type ProtectedReductionRecord,
   type ProtectedReductionState,
 } from "../execution/protected-reduction-saga.js";
+
+export interface ExecutionFactWrite {
+  sequence: number;
+  factId: string;
+  revision: number;
+  /** False when the identical fact content was already recorded. */
+  recorded: boolean;
+}
 
 export type IntentRegistrationResult =
   | { status: "claimed" }
@@ -482,17 +492,91 @@ export class SqliteExecutionStore {
     `).get(tradingDayId) !== undefined;
   }
 
+  /**
+   * Appends a lifecycle fact. Identity is `fact_id`; re-recording the same moment with
+   * unchanged content is a no-op, and changed content lands as the next revision of the same
+   * identity so corrections never fork into a new fact.
+   */
   public recordExecutionFact(input: {
     intentId: string;
     phase: string;
     recordedUtc: string;
+    factKey?: string;
     detail?: Record<string, unknown>;
-  }): number {
+    diagnostics?: LifecycleDiagnostics | Record<string, unknown>;
+  }): ExecutionFactWrite {
+    const factId = lifecycleFactId(input.intentId, input.factKey ?? input.phase);
+    const detailJson = JSON.stringify(input.detail ?? {});
+    const diagnosticsJson = JSON.stringify(input.diagnostics ?? {});
+    const contentHash = createHash("sha256")
+      .update(`${input.phase}\u0000${detailJson}\u0000${diagnosticsJson}`)
+      .digest("hex");
+    const latest = this.database.prepare(`
+      SELECT sequence, revision, content_hash
+      FROM execution_facts WHERE fact_id = ? ORDER BY revision DESC, sequence DESC LIMIT 1
+    `).get(factId) as { sequence: number; revision: number; content_hash: string } | undefined;
+    if (latest?.content_hash === contentHash) {
+      return {
+        sequence: Number(latest.sequence),
+        factId,
+        revision: Number(latest.revision),
+        recorded: false,
+      };
+    }
+    const revision = Number(latest?.revision ?? 0) + 1;
     const result = this.database.prepare(`
-      INSERT INTO execution_facts (intent_id, phase, recorded_utc, detail_json)
-      VALUES (?, ?, ?, ?)
-    `).run(input.intentId, input.phase, input.recordedUtc, JSON.stringify(input.detail ?? {}));
-    return Number(result.lastInsertRowid);
+      INSERT INTO execution_facts (
+        intent_id, phase, recorded_utc, detail_json, fact_id, revision, content_hash, diagnostics_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.intentId,
+      input.phase,
+      input.recordedUtc,
+      detailJson,
+      factId,
+      revision,
+      contentHash,
+      diagnosticsJson,
+    );
+    return { sequence: Number(result.lastInsertRowid), factId, revision, recorded: true };
+  }
+
+  /**
+   * Marks the intermediate facts of an intent as superseded once the revisioned outcome
+   * carries the same truth. Rows are kept for audit and a terminal fact tells cursor
+   * consumers to stop treating them as the freshest closure.
+   */
+  public supersedeExecutionFacts(intentId: string, supersededBy: string, atUtc: string): number {
+    const updated = this.database.prepare(`
+      UPDATE execution_facts
+      SET superseded_utc = ?, superseded_by = ?
+      WHERE intent_id = ? AND superseded_utc IS NULL AND phase <> 'outcome_superseded'
+    `).run(atUtc, supersededBy, intentId);
+    const count = Number(updated.changes);
+    if (count > 0) {
+      this.recordExecutionFact({
+        intentId,
+        phase: "outcome_superseded",
+        recordedUtc: atUtc,
+        detail: { superseded_by: supersededBy, superseded_facts: count },
+      });
+    }
+    return count;
+  }
+
+  public executionFactsStatus(): { live: number; superseded: number; high_water_sequence: number } {
+    const row = this.database.prepare(`
+      SELECT
+        COALESCE(SUM(CASE WHEN superseded_utc IS NULL THEN 1 ELSE 0 END), 0) AS live,
+        COALESCE(SUM(CASE WHEN superseded_utc IS NULL THEN 0 ELSE 1 END), 0) AS superseded,
+        COALESCE(MAX(sequence), 0) AS high
+      FROM execution_facts
+    `).get() as { live: number; superseded: number; high: number };
+    return {
+      live: Number(row.live),
+      superseded: Number(row.superseded),
+      high_water_sequence: Number(row.high),
+    };
   }
 
   public executionFactsAfter(afterSequence: number, limit = 500): Record<string, unknown> {
@@ -500,7 +584,8 @@ export class SqliteExecutionStore {
       throw new Error("execution_fact_cursor_invalid");
     }
     const rows = this.database.prepare(`
-      SELECT sequence, intent_id, phase, recorded_utc, detail_json
+      SELECT sequence, intent_id, phase, recorded_utc, detail_json,
+             fact_id, revision, content_hash, diagnostics_json, superseded_utc, superseded_by
       FROM execution_facts WHERE sequence > ? ORDER BY sequence ASC LIMIT ?
     `).all(afterSequence, limit) as Array<{
       sequence: number;
@@ -508,6 +593,12 @@ export class SqliteExecutionStore {
       phase: string;
       recorded_utc: string;
       detail_json: string;
+      fact_id: string;
+      revision: number;
+      content_hash: string;
+      diagnostics_json: string;
+      superseded_utc: string | null;
+      superseded_by: string | null;
     }>;
     const high = this.database.prepare(`SELECT COALESCE(MAX(sequence), 0) AS high FROM execution_facts`)
       .get() as { high: number };
@@ -518,10 +609,17 @@ export class SqliteExecutionStore {
       count: rows.length,
       facts: rows.map((row) => ({
         sequence: Number(row.sequence),
+        fact_id: row.fact_id,
         intent_id: row.intent_id,
         phase: row.phase,
+        revision: Number(row.revision),
         recorded_utc: row.recorded_utc,
+        status: row.superseded_utc === null ? "live" : "superseded_by_outcome",
+        superseded_utc: row.superseded_utc,
+        superseded_by: row.superseded_by,
+        content_hash: row.content_hash,
         detail: JSON.parse(row.detail_json) as Record<string, unknown>,
+        diagnostics: JSON.parse(row.diagnostics_json) as Record<string, unknown>,
       })),
     };
   }
@@ -665,6 +763,16 @@ export class SqliteExecutionStore {
       ) STRICT;
       CREATE INDEX idx_protected_reductions_state
         ON protected_reductions(state, updated_utc);
+    `);
+    this.applyMigration(7, `
+      ALTER TABLE execution_facts ADD COLUMN fact_id TEXT NOT NULL DEFAULT '';
+      ALTER TABLE execution_facts ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;
+      ALTER TABLE execution_facts ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
+      ALTER TABLE execution_facts ADD COLUMN diagnostics_json TEXT NOT NULL DEFAULT '{}';
+      ALTER TABLE execution_facts ADD COLUMN superseded_utc TEXT;
+      ALTER TABLE execution_facts ADD COLUMN superseded_by TEXT;
+      UPDATE execution_facts SET fact_id = 'fact:' || intent_id || ':' || phase WHERE fact_id = '';
+      CREATE INDEX idx_execution_facts_identity ON execution_facts(fact_id, revision);
     `);
   }
 

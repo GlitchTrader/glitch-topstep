@@ -23,6 +23,7 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
     "revisioned_outcome_feed_v1",
     "multi_instrument_observation_v1",
     "protected_reduction_saga_v1",
+    "immediate_lifecycle_facts_v1",
   ]),
   semantic_revisions: Object.freeze({
     bounded_entry_range: "glitch.topstep.entry_range.v1",

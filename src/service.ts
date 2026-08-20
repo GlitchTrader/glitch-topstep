@@ -5,6 +5,7 @@ import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
 import type { OrderInfo, PositionInfo } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
+import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { reconcilePendingReceipts } from "./execution/receipt-reconciliation.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
@@ -531,6 +532,7 @@ export class GlitchTopstepService {
           market_observation: marketObservation,
           order_flow: orderFlow,
           outcome_feed: outcomeFeed,
+          execution_facts: this.executionStore.executionFactsStatus(),
           event_ledger: eventLedger,
           persistence: {
             new_exposure_blocked: !eventLedger.durable,
@@ -1149,6 +1151,37 @@ export class GlitchTopstepService {
     if (active.length > 0) {
       this.cachedOpenTranches = preferRicherClosedTranches(active, this.cachedOpenTranches);
     }
+    this.recordLifecycleFillFacts(active, new Date().toISOString(), false);
+  }
+
+  /**
+   * Publishes the current fill state of each tranche as an immediate lifecycle fact. Unchanged
+   * state is deduplicated by the store, so this can run on every reconciliation pass.
+   */
+  private recordLifecycleFillFacts(
+    tranches: readonly TrancheView[],
+    atUtc: string,
+    instrumentFlat: boolean,
+  ): void {
+    for (const tranche of tranches) {
+      const fact = trancheLifecycleFact({
+        tranche,
+        requestedQuantity: this.executionStore.registeredIntentPayload(tranche.intent_id)?.quantity ?? null,
+        recordedUtc: atUtc,
+        instrumentFlat,
+      });
+      if (!fact) {
+        continue;
+      }
+      this.executionStore.recordExecutionFact({
+        intentId: fact.intentId,
+        phase: fact.phase,
+        factKey: fact.factKey,
+        recordedUtc: fact.recordedUtc,
+        detail: fact.detail,
+        diagnostics: fact.diagnostics,
+      });
+    }
   }
 
   private enrichClosedTrancheForOutcome(tranche: TrancheView): TrancheView {
@@ -1197,6 +1230,9 @@ export class GlitchTopstepService {
     this.tradeOutcomePublication = new Promise<void>((resolve) => {
       resolvePublication = resolve;
     });
+    // Factual closure is published before the enriched outcome so the next decision does not
+    // have to wait for the learner round trip.
+    this.recordLifecycleFillFacts(tranches, exitUtc, true);
     try {
       const snapshot = this.state.buildSnapshot(
         this.config.scope.accountId,
@@ -1232,6 +1268,9 @@ export class GlitchTopstepService {
         hadExitIntentByTranche,
       });
       if (published.length > 0) {
+        for (const outcome of published) {
+          this.executionStore.supersedeExecutionFacts(outcome.intent_id, outcome.outcome_id, exitUtc);
+        }
         await this.ledger.append({
           schema_version: "glitch.direct.event.v1",
           event_id: randomUUID(),
