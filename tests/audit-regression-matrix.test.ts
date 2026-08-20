@@ -13,6 +13,10 @@ const AUDIT_REGRESSION_FILES = [
   "tests/flatten-saga.test.ts",
   "tests/evidence-write-queue.test.ts",
   "tests/market-alignment.test.ts",
+  "tests/safety-supervisor.test.ts",
+  "tests/invariant-metrics.test.ts",
+  "tests/soak-evidence-gate.test.ts",
+  "tests/data-phase-d-gate.test.ts",
 ] as const;
 
 test("TS-AUDIT-11 regression matrix files exist", () => {

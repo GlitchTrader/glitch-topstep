@@ -63,6 +63,9 @@ import {
 import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
+import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
+import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
+import type { ProjectXAuthStatus } from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
 import { buildScannerPacket, type ScannerPacket } from "./market/scanner-packet.js";
@@ -117,6 +120,9 @@ export class GlitchTopstepService {
   private storesClosed = false;
   private controlPaused = false;
   private runtimeTradingMode: TradingMode;
+  private authRefreshFailureCount = 0;
+  private lastAuthRefreshUtc: string | null = null;
+  private authDegraded = false;
   private readonly lifecycle = new LifecycleSupervisor();
   private readonly runtimeLock: RuntimeScopeLock;
   private stopping: Promise<void> | null = null;
@@ -503,6 +509,40 @@ export class GlitchTopstepService {
         );
         const eventLedger = this.ledger.status();
         const outcomeFeed = this.tradeOutcomeStore.status();
+        const protectedReduction = this.coordinator?.protectedReductionHealth(current) ?? {
+          active_state: null,
+          active_reduction_id: null,
+          unprotected_open_quantity: 0,
+          orphan_protective_orders: 0,
+          ambiguous_age_ms: null,
+          fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
+        };
+        const authStatus = this.authStatus();
+        const flattenPending = this.controlStore.hasPendingFlatten();
+        const controlCounts = this.controlStore.status();
+        const safetySupervisor = evaluateSafetySupervisor({
+          snapshot: current,
+          risk: this.config.risk,
+          tradingMode: this.config.tradingMode,
+          runtimeTradingMode: this.runtimeTradingMode,
+          operatorPaused: this.controlPaused,
+          recovery: executionRecovery,
+          maxContracts: this.config.policy.maxContracts,
+          auth: authStatus,
+          protectedReduction,
+          flattenPending,
+          now: recordedAt,
+        });
+        const invariantMetrics = buildInvariantMetrics({
+          snapshot: current,
+          auth: authStatus,
+          protectedReduction,
+          evidenceQueue: this.evidenceQueue.metrics(),
+          recovery: executionRecovery,
+          controlCounts,
+          flattenPendingAgeMs: this.controlStore.oldestPendingFlattenAgeMs(recordedAt.getTime()),
+          now: recordedAt,
+        });
         return {
           schema_version: "glitch.direct.health.v2",
           compatibility: GATEWAY_COMPATIBILITY,
@@ -548,14 +588,9 @@ export class GlitchTopstepService {
             outcome_export_failures: outcomeFeed.export_failures,
             outcome_export_quarantine: outcomeFeed.quarantine,
           },
-          protected_reduction: this.coordinator?.protectedReductionHealth(current) ?? {
-            active_state: null,
-            active_reduction_id: null,
-            unprotected_open_quantity: 0,
-            orphan_protective_orders: 0,
-            ambiguous_age_ms: null,
-            fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
-          },
+          protected_reduction: protectedReduction,
+          safety_supervisor: safetySupervisor,
+          invariant_metrics: invariantMetrics,
         };
       },
       snapshot,
@@ -597,9 +632,16 @@ export class GlitchTopstepService {
     });
 
     this.tokenRefreshTimer = setInterval(() => {
-      void this.api.validateSession().catch((error: unknown) => {
-        console.error("ProjectX session validation failed", error);
-      });
+      void this.api.validateSession()
+        .then(() => {
+          this.lastAuthRefreshUtc = new Date().toISOString();
+          this.authDegraded = false;
+        })
+        .catch((error: unknown) => {
+          this.authRefreshFailureCount += 1;
+          this.authDegraded = true;
+          console.error("ProjectX session validation failed", error);
+        });
     }, 12 * 60 * 60 * 1000);
     this.tokenRefreshTimer.unref();
     this.lifecycle.register("token_refresh_timer", () => {
@@ -696,6 +738,16 @@ export class GlitchTopstepService {
    * `state_complete` gate (no new exposure) while EXIT, reconcile and user-stream events stay
    * live under `degraded_armed`.
    */
+  private authStatus(): ProjectXAuthStatus {
+    return {
+      degraded: this.authDegraded,
+      lastRefreshUtc: this.lastAuthRefreshUtc,
+      expiresAtUtc: null,
+      refreshInFlight: false,
+      refreshFailureCount: this.authRefreshFailureCount,
+    };
+  }
+
   private handleEvidenceQueueDegraded(metrics: EvidenceQueueMetrics): void {
     this.state.markEvidenceBacklog(true);
     this.state.markPayloadFault(

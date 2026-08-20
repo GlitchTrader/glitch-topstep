@@ -6,6 +6,7 @@ export interface ProjectXAuthStatus {
   lastRefreshUtc: string | null;
   expiresAtUtc: string | null;
   refreshInFlight: boolean;
+  refreshFailureCount: number;
 }
 
 export class ProjectXAuthManager {
@@ -13,6 +14,7 @@ export class ProjectXAuthManager {
   private lastRefreshUtc: string | null = null;
   private refreshInFlight: Promise<string> | null = null;
   private degraded = false;
+  private refreshFailureCount = 0;
 
   public constructor(options: ProjectXClientOptions) {
     this.client = new ProjectXApiClient(options);
@@ -24,6 +26,7 @@ export class ProjectXAuthManager {
       lastRefreshUtc: this.lastRefreshUtc,
       expiresAtUtc: null,
       refreshInFlight: this.refreshInFlight !== null,
+      refreshFailureCount: this.refreshFailureCount,
     };
   }
 
@@ -79,6 +82,7 @@ export class ProjectXAuthManager {
       return token;
     } catch (error: unknown) {
       this.degraded = true;
+      this.refreshFailureCount += 1;
       throw error;
     }
   }
