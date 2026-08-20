@@ -29,6 +29,10 @@ export interface DepthLevelObservation {
 
 export interface DepthBookObservation {
   available: boolean;
+  /** Reconstruction succeeded before quote/geometry sanitize (TS-DATA-01 B2). */
+  raw_available?: boolean;
+  /** False when crossed geometry or quote divergence invalidates the book (TS-DATA-01 B2). */
+  integrity_valid?: boolean;
   /** Present when available is false due to validation (crossed book, quote divergence, etc.). */
   unavailable_reason: string | null;
   depth_levels_requested: number;
