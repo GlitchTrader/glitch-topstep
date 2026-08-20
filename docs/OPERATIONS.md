@@ -49,6 +49,10 @@ Before any armed test, prove:
 - stop-aware risk matches an independent spreadsheet
 - MLL floor matches the Topstep dashboard
 
+## Armed partial EXIT (fail-closed)
+
+Armed `EXIT` that reduces an open position without flattening it is rejected with `partial_exit_protection_transition_unproven` until sanitized ProjectX evidence proves native SL/TP continuity on the surviving contract. Compatibility stays `partial_exit_protection_transition: not_proven_fail_closed`. For a single local PRAC evidence run only, start the gateway with `GLITCH_PARTIAL_EXIT_ACCEPTANCE=1` in the process environment (not in committed `.env`); that opt-in lets armed partial EXIT reach ProjectX. Leave the flag unset afterwards and restart so production default is fail-closed again. Do not treat a successful run as a silent lift of the gate.
+
 ## Armed acknowledgement
 
 The scaffold requires:

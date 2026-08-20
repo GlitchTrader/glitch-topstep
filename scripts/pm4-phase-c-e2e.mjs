@@ -604,6 +604,36 @@ function isProtectiveTagForIntent(customTag, intentId, leg) {
   return new RegExp(`^glt-${escaped}(?:-r\\d+)?-${leg}$`).test(customTag);
 }
 
+function openOrderEvidence(orders) {
+  return (orders ?? []).map((order) => ({
+    id: order.id,
+    type: order.type,
+    side: order.side,
+    size: order.size,
+    status: order.status,
+    stopPrice: order.stopPrice ?? null,
+    limitPrice: order.limitPrice ?? null,
+    customTag: order.customTag ?? null,
+  }));
+}
+
+function trancheProtectionEvidence(tranches, intentIds = []) {
+  const wanted = new Set(intentIds);
+  return (tranches ?? [])
+    .filter((tranche) => tranche.remaining_qty > 0 || wanted.has(tranche.intent_id))
+    .map((tranche) => ({
+    intent_id: tranche.intent_id,
+    remaining_qty: tranche.remaining_qty,
+    filled_qty: tranche.filled_qty,
+    entry_order_id: tranche.entry_order_id ?? null,
+    protection_status: tranche.protection?.status ?? null,
+    stop_order_id: tranche.protection?.stop?.provider_order_id ?? null,
+    stop_price: tranche.protection?.stop?.price ?? null,
+    target_order_id: tranche.protection?.target?.provider_order_id ?? null,
+    target_price: tranche.protection?.target?.price ?? null,
+  }));
+}
+
 async function waitLiveProtection(steps, label, intentId, timeoutSec = 120) {
   for (let i = 0; i < timeoutSec; i++) {
     await sleep(1000);
@@ -861,6 +891,23 @@ async function runTrancheScenario(scenario, {
     });
   }
 
+  const stImmediate = await state();
+  const ownImmediate = await ownership();
+  steps.push({
+    step: `${prefix}_EXIT_B_IMMEDIATE`,
+    http: exitB.http,
+    status: exitB.body?.status,
+    code: exitB.body?.code,
+    order_id: exitB.body?.order_id ?? null,
+    detail: exitB.body?.detail ?? null,
+    open_contracts: stImmediate.instrumentOpenContracts,
+    open_orders: openOrderEvidence(stImmediate.openOrders),
+    tranches: trancheProtectionEvidence(ownImmediate.tranches, [
+      trancheAIntentIdResolved,
+      trancheBIntentIdResolved,
+    ]),
+  });
+
   const { st: stMid, own: ownMid, trancheA: trancheAMid } = await waitPartialExitSettlement(
     steps,
     prefix,
@@ -872,6 +919,11 @@ async function runTrancheScenario(scenario, {
     instrument_open: stMid.instrumentOpenContracts,
     tranche_a_remaining: trancheAMid?.remaining_qty,
     tranche_a_protection: trancheAMid?.protection?.status,
+    open_orders: openOrderEvidence(stMid.openOrders),
+    tranches: trancheProtectionEvidence(ownMid.tranches, [
+      trancheAIntentIdResolved,
+      trancheBIntentIdResolved,
+    ]),
   });
   checks.one_contract_left = stMid.instrumentOpenContracts === 1;
   checks.tranche_a_alive =
@@ -1033,26 +1085,32 @@ try {
     gateway_mode: hlth.gateway_mode,
   };
 
-  await maybePreSubmitVelocityCooldown(log.scenario_a.steps);
-  await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
-  await ensureFlat(log.scenario_a.steps);
-
-  const scenarioAConfig = {
-    prefix: "SHORT",
-    enterAction: "ENTER_SHORT",
-    moveStopDelta: -5 * TICK,
-    moveTpDelta: 5 * TICK,
-  };
-  try {
-    await runTrancheScenario(log.scenario_a, scenarioAConfig);
-  } catch (enterAError) {
-    const msg = String(enterAError?.message ?? enterAError);
-    if (!msg.includes("ENTER_A")) throw enterAError;
-    log.scenario_a.steps.push({ step: "SHORT_ENTER_A_RETRY", reason: msg });
-    await sleep(30_000);
-    await cancelWorkingOrders(log.scenario_a.steps, "ENTER_A_RETRY");
+  if (process.env.PM4_E2E_SKIP_A === "1") {
+    log.scenario_a.skipped = true;
+    log.scenario_a.reason = "PM4_E2E_SKIP_A set";
+    log.scenario_a.pass = true;
+  } else {
+    await maybePreSubmitVelocityCooldown(log.scenario_a.steps);
+    await cancelWorkingOrders(log.scenario_a.steps, "PRE_START");
     await ensureFlat(log.scenario_a.steps);
-    await runTrancheScenario(log.scenario_a, scenarioAConfig);
+
+    const scenarioAConfig = {
+      prefix: "SHORT",
+      enterAction: "ENTER_SHORT",
+      moveStopDelta: -5 * TICK,
+      moveTpDelta: 5 * TICK,
+    };
+    try {
+      await runTrancheScenario(log.scenario_a, scenarioAConfig);
+    } catch (enterAError) {
+      const msg = String(enterAError?.message ?? enterAError);
+      if (!msg.includes("ENTER_A")) throw enterAError;
+      log.scenario_a.steps.push({ step: "SHORT_ENTER_A_RETRY", reason: msg });
+      await sleep(30_000);
+      await cancelWorkingOrders(log.scenario_a.steps, "ENTER_A_RETRY");
+      await ensureFlat(log.scenario_a.steps);
+      await runTrancheScenario(log.scenario_a, scenarioAConfig);
+    }
   }
 
   const runRestart = process.env.PM4_E2E_RESTART === "1";

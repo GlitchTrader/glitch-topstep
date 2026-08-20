@@ -1,0 +1,243 @@
+{
+  "schema": "glitch.topstep.partial_exit_prac_evidence.v1",
+  "captured_utc": "2026-08-20T00:06:10.615Z",
+  "run_utc": {
+    "started": "2026-08-20T00:00:48.072Z",
+    "finished": "2026-08-20T00:04:16.859Z"
+  },
+  "account_alias": "PRAC-V2-645601-47191819",
+  "contract_id": "CON.F.US.MNQ.U26",
+  "instrument": "MNQ",
+  "side": "SHORT",
+  "gateway_head": "76410a1",
+  "acceptance_flag": "GLITCH_PARTIAL_EXIT_ACCEPTANCE=1 for this run only",
+  "projectx_accepted_partial_exit": true,
+  "receipts": {
+    "enter_a": {
+      "http": 202,
+      "status": "pending",
+      "code": "entry_submitted_pending_reconciliation",
+      "intent_id": "64f55566-a8c8-4d40-b96f-434fdef4840e"
+    },
+    "scale_in": {
+      "http": 202,
+      "status": "pending",
+      "code": "entry_submitted_pending_reconciliation",
+      "intent_id": "01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6"
+    },
+    "exit_b": {
+      "http": 202,
+      "status": "pending",
+      "code": "partial_exit_submitted_pending_reconciliation",
+      "order_id": 3425731259,
+      "detail": "exit_quantity=1;remaining=1",
+      "intent_id": "a47b5e76-56fb-4a32-9595-60a8c2556e57"
+    },
+    "move_stop_a": {
+      "http": 202,
+      "status": "pending",
+      "code": "move_stop_submitted_pending_reconciliation",
+      "detail": "new_price=29702.75"
+    },
+    "move_tp_a": {
+      "http": 422,
+      "status": "rejected",
+      "code": "target_would_widen"
+    },
+    "exit_flat": {
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    }
+  },
+  "immediate_after_exit_b": {
+    "open_contracts": 1,
+    "open_orders": [
+      {
+        "id": 3425714842,
+        "type": 4,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": 29704,
+        "limitPrice": null,
+        "customTag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-SL"
+      },
+      {
+        "id": 3425714843,
+        "type": 1,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": null,
+        "limitPrice": 29504,
+        "customTag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-TP"
+      },
+      {
+        "id": 3425729187,
+        "type": 4,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": 29703,
+        "limitPrice": null,
+        "customTag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-SL"
+      },
+      {
+        "id": 3425729188,
+        "type": 1,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": null,
+        "limitPrice": 29503,
+        "customTag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-TP"
+      }
+    ],
+    "live_tranches": [
+      {
+        "intent_id": "64f55566-a8c8-4d40-b96f-434fdef4840e",
+        "remaining_qty": 1,
+        "filled_qty": 1,
+        "entry_order_id": 3425714841,
+        "protection_status": "proven",
+        "stop_order_id": 3425714842,
+        "stop_price": 29704,
+        "target_order_id": 3425714843,
+        "target_price": 29504
+      },
+      {
+        "intent_id": "01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6",
+        "remaining_qty": 0,
+        "filled_qty": 1,
+        "entry_order_id": 3425729186,
+        "protection_status": "proven",
+        "stop_order_id": 3425729187,
+        "stop_price": 29703,
+        "target_order_id": 3425729188,
+        "target_price": 29503
+      }
+    ]
+  },
+  "after_exit_b_settled": {
+    "instrument_open": 1,
+    "tranche_a_remaining": 1,
+    "tranche_a_protection": "proven",
+    "open_orders": [
+      {
+        "id": 3425714842,
+        "type": 4,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": 29704,
+        "limitPrice": null,
+        "customTag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-SL"
+      },
+      {
+        "id": 3425714843,
+        "type": 1,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": null,
+        "limitPrice": 29504,
+        "customTag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-TP"
+      },
+      {
+        "id": 3425729187,
+        "type": 4,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": 29703,
+        "limitPrice": null,
+        "customTag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-SL"
+      },
+      {
+        "id": 3425729188,
+        "type": 1,
+        "side": 0,
+        "size": 1,
+        "status": 1,
+        "stopPrice": null,
+        "limitPrice": 29503,
+        "customTag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-TP"
+      }
+    ],
+    "live_tranches": [
+      {
+        "intent_id": "64f55566-a8c8-4d40-b96f-434fdef4840e",
+        "remaining_qty": 1,
+        "filled_qty": 1,
+        "entry_order_id": 3425714841,
+        "protection_status": "proven",
+        "stop_order_id": 3425714842,
+        "stop_price": 29704,
+        "target_order_id": 3425714843,
+        "target_price": 29504
+      },
+      {
+        "intent_id": "01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6",
+        "remaining_qty": 0,
+        "filled_qty": 1,
+        "entry_order_id": 3425729186,
+        "protection_status": "proven",
+        "stop_order_id": 3425729187,
+        "stop_price": 29703,
+        "target_order_id": 3425729188,
+        "target_price": 29503
+      }
+    ],
+    "post_exit_already_proven": "proven"
+  },
+  "surviving_tranche": {
+    "intent_id": "64f55566-a8c8-4d40-b96f-434fdef4840e",
+    "native_sl_tp": "still_working_original_ids",
+    "stop": {
+      "order_id": 3425714842,
+      "price": 29704,
+      "tag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-SL"
+    },
+    "target": {
+      "order_id": 3425714843,
+      "price": 29504,
+      "tag": "glt-64f55566-a8c8-4d40-b96f-434fdef4840e-TP"
+    },
+    "note": "Original generation tags (no -rN- rearm). MOVE_STOP later mutated this stop."
+  },
+  "exited_tranche": {
+    "intent_id": "01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6",
+    "remaining_qty_after": 0,
+    "sl_tp_still_in_open_orders": true,
+    "stop": {
+      "order_id": 3425729187,
+      "price": 29703,
+      "tag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-SL"
+    },
+    "target": {
+      "order_id": 3425729188,
+      "price": 29503,
+      "tag": "glt-01df5e48-0e9d-4a35-9795-1e0ef8ec2bd6-TP"
+    },
+    "note": "Coordinator cancel + venue snapshot still showed B SL/TP working after B remaining_qty=0 and venue size=1. Confirm on TopstepX whether these were truly live orphans or stale REST."
+  },
+  "checks": {
+    "enter_a": true,
+    "proven_a": true,
+    "scale_in": true,
+    "two_tranches": true,
+    "exit_b": true,
+    "one_contract_left": true,
+    "tranche_a_alive": true,
+    "move_stop_a": true,
+    "move_tp_a": false,
+    "exit_flat": true,
+    "flat": true
+  },
+  "pm4_all_pass": false,
+  "pm4_fail_reason": "move_tp_a target_would_widen (unrelated to partial EXIT venue accept)",
+  "recommendation": "Keep partial_exit_protection_transition fail-closed. One SHORT sample is not the matrix; exited-tranche brackets still appeared working beside the survivor.",
+  "source": "PRAC live PM-4 SHORT 2026-08-20T00:00:48Z to 00:04:16Z",
+  "secrets": "none; tokens redacted by construction"
+}

@@ -928,6 +928,98 @@ describe("position management coordinator", () => {
     }
   });
 
+  it("submits armed targeted partial EXIT when GLITCH_PARTIAL_EXIT_ACCEPTANCE=1", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-partial-exit-accept-"));
+    const store = new SqliteExecutionStore(":memory:");
+    const previous = process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE;
+    process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE = "1";
+    try {
+      const appConfig = config(directory);
+      const current = openPositionSnapshot(ENTRY_INTENT_ID);
+      current.positions[0]!.size = 2;
+      current.instrumentOpenContracts = 2;
+      current.totalOpenContracts = 2;
+      current.openOrders = [
+        ...protectiveOrders(ENTRY_INTENT_ID),
+        ...protectiveOrders(ENTRY_INTENT_ID_B),
+      ];
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        healthyRecovery(),
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let placedSize: number | undefined;
+      const cancelledOrderIds: number[] = [];
+      const api = {
+        placeOrder: async (request: { size: number }) => {
+          placedSize = request.size;
+          return 9302;
+        },
+        modifyOrder: async () => undefined,
+        cancelOrder: async (_accountId: number, orderId: number) => {
+          cancelledOrderIds.push(orderId);
+        },
+        closePosition: async () => {
+          throw new Error("closePosition should not be called for targeted partial exit");
+        },
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [
+          tranche(ENTRY_INTENT_ID, 1, 9001),
+          tranche(ENTRY_INTENT_ID_B, 1, 9002),
+        ],
+      );
+      const receipt = await coordinator.handleWireIntent({
+        schema_version: "glitch.intent.v2",
+        intent_id: "00000000-0000-4000-8000-00000000b006",
+        created_utc: now.toISOString(),
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operator_profile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshot_hash: packet.market.snapshot_hash,
+        model_version: "test",
+        prompt_version: "glitch-topstep-v9",
+        reason: "Exit the second tranche only under acceptance flag.",
+        decision_audit: audit("EXIT"),
+        quantity: 1,
+        target_intent_id: ENTRY_INTENT_ID_B,
+      });
+      assert.equal(receipt.status, "pending");
+      assert.equal(receipt.code, "partial_exit_submitted_pending_reconciliation");
+      assert.equal(placedSize, 1);
+      assert.equal(receipt.order_id, 9302);
+      assert.deepEqual(cancelledOrderIds, [9201, 9202]);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE;
+      } else {
+        process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE = previous;
+      }
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("fails partial targeted EXIT closed with split venue position rows", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-pm-split-positions-"));
     const store = new SqliteExecutionStore(":memory:");

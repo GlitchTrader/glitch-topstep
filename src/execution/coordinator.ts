@@ -503,7 +503,14 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
-    if (partialExit && this.currentMode() === "armed") {
+    // ponytail: default stays fail-closed. GLITCH_PARTIAL_EXIT_ACCEPTANCE=1 is a
+    // local operator opt-in for one PRAC evidence run; do not treat it as a
+    // permanent lift of not_proven_fail_closed.
+    if (
+      partialExit
+      && this.currentMode() === "armed"
+      && process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE !== "1"
+    ) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
