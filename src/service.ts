@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
-import type { OrderInfo, PositionInfo } from "./domain/models.js";
+import type { OrderInfo, PositionInfo, AccountVenueSnapshot } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
 import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
@@ -50,6 +50,11 @@ import {
   parseControlCommand,
   type StoredControlCommand,
 } from "./control/durable-control-store.js";
+import {
+  flattenControlCanComplete,
+  flattenControlPhaseAfterReceipt,
+  type FlattenVenueSnapshot,
+} from "./control/flatten-control-saga.js";
 import type { TradingMode } from "./domain/models.js";
 import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
@@ -554,7 +559,8 @@ export class GlitchTopstepService {
         };
       },
       snapshot,
-      () => {
+      async () => {
+        await this.ensureSelectedMarketObservationFresh();
         if (!this.packets) {
           throw new Error("packet_service_unavailable");
         }
@@ -739,16 +745,24 @@ export class GlitchTopstepService {
             this.packets?.invalidateAll();
             this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
           }
-        } else {
+        } else if (control.action === "flatten") {
           const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
-          if (current.instrumentOpenContracts === 0) {
+          const phase = flattenControlPhaseAfterReceipt(
+            "submitted",
+            this.buildFlattenVenueSnapshot(current),
+          );
+          if (flattenControlCanComplete(phase)) {
             this.controlStore.transition(control.control_id, "completed", "reconciled_already_flat_after_restart");
+          } else if (control.detail === "waiting_for_flat") {
+            this.controlStore.transition(control.control_id, "applying", "waiting_for_flat");
           } else {
             this.controlPaused = true;
             this.runtimeTradingMode = "disabled";
             this.packets?.invalidateAll();
             this.controlStore.transition(control.control_id, "failed", "flatten_application_ambiguous_requires_operator_reconciliation");
           }
+        } else {
+          this.controlStore.transition(control.control_id, "failed", "control_resume_unsupported_action");
         }
         continue;
       }
@@ -769,6 +783,15 @@ export class GlitchTopstepService {
 
   private refreshMarketObservations(): Promise<unknown> {
     return this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
+  }
+
+  /** ponytail: one coalesced refresh per /packet; scanner background timer unchanged. */
+  private async ensureSelectedMarketObservationFresh(): Promise<void> {
+    if (this.scannerMarketData) {
+      await this.scannerMarketData.refreshSelected(this.config.scope.contractId);
+      return;
+    }
+    await this.marketObservation.refresh();
   }
 
   private currentMarketObservation(): MarketObservationState {
@@ -831,6 +854,7 @@ export class GlitchTopstepService {
         }
         this.runtimeTradingMode = stored.mode!;
       } else if (stored.action === "flatten") {
+        let receiptStatus = "submitted";
         const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
         if (current.instrumentOpenContracts > 0) {
           const packet = this.packets?.current();
@@ -870,7 +894,18 @@ export class GlitchTopstepService {
           if (["rejected", "shadowed", "ambiguous"].includes(receipt.status)) {
             throw new Error(`flatten_execution_${receipt.code}`);
           }
+          receiptStatus = receipt.status;
         }
+        const settled = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
+        const phase = flattenControlPhaseAfterReceipt(
+          receiptStatus,
+          this.buildFlattenVenueSnapshot(settled),
+        );
+        this.packets?.invalidateAll();
+        if (flattenControlCanComplete(phase)) {
+          return this.controlStore.transition(stored.control_id, "completed", "venue_flat_confirmed");
+        }
+        return this.controlStore.transition(stored.control_id, "applying", "waiting_for_flat");
       }
       this.packets?.invalidateAll();
       return this.controlStore.transition(stored.control_id, "completed");
@@ -918,6 +953,37 @@ export class GlitchTopstepService {
     throw new Error("startup_scope_fetch_exhausted");
   }
 
+  private buildFlattenVenueSnapshot(snapshot: AccountVenueSnapshot): FlattenVenueSnapshot {
+    const ownWorkingOrders = snapshot.openOrders.filter(
+      (order) => order.accountId === this.config.scope.accountId
+        && order.contractId === this.config.scope.contractId,
+    ).length;
+    return {
+      instrumentOpenContracts: snapshot.instrumentOpenContracts,
+      ownWorkingOrders,
+      stateComplete: snapshot.stateComplete,
+    };
+  }
+
+  private async completePendingFlattenControls(): Promise<void> {
+    for (const control of this.controlStore.pending()) {
+      if (control.action !== "flatten" || control.status !== "applying") {
+        continue;
+      }
+      if (control.detail !== "waiting_for_flat") {
+        continue;
+      }
+      const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
+      const phase = flattenControlPhaseAfterReceipt(
+        "submitted",
+        this.buildFlattenVenueSnapshot(current),
+      );
+      if (flattenControlCanComplete(phase)) {
+        this.controlStore.transition(control.control_id, "completed", "venue_flat_confirmed");
+      }
+    }
+  }
+
   private async reconcile(): Promise<void> {
     if (this.reconciliationInFlight) {
       return;
@@ -959,6 +1025,7 @@ export class GlitchTopstepService {
           this.packets?.invalidateAll();
         },
       });
+      await this.completePendingFlattenControls();
     } catch (error) {
       this.state.markReconciliationFailed(error);
       throw error;
