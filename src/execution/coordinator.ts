@@ -30,6 +30,10 @@ import {
   gatewayModePermitsRiskReduction,
 } from "./gateway-mode.js";
 import { maybeKill } from "./kill-hook.js";
+import {
+  partialExitFailClosedEnabled,
+  type ProtectedReductionHealth,
+} from "./protected-reduction-saga.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -503,26 +507,68 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
-    // ponytail: default stays fail-closed. GLITCH_PARTIAL_EXIT_ACCEPTANCE=1 is a
-    // local operator opt-in for one PRAC evidence run; do not treat it as a
-    // permanent lift of not_proven_fail_closed.
-    if (
-      partialExit
-      && this.currentMode() === "armed"
-      && process.env.GLITCH_PARTIAL_EXIT_ACCEPTANCE !== "1"
-    ) {
+    // ponytail: armed default admits partial EXIT via ProtectedReductionSaga (#109).
+    // Emergency rollback: GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1 restores the old gate.
+    if (partialExit && this.currentMode() === "armed" && partialExitFailClosedEnabled()) {
       return this.record({
         intentId: intent.intentId,
         status: "rejected",
         code: "partial_exit_protection_transition_unproven",
-        detail: "Armed partial EXIT remains fail-closed until sanitized ProjectX evidence proves native protection continuity.",
+        detail: "Armed partial EXIT fail-closed via GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1 rollback switch.",
       });
     }
+
+    const survivorTranches = this.attributableTranches().filter(
+      (tranche) => tranche.intent_id !== intent.targetIntentId && tranche.remaining_qty > 0,
+    );
+    const survivorProtection = survivorTranches.length === 1
+      ? bindProtection(
+        survivorTranches[0]!.intent_id,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        true,
+        survivorTranches[0]!.entry_order_id,
+      )
+      : null;
+    const nowUtc = new Date().toISOString();
+    if (partialExit) {
+      this.store.beginProtectedReduction({
+        reductionId: randomUUID(),
+        exitIntentId: intent.intentId,
+        targetIntentId: intent.targetIntentId ?? null,
+        accountId: this.config.scope.accountId,
+        contractId: this.config.scope.contractId,
+        exitQuantity,
+        positionSizeBefore: positionSize,
+        survivorStopOrderId: survivorProtection?.stop.providerOrderId ?? null,
+        survivorTargetOrderId: survivorProtection?.target.providerOrderId ?? null,
+        nowUtc,
+      });
+      maybeKill("reduction_after_prepared");
+      this.store.advanceProtectedReduction(
+        intent.intentId,
+        "reduction_submitting",
+        "prepared_to_submitting",
+        new Date().toISOString(),
+      );
+    }
+
+    // Cancel only the exited tranche brackets. Never cancel the last proven survivor stop
+    // before the reduction (or a substitute stop) is on the wire.
     if (partialExit && intent.targetIntentId !== undefined) {
       const cancelError = await this.cancelTrancheProtectionOrders(snapshot, intent);
       if (cancelError) {
+        this.store.advanceProtectedReduction(
+          intent.intentId,
+          "failed",
+          "protection_cancel_failed",
+          new Date().toISOString(),
+          { detail: cancelError.detail ?? cancelError.code },
+        );
         return cancelError;
       }
+      maybeKill("reduction_after_cancel_before_place");
     }
     const request = partialExit
       ? {
@@ -549,12 +595,20 @@ export class ExecutionCoordinator {
     try {
       if (partialExit) {
         const orderId = await this.api.placeOrder(request as PlaceOrderRequest);
+        maybeKill("reduction_after_place_before_mark");
         try {
           this.store.noteMutationProviderOrderId(intent.intentId, orderId);
         } catch {
           // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
         }
         this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        this.store.advanceProtectedReduction(
+          intent.intentId,
+          "reduction_ambiguous",
+          "exit_submitted_pending_survivor_proof",
+          new Date().toISOString(),
+          { providerExitOrderId: orderId },
+        );
         return this.record({
           intentId: intent.intentId,
           status: "pending",
@@ -572,6 +626,19 @@ export class ExecutionCoordinator {
         code: "close_contract_submitted",
       });
     } catch (error) {
+      if (partialExit) {
+        try {
+          this.store.advanceProtectedReduction(
+            intent.intentId,
+            "failed",
+            "provider_partial_exit_failed",
+            new Date().toISOString(),
+            { detail: error instanceof Error ? error.message : String(error) },
+          );
+        } catch {
+          // saga row may be absent if begin failed earlier
+        }
+      }
       return this.recordMutationFailure(intent.intentId, error);
     }
   }
@@ -797,6 +864,7 @@ export class ExecutionCoordinator {
     if (snapshot.instrumentOpenContracts !== 0) {
       return false;
     }
+    this.store.markProtectedReductionsFlat(new Date().toISOString());
     const orphans = snapshot.openOrders.filter(
       (order) => order.accountId === this.config.scope.accountId
         && order.contractId === this.config.scope.contractId
@@ -954,7 +1022,7 @@ export class ExecutionCoordinator {
         this.config.scope.accountId,
         this.config.scope.contractId,
       ) ?? entry?.takeProfit1 ?? null;
-      if (historicalStop === null || historicalTarget === null) {
+      if (historicalStop === null) {
         continue;
       }
       if (!snapshot.quote) {
@@ -974,13 +1042,14 @@ export class ExecutionCoordinator {
       const sanitized = sanitizeRearmProtectionPrices(
         coverSide,
         historicalStop,
-        historicalTarget,
+        historicalTarget ?? historicalStop,
         snapshot.quote,
         snapshot.contract.tickSize,
       );
       const stopPrice = sanitized.stopPrice;
-      const targetPrice = sanitized.targetPrice;
+      const targetPrice = historicalTarget === null ? null : sanitized.targetPrice;
       const size = tranche.remaining_qty;
+      let activeReduction = this.store.activeProtectedReduction();
       try {
         if (!protection.stop.providerOrderId) {
           await this.api.placeOrder({
@@ -992,17 +1061,85 @@ export class ExecutionCoordinator {
             stopPrice,
             customTag: tags.stop,
           });
+          activeReduction = this.store.activeProtectedReduction();
+          if (activeReduction
+            && (activeReduction.state === "reduction_ambiguous"
+              || activeReduction.state === "reduction_submitting")) {
+            this.store.advanceProtectedReduction(
+              activeReduction.exit_intent_id,
+              "degraded_stop_only",
+              "survivor_stop_replaced",
+              new Date().toISOString(),
+              { detail: `tranche=${tranche.intent_id};generation=${generation}` },
+            );
+            activeReduction = this.store.activeProtectedReduction();
+          }
+          maybeKill("rearm_after_stop_before_tp");
         }
-        if (!protection.target.providerOrderId) {
-          await this.api.placeOrder({
-            accountId: this.config.scope.accountId,
-            contractId: this.config.scope.contractId,
-            type: 1,
-            side: coverSide,
-            size,
-            limitPrice: targetPrice,
-            customTag: tags.target,
-          });
+        if (targetPrice !== null && !protection.target.providerOrderId) {
+          try {
+            await this.api.placeOrder({
+              accountId: this.config.scope.accountId,
+              contractId: this.config.scope.contractId,
+              type: 1,
+              side: coverSide,
+              size,
+              limitPrice: targetPrice,
+              customTag: tags.target,
+            });
+            activeReduction = this.store.activeProtectedReduction();
+            if (activeReduction
+              && (activeReduction.state === "degraded_stop_only"
+                || activeReduction.state === "reduction_ambiguous")) {
+              this.store.advanceProtectedReduction(
+                activeReduction.exit_intent_id,
+                "reduced_protected",
+                "survivor_stop_and_target_replaced",
+                new Date().toISOString(),
+              );
+            }
+          } catch (tpError) {
+            activeReduction = this.store.activeProtectedReduction();
+            if (activeReduction && activeReduction.state === "reduction_ambiguous") {
+              try {
+                this.store.advanceProtectedReduction(
+                  activeReduction.exit_intent_id,
+                  "degraded_stop_only",
+                  "target_rearm_failed_stop_only",
+                  new Date().toISOString(),
+                  { detail: tpError instanceof Error ? tpError.message : String(tpError) },
+                );
+              } catch {
+                // best-effort
+              }
+            }
+            await this.ledger.append({
+              schema_version: "glitch.direct.event.v1",
+              event_id: randomUUID(),
+              recorded_utc: new Date().toISOString(),
+              event: "tranche_protection_rearm_target_failed",
+              payload: {
+                tranche_intent_id: tranche.intent_id,
+                remaining_qty: size,
+                stop_price: stopPrice,
+                target_price: targetPrice,
+                detail: tpError instanceof Error ? tpError.message : String(tpError),
+              },
+            });
+          }
+        } else if (
+          protection.stop.providerOrderId
+          && protection.target.providerOrderId
+        ) {
+          activeReduction = this.store.activeProtectedReduction();
+          if (activeReduction && activeReduction.state === "reduction_ambiguous") {
+            this.store.advanceProtectedReduction(
+              activeReduction.exit_intent_id,
+              "reduced_protected",
+              "survivor_protection_still_proven",
+              new Date().toISOString(),
+            );
+          }
         }
         this.rearmLatched.add(tranche.intent_id);
         changed = true;
@@ -1021,6 +1158,20 @@ export class ExecutionCoordinator {
           },
         });
       } catch (error) {
+        activeReduction = this.store.activeProtectedReduction();
+        if (activeReduction) {
+          try {
+            this.store.advanceProtectedReduction(
+              activeReduction.exit_intent_id,
+              "failed",
+              "survivor_stop_rearm_failed",
+              new Date().toISOString(),
+              { detail: error instanceof Error ? error.message : String(error) },
+            );
+          } catch {
+            // best-effort
+          }
+        }
         // An unprotected position is the one state this gateway exists to prevent, so a
         // rejected re-arm has to be visible rather than retried in silence.
         await this.ledger.append({
@@ -1041,6 +1192,45 @@ export class ExecutionCoordinator {
       }
     }
     return changed;
+  }
+
+  public protectedReductionHealth(snapshot: AccountVenueSnapshot = this.snapshot()): ProtectedReductionHealth {
+    const active = this.store.activeProtectedReduction();
+    const attributable = this.attributableTranches();
+    let unprotected = 0;
+    for (const tranche of attributable) {
+      const protection = bindProtection(
+        tranche.intent_id,
+        snapshot.openOrders,
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+        snapshot.instrumentOpenContracts > 0,
+        tranche.entry_order_id,
+      );
+      const stopCovered = protection.stop.providerOrderId !== null
+        || (active?.state === "degraded_stop_only" && active.survivor_stop_order_id !== null);
+      if (!stopCovered) {
+        unprotected += tranche.remaining_qty;
+      }
+    }
+    const orphans = snapshot.instrumentOpenContracts === 0
+      ? snapshot.openOrders.filter(
+        (order) => order.accountId === this.config.scope.accountId
+          && order.contractId === this.config.scope.contractId
+          && isProtectiveCustomTag(order.customTag),
+      ).length
+      : 0;
+    const ambiguousAgeMs = active?.state === "reduction_ambiguous"
+      ? Math.max(0, Date.now() - Date.parse(active.updated_utc))
+      : null;
+    return {
+      active_state: active?.state ?? null,
+      active_reduction_id: active?.reduction_id ?? null,
+      unprotected_open_quantity: unprotected,
+      orphan_protective_orders: orphans,
+      ambiguous_age_ms: ambiguousAgeMs,
+      fail_closed_rollback: partialExitFailClosedEnabled(),
+    };
   }
 
   private async cancelTrancheProtectionOrders(

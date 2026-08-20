@@ -22,7 +22,7 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
     "explicit_partial_completed_bars_v1",
     "revisioned_outcome_feed_v1",
     "multi_instrument_observation_v1",
-    "partial_exit_fail_closed_v1",
+    "protected_reduction_saga_v1",
   ]),
   semantic_revisions: Object.freeze({
     bounded_entry_range: "glitch.topstep.entry_range.v1",
@@ -32,7 +32,7 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
     execution_facts: "glitch.topstep.execution_fact.v1",
   }),
   provider_acceptance_evidence: Object.freeze({
-    partial_exit_protection_transition: "not_proven_fail_closed",
+    partial_exit_protection_transition: "proven_prac_short_long_with_saga",
     exact_contract_resolution: "catalog_fixture_plus_runtime_resolution",
   }),
   paired_manifest_schema: "glitch.topstep.paired_release.v1",

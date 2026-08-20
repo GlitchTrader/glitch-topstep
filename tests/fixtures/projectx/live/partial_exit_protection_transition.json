@@ -237,7 +237,7 @@
   },
   "pm4_all_pass": false,
   "pm4_fail_reason": "move_tp_a target_would_widen (unrelated to partial EXIT venue accept)",
-  "recommendation": "Keep partial_exit_protection_transition fail-closed. One SHORT sample is not the matrix; exited-tranche brackets still appeared working beside the survivor.",
+  "recommendation": "SHORT sample alone is insufficient. Pair with partial_exit_protection_transition_long.json and ProtectedReductionSaga before advertising armed partial EXIT.",
   "source": "PRAC live PM-4 SHORT 2026-08-20T00:00:48Z to 00:04:16Z",
   "secrets": "none; tokens redacted by construction"
 }

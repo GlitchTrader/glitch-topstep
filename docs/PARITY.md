@@ -113,6 +113,15 @@ Topstep-native position management is **not** NT Master/Follower replication. Ea
 - Document ProjectX bracket rescale/rebind behavior on partial close.
 - Packet reflects remaining quantity and protection state truthfully.
 
+**ProjectX bracket matrix (PRAC MNQ, 2026-08-19/20):**
+
+| Side | Partial EXIT qty 1 of 2 | Exited-tranche brackets | Survivor brackets | Notes |
+|------|-------------------------|-------------------------|-------------------|-------|
+| SHORT | Venue accepted (`placeOrder` market) | Still visible in open_orders snapshot beside survivor (possible REST lag / orphans) | A SL/TP stayed; MOVE_STOP OK; MOVE_TP `target_would_widen` | Fixture `partial_exit_protection_transition.json` |
+| LONG | Venue accepted | Cancelled / absent after EXIT B | A SL/TP proven; MOVE_STOP + MOVE_TP OK | Fixture `partial_exit_protection_transition_long.json` |
+
+Gateway path: cancel only targeted tranche brackets → submit reduction → durable saga `reduction_ambiguous` → rearm stop-first if survivor naked (`degraded_stop_only` → `reduced_protected`). Rollback: `GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1`.
+
 ### PM-4 acceptance (multi-tranche, defer)
 
 - Each tranche: intent UUID + entry order ID + protective children.
