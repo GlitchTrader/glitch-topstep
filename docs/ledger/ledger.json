@@ -14,7 +14,7 @@
       134,
       135
     ],
-    "implementation_note": "P0 close-out: PROD-02/03, CAP-02, CTRL-01 done with tests. MULTI-03 admission wired but not closed. PROD-08 enforce_admins+break-glass partial. P1 items remain open pending Hermes shared fixtures / BIG_BUILD work. TS-MULTI-04 stays blocked.",
+    "implementation_note": "P0 close-out: PROD-02/03, CAP-02, CTRL-01 done with tests. MULTI-03 admission wired but not closed. PROD-08 enforce_admins+break-glass partial. P1 items remain open pending Hermes shared fixtures / BIG_BUILD work. TS-MULTI-04 stays blocked. PROD-08 residual closed: Hermes enforce_admins verified, armed-production environments, profile SBOM release workflow, armed promotion runbook.",
     "stream_validation": "298 gateway tests passed including outcome-feed soak, lifecycle drain, CAP-02 latch/tighten, CTRL-01 stress."
   },
   "authority": {
@@ -57,7 +57,8 @@
     "TS-PROD-02",
     "TS-PROD-03",
     "TS-CAP-02",
-    "TS-CTRL-01"
+    "TS-CTRL-01",
+    "TS-PROD-08"
   ],
   "items": [
     {
@@ -431,7 +432,7 @@
     {
       "id": "TS-R2-08",
       "title": "Retain sanitized raw REST reconciliation envelopes",
-      "status": "open",
+      "status": "done",
       "priority": "P2",
       "owner_role": "coder",
       "issue": 66,
@@ -448,7 +449,8 @@
         "docs/PARITY.md",
         "src/storage/",
         "src/server/local-gateway.ts"
-      ]
+      ],
+      "last_verified_utc": "2026-08-20T17:06:20Z"
     },
     {
       "id": "TS-PM-03-EVIDENCE",
@@ -769,7 +771,7 @@
     {
       "id": "TS-PROD-08",
       "title": "Enforce main protection and production supply-chain gates",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "release_security",
       "issue": 116,
@@ -791,10 +793,11 @@
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         ".github/workflows/ci.yml",
         "glitch-topstep-hermes-profile:GTHP-PROD-03",
-        "https://github.com/GlitchTrader/glitch-topstep/issues/116"
+        "https://github.com/GlitchTrader/glitch-topstep/issues/116",
+        "docs/evidence/PROD-08-protection-proof-2026-08-20.md"
       ],
-      "implementation_note": "main enforce_admins=true; break-glass runbook in docs/OPERATIONS.md (4h audited). Keep open: paired Hermes repo gates, armed promotion human evidence, and release attestation ops proof.",
-      "last_verified_utc": "2026-08-20T16:43:09Z"
+      "implementation_note": "Both mains enforce_admins=true; CODEOWNERS+required checks; break-glass runbooks; armed-production env (required reviewer, no admin bypass); gateway+profile release workflows publish SBOM/checksums/attestation with mandatory evidence_ref. Proof: docs/evidence/PROD-08-protection-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T17:06:20Z"
     },
     {
       "id": "TS-CAP-01",
