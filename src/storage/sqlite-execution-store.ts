@@ -12,6 +12,11 @@ import { computeIntentBodyHash } from "../domain/intent-body-hash.js";
 import type { TradeIntent } from "../domain/models.js";
 import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import { queryExitTargetedIntentIds } from "../ownership/tranches.js";
+import {
+  transitionProtectedReduction,
+  type ProtectedReductionRecord,
+  type ProtectedReductionState,
+} from "../execution/protected-reduction-saga.js";
 
 export type IntentRegistrationResult =
   | { status: "claimed" }
@@ -632,6 +637,163 @@ export class SqliteExecutionStore {
       ) STRICT;
       CREATE INDEX idx_execution_facts_intent ON execution_facts(intent_id, sequence);
     `);
+    this.applyMigration(6, `
+      CREATE TABLE protected_reductions (
+        reduction_id TEXT PRIMARY KEY,
+        exit_intent_id TEXT NOT NULL UNIQUE,
+        target_intent_id TEXT,
+        account_id INTEGER NOT NULL,
+        contract_id TEXT NOT NULL,
+        exit_quantity INTEGER NOT NULL,
+        position_size_before INTEGER NOT NULL,
+        state TEXT NOT NULL CHECK(state IN (
+          'protected_active',
+          'reduction_prepared',
+          'reduction_submitting',
+          'reduction_ambiguous',
+          'reduced_protected',
+          'degraded_stop_only',
+          'flat',
+          'failed'
+        )),
+        provider_exit_order_id INTEGER,
+        survivor_stop_order_id INTEGER,
+        survivor_target_order_id INTEGER,
+        detail TEXT,
+        created_utc TEXT NOT NULL,
+        updated_utc TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX idx_protected_reductions_state
+        ON protected_reductions(state, updated_utc);
+    `);
+  }
+
+  public beginProtectedReduction(input: {
+    reductionId: string;
+    exitIntentId: string;
+    targetIntentId: string | null;
+    accountId: number;
+    contractId: string;
+    exitQuantity: number;
+    positionSizeBefore: number;
+    survivorStopOrderId: number | null;
+    survivorTargetOrderId: number | null;
+    nowUtc: string;
+  }): ProtectedReductionRecord {
+    transitionProtectedReduction(null, "reduction_prepared", input.reductionId, "begin");
+    this.database.prepare(`
+      INSERT INTO protected_reductions (
+        reduction_id, exit_intent_id, target_intent_id, account_id, contract_id,
+        exit_quantity, position_size_before, state,
+        provider_exit_order_id, survivor_stop_order_id, survivor_target_order_id,
+        detail, created_utc, updated_utc
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'reduction_prepared', NULL, ?, ?, NULL, ?, ?)
+    `).run(
+      input.reductionId,
+      input.exitIntentId,
+      input.targetIntentId,
+      input.accountId,
+      input.contractId,
+      input.exitQuantity,
+      input.positionSizeBefore,
+      input.survivorStopOrderId,
+      input.survivorTargetOrderId,
+      input.nowUtc,
+      input.nowUtc,
+    );
+    return this.protectedReductionByExitIntent(input.exitIntentId)!;
+  }
+
+  public advanceProtectedReduction(
+    exitIntentId: string,
+    to: ProtectedReductionState,
+    reason: string,
+    nowUtc: string,
+    patch: {
+      providerExitOrderId?: number | null;
+      survivorStopOrderId?: number | null;
+      survivorTargetOrderId?: number | null;
+      detail?: string | null;
+    } = {},
+  ): ProtectedReductionRecord {
+    const current = this.protectedReductionByExitIntent(exitIntentId);
+    if (!current) {
+      throw new Error(`protected_reduction_not_found:${exitIntentId}`);
+    }
+    transitionProtectedReduction(current.state, to, current.reduction_id, reason, nowUtc);
+    this.database.prepare(`
+      UPDATE protected_reductions
+      SET state = ?,
+          provider_exit_order_id = COALESCE(?, provider_exit_order_id),
+          survivor_stop_order_id = COALESCE(?, survivor_stop_order_id),
+          survivor_target_order_id = COALESCE(?, survivor_target_order_id),
+          detail = COALESCE(?, detail),
+          updated_utc = ?
+      WHERE exit_intent_id = ?
+    `).run(
+      to,
+      patch.providerExitOrderId ?? null,
+      patch.survivorStopOrderId ?? null,
+      patch.survivorTargetOrderId ?? null,
+      patch.detail ?? null,
+      nowUtc,
+      exitIntentId,
+    );
+    return this.protectedReductionByExitIntent(exitIntentId)!;
+  }
+
+  public protectedReductionByExitIntent(exitIntentId: string): ProtectedReductionRecord | null {
+    const row = this.database.prepare(`
+      SELECT *
+      FROM protected_reductions
+      WHERE exit_intent_id = ?
+    `).get(exitIntentId) as SqlRow | undefined;
+    return row ? this.mapProtectedReduction(row) : null;
+  }
+
+  public activeProtectedReduction(): ProtectedReductionRecord | null {
+    const row = this.database.prepare(`
+      SELECT *
+      FROM protected_reductions
+      WHERE state NOT IN ('flat', 'failed', 'reduced_protected')
+      ORDER BY updated_utc DESC
+      LIMIT 1
+    `).get() as SqlRow | undefined;
+    return row ? this.mapProtectedReduction(row) : null;
+  }
+
+  public markProtectedReductionsFlat(nowUtc: string): number {
+    const result = this.database.prepare(`
+      UPDATE protected_reductions
+      SET state = 'flat', updated_utc = ?, detail = COALESCE(detail, 'venue_flat')
+      WHERE state NOT IN ('flat', 'failed')
+    `).run(nowUtc);
+    return Number(result.changes ?? 0);
+  }
+
+  private mapProtectedReduction(row: SqlRow): ProtectedReductionRecord {
+    return {
+      reduction_id: String(row.reduction_id),
+      exit_intent_id: String(row.exit_intent_id),
+      target_intent_id: row.target_intent_id == null ? null : String(row.target_intent_id),
+      account_id: Number(row.account_id),
+      contract_id: String(row.contract_id),
+      exit_quantity: Number(row.exit_quantity),
+      position_size_before: Number(row.position_size_before),
+      state: String(row.state) as ProtectedReductionState,
+      provider_exit_order_id: row.provider_exit_order_id == null
+        ? null
+        : Number(row.provider_exit_order_id),
+      survivor_stop_order_id: row.survivor_stop_order_id == null
+        ? null
+        : Number(row.survivor_stop_order_id),
+      survivor_target_order_id: row.survivor_target_order_id == null
+        ? null
+        : Number(row.survivor_target_order_id),
+      detail: row.detail == null ? null : String(row.detail),
+      created_utc: String(row.created_utc),
+      updated_utc: String(row.updated_utc),
+    };
   }
 
   private applyMigration(version: number, sql: string): void {

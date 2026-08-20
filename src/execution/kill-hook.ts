@@ -16,6 +16,10 @@ export const KILL_POINTS = [
   "during_close_position",
   "during_recovery",
   "during_duplicate_wait",
+  "reduction_after_prepared",
+  "reduction_after_cancel_before_place",
+  "reduction_after_place_before_mark",
+  "rearm_after_stop_before_tp",
 ] as const;
 
 export type KillPoint = (typeof KILL_POINTS)[number];

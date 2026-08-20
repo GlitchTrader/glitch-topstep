@@ -19,6 +19,11 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { OrderInfo } from "../src/domain/models.js";
 import { KILL_EXIT_CODE, KILL_POINTS, type KillPoint } from "../src/execution/kill-hook.js";
+
+/** Entry/close recovery matrix only; reduction/rearm points are covered in protected-reduction-saga tests. */
+const ENTRY_KILL_POINTS = KILL_POINTS.filter(
+  (point) => !point.startsWith("reduction_") && !point.startsWith("rearm_"),
+);
 import { recoverExecutionMutations } from "../src/execution/recovery.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 
@@ -197,7 +202,7 @@ describe("TS-R1-01 process-kill matrix (fake provider)", () => {
     assert.ok(existsSync(CHILD), `build child harness first: ${CHILD}`);
 
     const results: CaseResult[] = [];
-    for (const point of KILL_POINTS) {
+    for (const point of ENTRY_KILL_POINTS) {
       results.push(await runKillPoint(point));
     }
 

@@ -28,7 +28,11 @@ describe("gateway compatibility contract", () => {
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("bracket_verification"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("restart_reconciliation"));
     assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("bounded_entry_range_v1"));
-    assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("partial_exit_fail_closed_v1"));
+    assert.ok(GATEWAY_COMPATIBILITY.capabilities.includes("protected_reduction_saga_v1"));
+    assert.equal(
+      GATEWAY_COMPATIBILITY.provider_acceptance_evidence.partial_exit_protection_transition,
+      "proven_prac_short_long_with_saga",
+    );
   });
 
   it("is present in health and contains no credential-shaped fields", () => {

@@ -1,0 +1,125 @@
+{
+  "schema": "glitch.topstep.partial_exit_prac_evidence.v1",
+  "captured_utc": "2026-08-20T00:28:11.992Z",
+  "run_utc": {
+    "started": "2026-08-20T00:24:55.499Z",
+    "finished": "2026-08-20T00:28:11.992Z"
+  },
+  "account_alias": "PRAC-V2-645601-47191819",
+  "contract_id": "CON.F.US.MNQ.U26",
+  "instrument": "MNQ",
+  "side": "LONG",
+  "gateway_head": "c3d49dd",
+  "acceptance_flag": "GLITCH_PARTIAL_EXIT_ACCEPTANCE=1 was set for this run; default later lifted via ProtectedReductionSaga",
+  "projectx_accepted_partial_exit": true,
+  "receipts": {
+    "enter_a": {
+      "http": 202,
+      "status": "pending",
+      "code": "entry_submitted_pending_reconciliation",
+      "intent_id": "a97534b0-4462-472a-ba33-aad62f72ee17",
+      "entry_order_id": 3425903079
+    },
+    "scale_in": {
+      "http": 202,
+      "status": "pending",
+      "code": "entry_submitted_pending_reconciliation",
+      "intent_id": "3cbb13cc-cb07-4718-88cd-5fa402bb8c19",
+      "entry_order_id": 3425904370
+    },
+    "exit_b": {
+      "http": 202,
+      "status": "pending",
+      "code": "partial_exit_submitted_pending_reconciliation",
+      "order_id": 3425904761,
+      "detail": "exit_quantity=1;remaining=1",
+      "intent_id": "9b84231f-55df-47e8-afa2-1b8333cc4b2e"
+    },
+    "move_stop_a": {
+      "http": 202,
+      "status": "pending",
+      "code": "move_stop_submitted_pending_reconciliation",
+      "detail": "new_price=29533"
+    },
+    "move_tp_a": {
+      "http": 202,
+      "status": "pending",
+      "code": "move_tp_submitted_pending_reconciliation",
+      "detail": "new_price=29733"
+    },
+    "exit_flat": {
+      "http": 202,
+      "status": "closed",
+      "code": "close_contract_submitted"
+    }
+  },
+  "immediate_after_exit_b": {
+    "open_contracts": 1,
+    "open_orders": [
+      {
+        "id": 3425903080,
+        "type": 4,
+        "side": 1,
+        "size": 1,
+        "status": 1,
+        "stopPrice": 29531.75,
+        "limitPrice": null,
+        "customTag": "glt-a97534b0-4462-472a-ba33-aad62f72ee17-SL"
+      },
+      {
+        "id": 3425903081,
+        "type": 1,
+        "side": 1,
+        "size": 1,
+        "status": 1,
+        "stopPrice": null,
+        "limitPrice": 29731.75,
+        "customTag": "glt-a97534b0-4462-472a-ba33-aad62f72ee17-TP"
+      }
+    ],
+    "tranches": [
+      {
+        "intent_id": "a97534b0-4462-472a-ba33-aad62f72ee17",
+        "remaining_qty": 1,
+        "protection_status": "proven",
+        "stop_order_id": 3425903080,
+        "target_order_id": 3425903081
+      },
+      {
+        "intent_id": "3cbb13cc-cb07-4718-88cd-5fa402bb8c19",
+        "remaining_qty": 0,
+        "protection_status": "pending",
+        "stop_order_id": null,
+        "target_order_id": null
+      }
+    ],
+    "note": "Unlike SHORT sample, exited tranche B brackets were already gone from open_orders; survivor A SL/TP stayed proven."
+  },
+  "topstep_ui_confirmation": {
+    "exit_b_sell_market": 3425904761,
+    "enter_a_buy": 3425903079,
+    "enter_b_buy": 3425904370,
+    "a_stop_cancelled_on_flat": 3425903080,
+    "a_target_cancelled_on_flat": 3425903081,
+    "b_stop_cancelled": 3425904371,
+    "b_target_cancelled": 3425904372,
+    "flatten_sell": 3425906520
+  },
+  "checks": {
+    "enter_a": true,
+    "proven_a": true,
+    "scale_in": true,
+    "two_tranches": true,
+    "exit_b": true,
+    "one_contract_left": true,
+    "tranche_a_alive": true,
+    "move_stop_a": true,
+    "move_tp_a": true,
+    "exit_flat": true,
+    "flat": true
+  },
+  "pm4_all_pass": true,
+  "recommendation": "Venue accepts LONG partial EXIT; survivor A protection remained proven in gateway snapshot. Promote only with ProtectedReductionSaga + rollback switch.",
+  "source": "PRAC live PM-4 LONG scenario_c 2026-08-20T00:24:55Z to 00:28:11Z",
+  "secrets": "none; tokens redacted by construction"
+}

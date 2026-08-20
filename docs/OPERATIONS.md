@@ -49,9 +49,19 @@ Before any armed test, prove:
 - stop-aware risk matches an independent spreadsheet
 - MLL floor matches the Topstep dashboard
 
-## Armed partial EXIT (fail-closed)
+## Armed partial EXIT (ProtectedReductionSaga)
 
-Armed `EXIT` that reduces an open position without flattening it is rejected with `partial_exit_protection_transition_unproven` until sanitized ProjectX evidence proves native SL/TP continuity on the surviving contract. Compatibility stays `partial_exit_protection_transition: not_proven_fail_closed`. For a single local PRAC evidence run only, start the gateway with `GLITCH_PARTIAL_EXIT_ACCEPTANCE=1` in the process environment (not in committed `.env`); that opt-in lets armed partial EXIT reach ProjectX. Leave the flag unset afterwards and restart so production default is fail-closed again. Do not treat a successful run as a silent lift of the gate.
+Armed `EXIT` that reduces an open position without flattening it is admitted by default through a durable `ProtectedReductionSaga` (SQLite `protected_reductions`). Compatibility advertises `protected_reduction_saga_v1` and `partial_exit_protection_transition: proven_prac_short_long_with_saga` after SHORT + LONG PRAC fixtures.
+
+**Invariant:** while venue open quantity is positive, stop coverage on the provider must be ≥ that quantity, except during explicit `degraded_stop_only` (stop present, TP missing). The saga never cancels the last proven survivor stop before the reduction is on the wire; rearm places stop before target.
+
+**Health:** `GET /health` → `protected_reduction` exposes `active_state`, `unprotected_open_quantity`, `orphan_protective_orders`, `ambiguous_age_ms`, `fail_closed_rollback`.
+
+**Emergency rollback (no redeploy):** set `GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1` in the gateway process environment and restart. Armed partial EXIT returns `partial_exit_protection_transition_unproven` again. Unset the variable and restart to restore the saga path.
+
+**Evidence fixtures:** `tests/fixtures/projectx/live/partial_exit_protection_transition.json` (SHORT) and `partial_exit_protection_transition_long.json` (LONG).
+
+Legacy `GLITCH_PARTIAL_EXIT_ACCEPTANCE=1` is no longer required for admission.
 
 ## Armed acknowledgement
 

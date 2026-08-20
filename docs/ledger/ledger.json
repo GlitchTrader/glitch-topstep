@@ -441,7 +441,7 @@
     {
       "id": "TS-PM-03-EVIDENCE",
       "title": "Document and test ProjectX bracket behavior on partial EXIT",
-      "status": "open",
+      "status": "done",
       "priority": "P2",
       "owner_role": "operator_tests",
       "issue": 67,
@@ -454,8 +454,11 @@
       "sources": [
         "src/execution/coordinator.ts",
         "docs/PARITY.md",
-        "docs/PROJECTX-API-REFERENCE.md"
-      ]
+        "docs/PROJECTX-API-REFERENCE.md",
+        "tests/fixtures/projectx/live/partial_exit_protection_transition.json",
+        "tests/fixtures/projectx/live/partial_exit_protection_transition_long.json"
+      ],
+      "last_verified_utc": "2026-08-20T14:00:00Z"
     },
     {
       "id": "TS-EVAL-01",
@@ -563,7 +566,7 @@
     {
       "id": "TS-PROD-01",
       "title": "Make protected reduction and bracket rearm fail-safe",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "execution_architecture",
       "issue": 109,
@@ -579,11 +582,15 @@
         "Sanitized PRAC evidence proves ProjectX group relationships and partial-close behavior before capability advertisement."
       ],
       "stop_line": "Do not infer OCO/ownership from timing or geometry and do not advertise partial EXIT without provider acceptance evidence.",
+      "implementation_note": "ProtectedReductionSaga persists in SQLite; armed default admits partial EXIT; GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1 is emergency rollback; rearm is stop-first with degraded_stop_only; health exposes unprotected_open_quantity.",
+      "last_verified_utc": "2026-08-20T14:00:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/execution/coordinator.ts",
+        "src/execution/protected-reduction-saga.ts",
         "src/service.ts",
         "tests/position-management.test.ts",
+        "tests/protected-reduction-saga.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/109"
       ]
     },
@@ -1238,7 +1245,7 @@
     "code_status": "implemented_on_paired_clean_branches",
     "implemented_orders": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27],
     "safe_defaults": {
-      "partial_exit": "fail_closed_in_armed_until_projectx_acceptance_evidence",
+      "partial_exit": "armed_via_protected_reduction_saga_with_fail_closed_rollback",
       "simultaneous_multi_instrument": "disabled_unless_explicitly_enabled",
       "additional_instruments": "observation_only_until_selected_exact_contract_scope",
       "daily_capture": "context_only_default_0.5_percent_not_a_quota"

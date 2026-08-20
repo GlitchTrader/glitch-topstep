@@ -467,6 +467,14 @@ export class GlitchTopstepService {
           order_flow: orderFlow,
           outcome_feed: this.tradeOutcomeStore.status(),
           event_ledger: this.ledger.status(),
+          protected_reduction: this.coordinator?.protectedReductionHealth(current) ?? {
+            active_state: null,
+            active_reduction_id: null,
+            unprotected_open_quantity: 0,
+            orphan_protective_orders: 0,
+            ambiguous_age_ms: null,
+            fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
+          },
         };
       },
       snapshot,

@@ -274,7 +274,18 @@ O payload do stream também traz `contractDisplayName` (ex.: `"MNQU26"`), campo 
 
 `partialCloseContract` **existe e está documentado** (<https://gateway.docs.projectx.com/docs/api-reference/positions/close-positions-partial>). Resposta é só o envelope `{success, errorCode, errorMessage}` — **não devolve orderId**, então você não consegue atribuir o fill resultante a essa chamada por identidade de ordem; só por `GatewayUserTrade` subsequente.
 
-**[NÃO CONFIRMADO]:** o que acontece com os brackets ativos ao fazer partial close — se o provider redimensiona o SL/TP restante, cancela, ou deixa órfão. O projeto já anotou isso como pendência (`docs/PARITY.md:110`: "Document ProjectX bracket rescale/rebind behavior on partial close") e observou empiricamente que **os brackets podem ser perdidos** após EXIT parcial direcionado (`src/execution/coordinator.ts:612` — "Re-place SL/TP when venue brackets were lost (e.g. after targeted partial EXIT)"). Isso é comportamento observado, não documentado, e merece teste dedicado.
+**[LIVE 2026-08-19/20 PRAC]:** Gateway uses `placeOrder` (type market) for partial EXIT rather than `partialCloseContract`, so the exit is attributable by `orderId` / `customTag`. Observed Auto OCO / bracket behavior on multi-tranche MNQ:
+
+| Observation | SHORT | LONG |
+|-------------|-------|------|
+| Venue accepted partial EXIT | yes (`3425731259`) | yes (`3425904761`) |
+| Survivor SL/TP after EXIT | present; MOVE_STOP OK | present; MOVE_STOP + MOVE_TP OK |
+| Exited-tranche brackets | still in open_orders snapshot with survivor | cancelled / absent |
+| Native atomic close+OCO rescale | **not** observed | **not** observed |
+
+Gateway therefore keeps a durable `ProtectedReductionSaga` and stop-first rearm rather than assuming provider rescale. Fixtures: `tests/fixtures/projectx/live/partial_exit_protection_transition.json` and `partial_exit_protection_transition_long.json`.
+
+**[NÃO CONFIRMADO historically]:** whether `partialCloseContract` itself rescales brackets — this project does not rely on that endpoint for attributable exits.
 
 ---
 
