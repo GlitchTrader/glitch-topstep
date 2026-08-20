@@ -35,8 +35,9 @@ export class MultiInstrumentMarketDataPlane {
     private readonly selectedContractId: string,
     private readonly liveMarketData = true,
     now: () => Date = () => new Date(),
+    sleep?: (ms: number) => Promise<void>,
   ) {
-    this.scheduler = new RateAwareScheduler(requestsPerMinute);
+    this.scheduler = new RateAwareScheduler(requestsPerMinute, () => now().getTime(), sleep);
     const scheduledApi = {
       retrieveBars: (request: Parameters<ProjectXApiClient["retrieveBars"]>[0]) => (
         this.scheduler.schedule(() => api.retrieveBars(request))

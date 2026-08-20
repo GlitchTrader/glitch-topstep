@@ -60,7 +60,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Bounded DOM reconstruction with Reset/currentVolume semantics | Implemented, always `book_complete=false` | Prove full-book reconstruction contract on real payloads |
 | Depth spread, top-level volume, and imbalance | Implemented as descriptive partial evidence | Compare against real DOM snapshots and resets |
 | Order-flow packet identity and health | Implemented without execution gating | Real Hermes latency and retention acceptance |
-| Instrument-general Topstep support | Configurable single contract | At least two Topstep-supported contracts |
+| Instrument-general Topstep support | Operator allowlist (MNQ, MES, MCL→MCLE) resolved from the ProjectX catalog; every candidate observed, exactly one armed per account (`account_selection.v1`, `simultaneous_exposure_enabled=false`) | Live armed session on a second contract with per-contract outcome attribution — MCL/MCLE outcome is still `unknown` |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
 | Replay and comparative cognition evaluation | Replay foundation implemented | Identical evidence corpus across cognition versions |
 | Hermes autonomous cognition | Implemented in companion profile | Actual Windows/Hermes acceptance |

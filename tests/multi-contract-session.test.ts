@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AppConfig } from "../src/config.js";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
+import type { ContractInfo } from "../src/domain/models.js";
+import { resolveInstrumentUniverse } from "../src/domain/instrument-universe.js";
 import { DecisionPacketService } from "../src/hermes/packet-service.js";
+import { validatePortfolioSelection } from "../src/risk/portfolio-selection.js";
 import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import { snapshot, testSessionConfig } from "./fixtures.js";
 
@@ -21,6 +24,16 @@ const healthyRecovery = (): ExecutionRecoveryStatus => ({
   lastRecoveryUtc: null,
   lastRecoveryError: null,
 });
+
+const catalog: ContractInfo[] = contracts.map((contract) => ({
+  id: contract.id,
+  name: contract.name,
+  description: contract.instrument,
+  tickSize: contract.tickSize,
+  tickValue: contract.tickValue,
+  activeContract: true,
+  symbolId: contract.symbolId,
+}));
 
 function config(contract: (typeof contracts)[number]): AppConfig {
   return {
@@ -49,6 +62,53 @@ test("simulated contract session matrix preserves exact MNQ, MES, and MCL/MCLE i
     assert.equal(packet.account_selection.selected_contract_id, contract.id);
     assert.equal(packet.account_selection.selected_instrument, contract.instrument);
     assert.equal(packet.account_selection.mode, "single_contract");
+    assert.equal(packet.account_selection.simultaneous_exposure_enabled, false);
     store.close();
   }
+});
+
+test("MCL is an operator alias that only ever arms the exact ProjectX MCLE contract", () => {
+  const universe = resolveInstrumentUniverse(["MNQ", "MES", "MCL"], catalog);
+
+  assert.deepEqual(
+    universe.contracts.map((contract) => [contract.instrument, contract.contract_id]),
+    [["MNQ", "CON.F.US.MNQ.U26"], ["MES", "CON.F.US.MES.U26"], ["MCL", "CON.F.US.MCLE.V26"]],
+  );
+
+  // Every allowlisted contract is selectable one at a time; none substitutes for another.
+  for (const contract of contracts) {
+    const selection = validatePortfolioSelection({
+      universe,
+      selected_contract_id: contract.id,
+      open_contract_ids: [],
+      simultaneous_exposure_enabled: false,
+    });
+    assert.equal(selection.allowed, true);
+    assert.equal(selection.selected_instrument, contract.instrument);
+  }
+
+  // The operator root alone is not an executable identity.
+  assert.equal(
+    validatePortfolioSelection({
+      universe,
+      selected_contract_id: "MCL",
+      open_contract_ids: [],
+      simultaneous_exposure_enabled: false,
+    }).code,
+    "selected_contract_not_allowlisted",
+  );
+});
+
+test("a second contract stays observation-only while another contract holds the account", () => {
+  const universe = resolveInstrumentUniverse(["MNQ", "MES", "MCL"], catalog);
+
+  const selection = validatePortfolioSelection({
+    universe,
+    selected_contract_id: "CON.F.US.MES.U26",
+    open_contract_ids: ["CON.F.US.MNQ.U26"],
+    simultaneous_exposure_enabled: false,
+  });
+
+  assert.equal(selection.allowed, false);
+  assert.equal(selection.code, "foreign_exposure_requires_accountwide_opt_in");
 });

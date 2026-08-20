@@ -1,0 +1,148 @@
+{
+  "schema_version": "glitch.topstep.market_universe.v1",
+  "market_data_mode": "simulated",
+  "generated_utc": "2026-08-20T12:00:00.000Z",
+  "generation": 1,
+  "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd",
+  "scheduler": {
+    "pending": 0,
+    "completed": 12,
+    "failed": 0,
+    "last_started_utc": "2026-08-20T11:59:58.000Z",
+    "last_error": null,
+    "window_ms": 30000,
+    "budget_per_window": 50,
+    "observed_peak_per_window": 12,
+    "headroom_per_window": 38
+  },
+  "candidates": [
+    {
+      "instrument": "MNQ",
+      "contract_id": "CON.F.US.MNQ.U26",
+      "symbol_id": "F.US.MNQ",
+      "tick_size": 0.25,
+      "tick_value": 0.5,
+      "execution_mode": "selected",
+      "market_observation": {
+        "last_attempt_utc": "2026-08-20T12:00:00.000Z",
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "observation": null
+      },
+      "observation_quality": {
+        "status": "ready",
+        "observation_ready": true,
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "timeframe_count": 4,
+        "completed_timeframe_count": 4,
+        "gap_count": 0,
+        "identity_issue_count": 0
+      },
+      "quote": {
+        "contractId": "CON.F.US.MNQ.U26",
+        "symbol": "F.US.MNQ",
+        "lastPrice": 20000,
+        "bestBid": 19999.75,
+        "bestAsk": 20000.25,
+        "open": 19950,
+        "high": 20020,
+        "low": 19930,
+        "volume": 10000,
+        "timestamp": "2026-07-21T12:00:04Z"
+      },
+      "open_contracts": 1,
+      "state_complete": true,
+      "state_issues": []
+    },
+    {
+      "instrument": "MES",
+      "contract_id": "CON.F.US.MES.U26",
+      "symbol_id": "F.US.MES",
+      "tick_size": 0.25,
+      "tick_value": 1.25,
+      "execution_mode": "observation_only",
+      "market_observation": {
+        "last_attempt_utc": "2026-08-20T12:00:00.000Z",
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "observation": null
+      },
+      "observation_quality": {
+        "status": "ready",
+        "observation_ready": true,
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "timeframe_count": 4,
+        "completed_timeframe_count": 4,
+        "gap_count": 0,
+        "identity_issue_count": 0
+      },
+      "quote": {
+        "contractId": "CON.F.US.MES.U26",
+        "symbol": "F.US.MES",
+        "lastPrice": 20000,
+        "bestBid": 19999.75,
+        "bestAsk": 20000.25,
+        "open": 19950,
+        "high": 20020,
+        "low": 19930,
+        "volume": 10000,
+        "timestamp": "2026-07-21T12:00:04Z"
+      },
+      "open_contracts": 0,
+      "state_complete": true,
+      "state_issues": []
+    },
+    {
+      "instrument": "MCL",
+      "contract_id": "CON.F.US.MCLE.V26",
+      "symbol_id": "F.US.MCLE",
+      "tick_size": 0.01,
+      "tick_value": 1,
+      "execution_mode": "observation_only",
+      "market_observation": {
+        "last_attempt_utc": "2026-08-20T12:00:00.000Z",
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "observation": null
+      },
+      "observation_quality": {
+        "status": "ready",
+        "observation_ready": true,
+        "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
+        "last_error": null,
+        "timeframe_count": 4,
+        "completed_timeframe_count": 4,
+        "gap_count": 0,
+        "identity_issue_count": 0
+      },
+      "quote": {
+        "contractId": "CON.F.US.MCLE.V26",
+        "symbol": "F.US.MCLE",
+        "lastPrice": 20000,
+        "bestBid": 19999.75,
+        "bestAsk": 20000.25,
+        "open": 19950,
+        "high": 20020,
+        "low": 19930,
+        "volume": 10000,
+        "timestamp": "2026-07-21T12:00:04Z"
+      },
+      "open_contracts": 0,
+      "state_complete": true,
+      "state_issues": []
+    }
+  ],
+  "account_id": 101,
+  "simultaneous_exposure_enabled": false,
+  "account_selection": {
+    "schema_version": "glitch.topstep.account_selection.v1",
+    "mode": "single_contract",
+    "selected_instrument": "MNQ",
+    "selected_contract_id": "CON.F.US.MNQ.U26",
+    "scope_generation": 1,
+    "scope_hash": "22db22092e78bae1fa8d3a789f38c66136eda130de78993f14c7075398f229bd",
+    "simultaneous_exposure_enabled": false
+  }
+}

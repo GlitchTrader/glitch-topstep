@@ -1,9 +1,18 @@
+/** ProjectX history endpoint budget documented for TS-MULTI-02: 50 requests per 30s window. */
+export const PROJECTX_HISTORY_BUDGET = Object.freeze({ requests: 50, windowMs: 30_000 });
+
 export interface RateAwareSchedulerStatus {
   pending: number;
   completed: number;
   failed: number;
   last_started_utc: string | null;
   last_error: string | null;
+  window_ms: number;
+  budget_per_window: number;
+  /** Highest number of starts observed inside any trailing window so far. */
+  observed_peak_per_window: number;
+  /** Unused budget at that observed peak; negative would mean the provider limit was crossed. */
+  headroom_per_window: number;
 }
 
 export class RateAwareScheduler {
@@ -14,6 +23,9 @@ export class RateAwareScheduler {
   private failed = 0;
   private lastStartedUtc: string | null = null;
   private lastError: string | null = null;
+  private observedPeakPerWindow = 0;
+  /** ponytail: sampled at start boundaries only; pruned every start so it stays O(budget). */
+  private readonly recentStartsMs: number[] = [];
   private readonly intervalMs: number;
 
   public constructor(
@@ -43,6 +55,7 @@ export class RateAwareScheduler {
       const started = this.now();
       this.nextStartMs = started + this.intervalMs;
       this.lastStartedUtc = new Date(started).toISOString();
+      this.recordStart(started);
       try {
         const value = await task();
         this.completed += 1;
@@ -70,7 +83,20 @@ export class RateAwareScheduler {
       failed: this.failed,
       last_started_utc: this.lastStartedUtc,
       last_error: this.lastError,
+      window_ms: PROJECTX_HISTORY_BUDGET.windowMs,
+      budget_per_window: PROJECTX_HISTORY_BUDGET.requests,
+      observed_peak_per_window: this.observedPeakPerWindow,
+      headroom_per_window: PROJECTX_HISTORY_BUDGET.requests - this.observedPeakPerWindow,
     };
+  }
+
+  private recordStart(startedMs: number): void {
+    const windowStart = startedMs - PROJECTX_HISTORY_BUDGET.windowMs;
+    while (this.recentStartsMs.length > 0 && this.recentStartsMs[0]! <= windowStart) {
+      this.recentStartsMs.shift();
+    }
+    this.recentStartsMs.push(startedMs);
+    this.observedPeakPerWindow = Math.max(this.observedPeakPerWindow, this.recentStartsMs.length);
   }
 }
 
