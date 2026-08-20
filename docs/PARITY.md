@@ -62,7 +62,7 @@ Donor repositories are read-only. A row is complete only when implementation, de
 | Order-flow packet identity and health | Implemented without execution gating | Real Hermes latency and retention acceptance |
 | Instrument-general Topstep support | Operator allowlist (MNQ, MES, MCL→MCLE) resolved from the ProjectX catalog; every candidate observed, exactly one armed per account (`account_selection.v1`, `simultaneous_exposure_enabled=false`); simulated armed/shadow sessions per contract in `tests/multi-contract-session.test.ts` | Live armed trade outcome on MCL/MCLE still `unknown` — simulated acceptance satisfied |
 | Topstep account-stage and payout lifecycle | Manual evidence only | Provider/dashboard provenance and reconciliation |
-| Replay and comparative cognition evaluation | Replay foundation implemented | Identical evidence corpus across cognition versions |
+| Replay and comparative cognition evaluation | Workflow documented in `docs/OPERATIONS.md`; Hermes `run-frozen-cognition.py` + `evaluate-frozen-cognition.py` with fixture corpus | Live two-prompt run archived as evidence |
 | Hermes autonomous cognition | Implemented in companion profile | Actual Windows/Hermes acceptance |
 | First complete payout lifecycle | Missing | Reconciled account progression and payout evidence |
 

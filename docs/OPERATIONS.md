@@ -177,3 +177,37 @@ Operator steps:
 2. Check `/ownership` and TopstepX for missing protective orders.
 3. Issue `EXIT` via Hermes if the position should be closed.
 4. After partial scale-out, wait for `tranche_protection_rearmed` or restart reconcile — see `docs/PARITY.md` PM-3 notes.
+
+## Comparative cognition evaluation (TS-EVAL-01)
+
+Evaluation-only procedure — **never** promotes `armed` from replay scores.
+
+1. Freeze a corpus under the Hermes profile state root: `state/minute-frames/*.json` (`glitch.topstep.minute_frame.v2`).
+2. Archive paired state snapshots with decisions/receipts for each prompt version:
+   - `baseline-state/decisions.jsonl` (+ optional `receipts.jsonl`)
+   - `candidate-state/decisions.jsonl`
+3. Build runs (Hermes profile repo):
+
+```powershell
+cd C:\Users\arifr\Projects\glitch-topstep-hermes-profile
+$frames = "C:\path\to\frozen\minute-frames"
+python scripts/run-frozen-cognition.py `
+  --frames-dir $frames `
+  --state-root C:\path\to\baseline-state `
+  --prompt-version glitch-topstep-v9 `
+  --output data\eval\baseline-run.json
+python scripts/run-frozen-cognition.py `
+  --frames-dir $frames `
+  --state-root C:\path\to\candidate-state `
+  --prompt-version glitch-topstep-v10 `
+  --output data\eval\candidate-run.json
+python scripts/evaluate-frozen-cognition.py `
+  --baseline data\eval\baseline-run.json `
+  --candidate data\eval\candidate-run.json `
+  --output data\eval\cognition-diff.json
+```
+
+4. Inspect `glitch.topstep.cognition_diff.v1`: `changed_frames`, per-frame `action` / `rejection` / `abstention_classification` deltas. `armed_promotion_allowed` is always `false`.
+5. Archive the diff under `docs/evidence/TS-EVAL-01-*.md` when closing acceptance.
+
+Fixture corpus for CI: `glitch-topstep-hermes-profile/tests/fixtures/frozen_corpus/`.
