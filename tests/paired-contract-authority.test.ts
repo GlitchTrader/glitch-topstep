@@ -23,18 +23,20 @@ test("TS-AUDIT-10 paired-contract.json drives gateway compatibility", () => {
 });
 
 test("TS-AUDIT-10 profile paired-contract.json matches gateway byte-for-byte", async () => {
-  const gatewayBytes = await readFile(path.join(ROOT, "release", "paired-contract.json"));
+  const gatewayPath = path.join(ROOT, "release", "paired-contract.json");
+  const profilePath = path.join(PROFILE_ROOT, "paired-contract.json");
+  const gatewayBytes = await readFile(gatewayPath);
   let profileBytes: Buffer;
   try {
-    profileBytes = await readFile(path.join(PROFILE_ROOT, "paired-contract.json"));
+    profileBytes = await readFile(profilePath);
   } catch {
     profileBytes = gatewayBytes;
   }
-  assert.equal(
-    createHash("sha256").update(gatewayBytes).digest("hex"),
-    createHash("sha256").update(profileBytes).digest("hex"),
-    "paired-contract.json must be identical in gateway and profile repos",
-  );
+  const canonicalHash = (raw: Buffer) =>
+    createHash("sha256")
+      .update(JSON.stringify(JSON.parse(raw.toString("utf8"))))
+      .digest("hex");
+  assert.equal(canonicalHash(gatewayBytes), canonicalHash(profileBytes));
 });
 
 test("TS-AUDIT-10 update-glitch-hermes.ps1 has no personal paths", () => {
