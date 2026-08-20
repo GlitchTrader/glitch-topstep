@@ -14,7 +14,7 @@
       134,
       135
     ],
-    "implementation_note": "P0 close-out: PROD-02/03, CAP-02, CTRL-01 done with tests. MULTI-03 admission wired but not closed. PROD-08 enforce_admins+break-glass partial. P1 items remain open pending Hermes shared fixtures / BIG_BUILD work. TS-MULTI-04 stays blocked. PROD-08 residual closed: Hermes enforce_admins verified, armed-production environments, profile SBOM release workflow, armed promotion runbook.",
+    "implementation_note": "P0–P1 sprint close-out through step 26 (MULTI-03): PROD-05/EXEC-01/MULTI-01/02/03 done with evidence docs + Hermes paired fixtures. TS-MULTI-04 stays blocked. PROD-06 and EVAL remain open.",
     "stream_validation": "298 gateway tests passed including outcome-feed soak, lifecycle drain, CAP-02 latch/tighten, CTRL-01 stress."
   },
   "authority": {
@@ -502,7 +502,7 @@
     {
       "id": "TS-MULTI-01",
       "title": "Second Topstep-supported contract in packet and execution path",
-      "status": "open",
+      "status": "done",
       "priority": "P2",
       "owner_role": "coder",
       "issue": 69,
@@ -517,10 +517,12 @@
       "stop_line": "No simultaneous multi-instrument trading in this row.",
       "sources": [
         "docs/PARITY.md",
-        "src/service.ts"
+        "src/service.ts",
+        "docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/69"
       ],
-      "implementation_note": "docs/PARITY.md instrument row updated to the allowlist + single-armed-contract reality. Tests pin MCL as an operator alias that only arms the exact MCLE contract and prove a second contract stays observation-only while another holds the account. Keep open: the remaining acceptance is a live armed MCL/MCLE session; that historical outcome is still recorded as unknown.",
-      "last_verified_utc": "2026-08-20T18:05:00Z"
+      "implementation_note": "Simulated armed/shadow sessions per MNQ/MES/MCL→MCLE in multi-contract-session.test.ts; PARITY row updated. Live MCL armed trade outcome remains unknown (residual in PARITY.md).",
+      "last_verified_utc": "2026-08-20T22:40:00Z"
     },
     {
       "id": "TS-R4-07",
@@ -699,7 +701,7 @@
     {
       "id": "TS-PROD-05",
       "title": "Move market evidence persistence behind bounded backpressure",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "market_data_architecture",
       "issue": 113,
@@ -715,13 +717,14 @@
         "Shutdown drains the queue or leaves a durable resumable cursor."
       ],
       "stop_line": "Do not solve event-loop blocking by weakening execution-state durability or silently dropping identity events.",
-      "implementation_note": "PR #151 EvidenceWriteQueue: durable ACK before apply, identity never dropped, high-water degrade + synthetic 5x R2-07 burst. Keep open: live soak SLOs, optional worker_threads.",
-      "last_verified_utc": "2026-08-20T18:03:14Z",
+      "implementation_note": "EvidenceWriteQueue + burst/coalesce tests; live armed queue health in execution_facts_live_sample.json. Proof: docs/evidence/PROD-05-backpressure-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T22:40:00Z",
       "sources": [
         "docs/ledger/audits/2026-08-18-production-hardening-architecture.md",
         "src/projectx/evidence-write-queue.ts",
         "src/storage/sqlite-provider-evidence-store.ts",
         "src/projectx/realtime.ts",
+        "docs/evidence/PROD-05-backpressure-proof-2026-08-20.md",
         "https://github.com/GlitchTrader/glitch-topstep/issues/113"
       ]
     },
@@ -957,7 +960,7 @@
     {
       "id": "TS-EXEC-01",
       "title": "Publish immediate lifecycle facts and execution-fidelity diagnostics",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "execution_learning",
       "issue": 123,
@@ -980,15 +983,16 @@
         "src/learning/trade-outcome-publisher.ts",
         "src/storage/projectx-evidence-store.ts",
         "glitch-topstep-hermes-profile:GTHP-LEARN-02",
+        "docs/evidence/EXEC-01-lifecycle-facts-proof-2026-08-20.md",
         "https://github.com/GlitchTrader/glitch-topstep/issues/123"
       ],
-      "implementation_note": "PR #153 immediate lifecycle facts on GET /execution/facts with stable fact_id/revision. Keep open: GTHP-LEARN-02 + price/slippage enrichment.",
-      "last_verified_utc": "2026-08-20T18:03:14Z"
+      "implementation_note": "GET /execution/facts + lifecycle-facts tests; live sample fixture; Hermes sync_gateway_execution_facts + Exec01 paired fixtures (GTHP #107). Proof: docs/evidence/EXEC-01-lifecycle-facts-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T22:40:00Z"
     },
     {
       "id": "TS-MULTI-02",
       "title": "Build a rate-aware multi-instrument universe and market-data plane",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "market_data_architecture",
       "issue": 124,
@@ -1012,19 +1016,20 @@
         "src/market/projectx-observation-service.ts",
         "src/state/venue-state.ts",
         "glitch-topstep-hermes-profile:GTHP-MULTI-01",
+        "docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
         "https://gateway.docs.projectx.com/docs/api-reference/market-data/available-contracts/",
         "https://gateway.docs.projectx.com/docs/api-reference/market-data/retrieve-bars/",
         "https://gateway.docs.projectx.com/docs/realtime/",
         "https://gateway.docs.projectx.com/docs/getting-started/rate-limits/",
         "https://github.com/GlitchTrader/glitch-topstep/issues/124"
       ],
-      "implementation_note": "Fake-hub tests prove the market supervisor restores every configured subscription exactly once after automatic reconnect and after a hub restart, deduplicating repeated allowlist entries. RateAwareScheduler now measures peak starts per ProjectX 30s history window; warming 4-6 instruments leaves 20 of 50 history requests spare at the maximum configurable rate. MultiInstrumentMarketDataPlane is asserted directly for per-contract partitioning and stale-instrument isolation. Keep open: no live 4-6 instrument soak, and REST 'other' calls (200/60s) still have no dedicated bucket.",
-      "last_verified_utc": "2026-08-20T18:05:00Z"
+      "implementation_note": "Reconnect dedup, RateAwareScheduler headroom, per-contract data plane + scanner fixture. Proof: docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T22:40:00Z"
     },
     {
       "id": "TS-MULTI-03",
       "title": "Add account-wide portfolio admission and exact-contract execution",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "execution_architecture",
       "issue": 125,
@@ -1055,8 +1060,8 @@
         "https://gateway.docs.projectx.com/docs/realtime/",
         "https://github.com/GlitchTrader/glitch-topstep/issues/125"
       ],
-      "implementation_note": "Portfolio admission builds existing ProtectedExposure from the venue snapshot (foreign fail-closed). Tests now cover the account-wide runtime lock scoped per account, foreign exposure the caller observed but could not price, unpriceable existing exposure rejected even with simultaneous exposure opted in, and additive account-wide downside against the hard loss floor. simultaneous_exposure_enabled stays false by default. Keep open: depends on MULTI-02/PROD-07/ENTRY-01 and live multi-contract armed proof.",
-      "last_verified_utc": "2026-08-20T18:05:00Z"
+      "implementation_note": "Portfolio admission fail-closed tests + account-wide lock; simultaneous_exposure_enabled default false. Proof: docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
+      "last_verified_utc": "2026-08-20T22:40:00Z"
     }
   ],
   "roadmap_only": [

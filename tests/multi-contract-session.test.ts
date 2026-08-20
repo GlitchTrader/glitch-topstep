@@ -35,12 +35,12 @@ const catalog: ContractInfo[] = contracts.map((contract) => ({
   symbolId: contract.symbolId,
 }));
 
-function config(contract: (typeof contracts)[number]): AppConfig {
+function config(contract: (typeof contracts)[number], tradingMode: AppConfig["tradingMode"] = "shadow"): AppConfig {
   return {
     projectX: { username: "user", apiKey: "key", apiUrl: "https://api.topstepx.com", userHubUrl: "user", marketHubUrl: "market" },
     scope: { accountId: 101, accountName: "SIM", contractId: contract.id, instrument: contract.instrument, liveMarketData: false },
     localGateway: { host: "127.0.0.1", port: 8790, token: "012345678901234567890123" },
-    tradingMode: "shadow",
+    tradingMode,
     policy: { accountStage: "express_funded_standard", lossModel: "express_funded_eod", authority: "operator_configured", verifiedAtUtc: null, startingBalance: 50_000, initialMaximumLoss: 2_000, highestEndOfDayBalance: 0, lossFloorLockedAtZero: false, payoutProcessed: false, operatorProvidedLossFloorUsd: null, maxContracts: 5 },
     session: testSessionConfig,
     dailyEconomics: { enabled: false, nominalSizeUsd: null, profitTargetUsd: null },
@@ -50,22 +50,25 @@ function config(contract: (typeof contracts)[number]): AppConfig {
   };
 }
 
-test("simulated contract session matrix preserves exact MNQ, MES, and MCL/MCLE identity", () => {
-  for (const contract of contracts) {
-    const current = snapshot();
-    current.contract = { ...current.contract, id: contract.id, name: contract.name, symbolId: contract.symbolId, tickSize: contract.tickSize, tickValue: contract.tickValue, description: contract.instrument === "MCL" ? "Micro Crude Oil" : contract.instrument };
-    current.quote = { ...current.quote!, contractId: contract.id, symbol: contract.symbolId };
-    const store = new SqliteExecutionStore(":memory:");
-    const packet = new DecisionPacketService(config(contract), () => current, store, healthyRecovery, () => Date.parse("2026-08-19T12:00:05Z")).current();
-    assert.equal(packet.contract.id, contract.id);
-    assert.equal(packet.contract.symbol_id, contract.symbolId);
-    assert.equal(packet.account_selection.selected_contract_id, contract.id);
-    assert.equal(packet.account_selection.selected_instrument, contract.instrument);
-    assert.equal(packet.account_selection.mode, "single_contract");
-    assert.equal(packet.account_selection.simultaneous_exposure_enabled, false);
-    store.close();
-  }
-});
+for (const tradingMode of ["shadow", "armed"] as const) {
+  test(`TS-MULTI-01 simulated ${tradingMode} session matrix preserves exact MNQ, MES, and MCL/MCLE identity`, () => {
+    for (const contract of contracts) {
+      const current = snapshot();
+      current.contract = { ...current.contract, id: contract.id, name: contract.name, symbolId: contract.symbolId, tickSize: contract.tickSize, tickValue: contract.tickValue, description: contract.instrument === "MCL" ? "Micro Crude Oil" : contract.instrument };
+      current.quote = { ...current.quote!, contractId: contract.id, symbol: contract.symbolId };
+      const store = new SqliteExecutionStore(":memory:");
+      const packet = new DecisionPacketService(config(contract, tradingMode), () => current, store, healthyRecovery, () => Date.parse("2026-08-19T12:00:05Z")).current();
+      assert.equal(packet.contract.id, contract.id);
+      assert.equal(packet.contract.symbol_id, contract.symbolId);
+      assert.equal(packet.account_selection.selected_contract_id, contract.id);
+      assert.equal(packet.account_selection.selected_instrument, contract.instrument);
+      assert.equal(packet.account_selection.mode, "single_contract");
+      assert.equal(packet.account_selection.simultaneous_exposure_enabled, false);
+      assert.equal(packet.execution.gateway_mode_configured, tradingMode);
+      store.close();
+    }
+  });
+}
 
 test("MCL is an operator alias that only ever arms the exact ProjectX MCLE contract", () => {
   const universe = resolveInstrumentUniverse(["MNQ", "MES", "MCL"], catalog);
