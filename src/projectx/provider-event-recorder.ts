@@ -3,6 +3,12 @@ import type { ProviderEvidenceEvent } from "../domain/provider-evidence.js";
 
 export interface ProviderEvidenceSink {
   append(event: ProviderEvidenceEvent): unknown;
+  /**
+   * Bounded-queue sinks acknowledge the durable commit asynchronously; `onDurable` runs after
+   * the event is written, so persist-before-apply survives the deferral. A sink that omits
+   * `submit` keeps the synchronous write-then-apply path.
+   */
+  submit?(event: ProviderEvidenceEvent, onDurable: () => void): unknown;
 }
 
 export interface ProviderEventIdentity {
@@ -80,7 +86,7 @@ export function recordProviderEventBeforeApply<T>(
   const identity = input.identity(normalized);
   const relatedProviderEntityId = identity.relatedProviderEntityId
     ?? explicitRelatedProviderEntityId(input.eventType, normalized);
-  input.sink.append({
+  const event: ProviderEvidenceEvent = {
     receivedUtc: input.receivedUtc,
     providerTimestampUtc: identity.providerTimestampUtc,
     source: input.source,
@@ -92,7 +98,12 @@ export function recordProviderEventBeforeApply<T>(
     relatedProviderEntityId,
     rawPayload: input.rawPayload,
     normalizedPayload: normalized,
-  });
+  };
+  if (input.sink.submit) {
+    input.sink.submit(event, () => input.apply(normalized));
+    return normalized;
+  }
+  input.sink.append(event);
   input.apply(normalized);
   return normalized;
 }

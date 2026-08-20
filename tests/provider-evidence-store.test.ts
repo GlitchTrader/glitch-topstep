@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import type { ProviderEvidenceEvent } from "../src/domain/provider-evidence.js";
 import {
   redactSecrets,
   SqliteProviderEvidenceStore,
@@ -112,6 +113,48 @@ describe("ProjectX provider evidence store", () => {
       marketPruneInterval: 1,
       maximumMarketEventsBetweenPrunes: 3,
     });
+    store.close();
+  });
+
+  it("commits a batch atomically and keeps retention honest", () => {
+    const store = new SqliteProviderEvidenceStore(":memory:", {
+      marketEventRetention: 3,
+      marketPruneInterval: 1,
+    });
+    const event = (
+      source: ProviderEvidenceEvent["source"],
+      eventType: string,
+      second: number,
+    ): ProviderEvidenceEvent => ({
+      receivedUtc: `2026-07-21T12:00:0${second}Z`,
+      providerTimestampUtc: null,
+      source,
+      eventType,
+      generation: 1,
+      accountId: source === "projectx_market_stream" ? null : 101,
+      contractId: "MNQ",
+      providerEntityId: `${eventType}-${second}`,
+      rawPayload: { second },
+      normalizedPayload: { second },
+    });
+
+    const stored = store.appendBatch([
+      event("projectx_user_stream", "order", 0),
+      event("projectx_market_stream", "quote", 1),
+      event("projectx_market_stream", "depth", 2),
+      event("projectx_market_stream", "quote", 3),
+      event("projectx_market_stream", "trade", 4),
+    ]);
+    assert.deepEqual(stored.map((item) => item.sequence), [1, 2, 3, 4, 5]);
+    assert.equal(store.status().marketEventCount, 3);
+
+    const before = store.status();
+    assert.throws(() => store.appendBatch([
+      event("projectx_user_stream", "order", 5),
+      { ...event("projectx_user_stream", "order", 6), source: "bogus" as ProviderEvidenceEvent["source"] },
+    ]));
+    assert.equal(store.status().eventCount, before.eventCount);
+    assert.equal(store.status().latestSequence, before.latestSequence);
     store.close();
   });
 

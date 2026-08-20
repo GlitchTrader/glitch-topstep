@@ -79,6 +79,18 @@ describe("venue state truth", () => {
     assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
   });
 
+  it("keeps evidence backlog visible while the persistence queue is shedding", () => {
+    const state = readyState();
+    state.markEvidenceBacklog(true);
+    state.markStreamEvent("market");
+    const degraded = state.buildSnapshot(1, "MNQ");
+    assert.equal(degraded.stateComplete, false);
+    assert.ok(degraded.stateIssues.includes("provider_evidence_backlog"));
+
+    state.markEvidenceBacklog(false);
+    assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
+  });
+
   it("stays current while a reconciliation cycle is in flight", () => {
     const state = readyState();
     state.markReconciliationStarted();
