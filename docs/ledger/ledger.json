@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T11:30:00Z",
+  "updated": "2026-08-21T13:15:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -27,7 +27,8 @@
       203,
       204,
       206,
-      208
+      208,
+      210
     ],
     "profile_merged_prs": [
       131,
@@ -36,10 +37,39 @@
       135,
       153,
       155,
-      158
+      158,
+      159,
+      161,
+      162,
+      163
     ],
-    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. The independent re-audit found incomplete runtime wiring and edge-state invariants; TS-REAUDIT-01 through TS-REAUDIT-12 are now the active production-hardening authority and armed promotion is blocked.",
-    "stream_validation": "Re-audit baseline: gateway build and 396 tests green with npm audit reporting zero vulnerabilities; Hermes 222 tests green with one expected skip. Targeted probes still reproduced residual-order flatten completion and decision dual-write divergence."
+    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. REAUDIT wave 1 (#210 gateway, #163 profile) landed 2026-08-21 with partial P0/P1 increments; all REAUDIT acceptance criteria remain open until follow-up PRs close each item. Armed promotion blocked.",
+    "reaudit_wave_1_2026_08_21": {
+      "gateway_pr": 210,
+      "gateway_commit": "a346ced",
+      "profile_pr": 163,
+      "profile_commit": "097808b",
+      "plan": "docs/plans/2026-08-21-reaudit-p0-p1-attack-plan.md",
+      "status": "partial_merged",
+      "items_touched": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-02",
+        "TS-REAUDIT-03",
+        "TS-REAUDIT-04",
+        "TS-REAUDIT-05",
+        "TS-REAUDIT-06",
+        "TS-REAUDIT-07",
+        "TS-REAUDIT-08",
+        "TS-REAUDIT-10",
+        "TS-REAUDIT-11",
+        "TS-REAUDIT-12",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-01",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-03",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-04"
+      ],
+      "issues_remain_open": true
+    },
+    "stream_validation": "Post wave 1: gateway npm run check 413 tests green (#210); profile 249 tests green (#163). Acceptance gaps remain on evidence outbox table, auth exposure gate, flatten restart matrix, paired delivery fixtures, fault proof, and signed pair manifest."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -1431,7 +1461,9 @@
         "src/service.ts",
         "tests/projectx-auth-manager.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/184"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100× concurrent refresh test."
     },
     {
       "id": "TS-REAUDIT-02",
@@ -1470,7 +1502,9 @@
         "src/service.ts",
         "tests/evidence-write-queue.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/185"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): stopSerial propagates evidenceQueue.close() failure. Residual: durable evidence_outbox table, persist-before-enqueue, identity bound, kill/ENOSPC/restart matrix."
     },
     {
       "id": "TS-REAUDIT-03",
@@ -1510,7 +1544,9 @@
         "tests/flatten-saga.test.ts",
         "tests/flatten-workflow.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/186"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): flattenControlPhaseAfterReceipt requires ownWorkingOrders===0 on fallback branch; table-driven receipt tests. Residual: restart fixtures, full receipt×venue matrix, phase deadline persistence."
     },
     {
       "id": "TS-REAUDIT-04",
@@ -1548,7 +1584,9 @@
         "src/execution/coordinator.ts",
         "glitch-topstep-hermes-profile:scripts/workflows/intent_outbox.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/187"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210/#163): GET /intent/status + deriveIntentDeliveryState; profile retain on receipt-only 404; supersession discard only when status=not_seen. Residual: paired CI fixtures, retention generation, crash registered/inflight tests."
     },
     {
       "id": "TS-REAUDIT-05",
@@ -1581,7 +1619,9 @@
         "src/storage/trade-outcome-store.ts",
         "src/projectx/provider-event-recorder.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/188"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): MAX_HOT_OUTCOMES LRU in trade-outcome-store; rearmStates.clear on flat. Residual: provider-event-recorder hash bound, cache metrics, multi-day heap soak."
     },
     {
       "id": "TS-REAUDIT-06",
@@ -1615,7 +1655,9 @@
         "src/observability/invariant-metrics.ts",
         "tests/invariant-metrics.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/189"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): unprotected_since_utc persisted in execution store; invariant metrics prefer truthful duration. Residual: supervisor authority promotion, gate parity soak, per-invariant owners."
     },
     {
       "id": "TS-REAUDIT-07",
@@ -1652,7 +1694,9 @@
         "src/storage/sqlite-execution-store.ts",
         "tests/workflow-decomposition.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/190"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): IntentDeliveryStatusPort added under src/domain/ports/. Residual: AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, OutcomeProjection ports + composition-root binding tests."
     },
     {
       "id": "TS-REAUDIT-08",
@@ -1686,7 +1730,9 @@
         "src/service.ts",
         "src/server/local-gateway.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/191"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): stopSerial fails on lifecycle.drain() disposer errors; evidenceQueue.close() no longer swallowed. Residual: critical vs best-effort disposer taxonomy, lock retention on failed_shutdown, AppService fault tests."
     },
     {
       "id": "TS-REAUDIT-09",
@@ -1761,7 +1807,9 @@
         "scripts/acceptance-r1-04-kill-matrix.mjs",
         ".github/workflows/release.yml",
         "https://github.com/GlitchTrader/glitch-topstep/issues/193"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): intent-delivery-status.test.ts added to audit regression matrix file list. Residual: deterministic kill matrix CI gate, immutable fault proof JSON, release manifest enforcement."
     },
     {
       "id": "TS-REAUDIT-11",
@@ -1793,7 +1841,9 @@
         "src/safety/safety-supervisor.ts",
         "src/service.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/194"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): SLO threshold table documented in docs/OPERATIONS.md. Residual: actionable alerts with hysteresis, health breach runbook links, automatic downgrade wiring."
     },
     {
       "id": "TS-REAUDIT-12",
@@ -1837,7 +1887,9 @@
         "glitch-topstep-hermes-profile:.github/workflows/release.yml",
         "https://github.com/GlitchTrader/glitch-topstep/issues/195",
         "https://github.com/GlitchTrader/glitch-topstep-hermes-profile/issues/142"
-      ]
+      ],
+      "pull_request": 210,
+      "implementation_note": "Wave 1 (#210): armed promotion and rollback checklist in docs/OPERATIONS.md. Residual: signed pair manifest validator, rollback rehearsal proof, release workflow enforcement."
     }
   ],
   "reaudit_program_2026_08_20": {
@@ -1911,7 +1963,8 @@
         "exit_gate": "Rollback rehearsed, paired Sim/PRAC soak accepted, signed manifest complete, human armed approval."
       }
     ],
-    "global_stop_line": "Do not promote to armed while any P0 re-audit item is open or while current paired fault/soak/rollback evidence is absent."
+    "global_stop_line": "Do not promote to armed while any P0 re-audit item is open or while current paired fault/soak/rollback evidence is absent.",
+    "next_plan": "docs/plans/2026-08-21-reaudit-p0-p1-attack-plan.md"
   },
   "roadmap_only": [
     "provider-event replay and archive",
