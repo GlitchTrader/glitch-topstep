@@ -764,7 +764,7 @@ export function buildDecisionPacket(
       session_open: sessionLevels.session_open,
       session_high: sessionLevels.session_high,
       session_low: sessionLevels.session_low,
-      session_levels_reliable: sessionLevels.reliable,
+      session_levels_reliable: sessionLevels.session_levels.reliable,
       ...(sessionLevels.note === undefined ? {} : { session_levels_note: sessionLevels.note }),
       session_levels: sessionLevels.session_levels,
       volume: quote?.volume ?? null,

@@ -50,7 +50,7 @@ export function buildStructuralLevels(input: {
       provenance: "market.session_low",
     });
   }
-  if (input.sessionOpen !== null) {
+  if (input.sessionLevelsReliable && input.sessionOpen !== null) {
     levels.push({
       kind: "session_open",
       label: "session_open",

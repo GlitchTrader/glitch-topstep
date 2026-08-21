@@ -144,9 +144,11 @@ test("TS-DATA-01 B3: session_levels.available is separate from reliable", () => 
     null,
   );
   assert.equal(packet.market.session_levels_reliable, false);
+  assert.equal(packet.market.session_levels_reliable, packet.market.session_levels.reliable);
   assert.equal(packet.market.session_high, null);
   assert.equal(packet.market.session_low, null);
   assert.equal(packet.market.session_levels.available, true);
   assert.equal(packet.market.session_levels.reliable, false);
   assert.equal(packet.market.session_levels.reason, "mirror_last_open_heuristic");
+  assert.ok(!packet.structural_levels.levels.some((row) => row.label === "session_open"));
 });
