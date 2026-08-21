@@ -525,7 +525,7 @@ describe("position management coordinator", () => {
         new_stop_price: 19_980,
       });
       assert.equal(receipt.status, "rejected");
-      assert.equal(receipt.code, "stop_would_widen");
+      assert.equal(receipt.code, "original_risk_envelope_missing");
     } finally {
       store.close();
       rmSync(directory, { recursive: true, force: true });
