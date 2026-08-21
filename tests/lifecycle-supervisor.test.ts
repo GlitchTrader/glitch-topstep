@@ -76,4 +76,5 @@ test("critical disposer failure is surfaced separately (TS-REAUDIT-08)", async (
   const result = await supervisor.drain("stop_requested");
   assert.deepEqual(result.failed, ["realtime"]);
   assert.deepEqual(result.criticalFailed, ["realtime"]);
+  assert.ok(supervisor.registeredNames().includes("realtime"));
 });

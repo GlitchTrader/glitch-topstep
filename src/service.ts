@@ -138,7 +138,7 @@ export class GlitchTopstepService {
       username: config.projectX.username,
       apiKey: config.projectX.apiKey,
     });
-    this.api = this.authManager.apiClient();
+    this.api = this.authManager.authenticatedClient();
     this.ledger = new JsonlEventStore(config.dataDir);
     this.executionStore = new SqliteExecutionStore(
       join(config.dataDir, "glitch-topstep.sqlite"),

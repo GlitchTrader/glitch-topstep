@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T18:00:00Z",
+  "updated": "2026-08-21T18:30:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -179,7 +179,7 @@
         "TS-TRAIL-D-01"
       ]
     },
-    "stream_validation": "Trail A+D merged (#220 gateway, #175 profile on 2026-08-21): npm run check and profile unittest green. Trail A: export idempotency, model-owner preemption, quiescence default false, identity queue cap, conservative shutdown, sanitized gateway errors. Trail D: cycle-empirical.jsonl. Residual REAUDIT acceptance: full auth facade wiring, kill matrix, PRAC soak, signed pair manifest."
+    "stream_validation": "Trail A+D merged (#220/#175). P0 wave 1-5 (#TBD): fault matrix registry + gate, authenticatedClient facade, pair_digest manifest, PRAC soak runbook; profile outbox delivery states (#TBD profile)."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
