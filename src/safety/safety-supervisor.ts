@@ -57,6 +57,7 @@ export function evaluateSafetySupervisor(input: SafetySupervisorInput): SafetySu
     input.tradingMode,
     input.maxContracts,
     now,
+    input.auth,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
   const newExposureBlockedByGates = newExposureGate ? !newExposureGate.passed : true;

@@ -13,6 +13,7 @@ import type {
   TopstepPolicyState,
   TradeAction,
 } from "../domain/models.js";
+import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
 import {
   resolvePacketProtectionStatus,
   type PacketProtectionStatus,
@@ -630,6 +631,7 @@ export function buildDecisionPacket(
   decisionScope?: { generation: number; scopeHash: string },
   dailyCaptureLocked = false,
   simultaneousExposureEnabled = false,
+  auth: ProjectXAuthStatus | null = null,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -665,6 +667,7 @@ export function buildDecisionPacket(
     tradingMode,
     policy.maxContracts,
     now,
+    auth ?? undefined,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
   if (dailyCaptureLocked && newExposureGate) {

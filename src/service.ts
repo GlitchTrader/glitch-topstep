@@ -155,6 +155,9 @@ export class GlitchTopstepService {
       },
     );
     this.evidenceQueue = new EvidenceWriteQueue(this.providerEvidenceStore, {
+      onStageIdentity: (event) => {
+        this.providerEvidenceStore.stageIdentityOutbox(event);
+      },
       onDegraded: (metrics) => {
         this.handleEvidenceQueueDegraded(metrics);
       },
@@ -227,6 +230,9 @@ export class GlitchTopstepService {
 
   private async startResources(): Promise<void> {
     await this.authManager.ensureAuthenticated();
+    for (const event of this.providerEvidenceStore.loadPendingOutboxEvents()) {
+      this.evidenceQueue.submit(event, null, { skipOutboxStage: true });
+    }
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;
     const contracts = contractsCol.items;
@@ -381,6 +387,7 @@ export class GlitchTopstepService {
       () => {
         void this.coordinator?.tightenOwnedStopsAfterCaptureLock();
       },
+      () => this.authManager.status(),
     );
 
     this.realtime = new ProjectXRealtimeClient(
@@ -427,7 +434,7 @@ export class GlitchTopstepService {
     this.lifecycle.register("realtime", async () => {
       await this.realtime?.stop();
       this.realtime = null;
-    });
+    }, { critical: true });
     try {
       await this.reconcile();
     } catch (error: unknown) {
@@ -635,7 +642,7 @@ export class GlitchTopstepService {
     this.lifecycle.register("local_gateway", async () => {
       await this.gateway?.stop();
       this.gateway = null;
-    });
+    }, { critical: true });
 
     this.tokenRefreshTimer = setInterval(() => {
       void this.authManager.ensureAuthenticated().catch((error: unknown) => {
@@ -686,9 +693,12 @@ export class GlitchTopstepService {
     try {
       // Intents already queued must settle before the stores they write to close.
       await this.coordinator?.drainExecutionQueue();
-      const failedDisposers = await this.lifecycle.drain("disposing_runtime_resources");
-      if (failedDisposers.length > 0) {
-        throw new Error(`lifecycle_dispose_failed:${failedDisposers.join(",")}`);
+      const drainResult = await this.lifecycle.drain("disposing_runtime_resources");
+      if (drainResult.criticalFailed.length > 0) {
+        throw new Error(`lifecycle_dispose_failed:${drainResult.criticalFailed.join(",")}`);
+      }
+      if (drainResult.failed.length > 0) {
+        console.warn(`lifecycle_best_effort_dispose_failed:${drainResult.failed.join(",")}`);
       }
       await Promise.all([
         this.historySync.waitForIdle(),
@@ -706,12 +716,28 @@ export class GlitchTopstepService {
         "failed_shutdown",
         error instanceof Error ? error.message : String(error),
       );
-      // An aborted drain must still not leak the runtime lock or the sqlite handles.
-      await this.closeStores().catch((cleanupError: unknown) => {
-        console.error("shutdown cleanup failed", cleanupError);
-      });
+      if (!this.shouldRetainShutdownRecoveryState()) {
+        await this.closeStores().catch((cleanupError: unknown) => {
+          console.error("shutdown cleanup failed", cleanupError);
+        });
+      } else {
+        this.orderFlow?.close();
+        this.orderFlow = null;
+        this.gateway = null;
+        this.realtime = null;
+        this.packets = null;
+      }
       throw error;
     }
+  }
+
+  /** TS-REAUDIT-02/08: retain lock + evidence handles when durable backlog remains. */
+  private shouldRetainShutdownRecoveryState(): boolean {
+    const metrics = this.evidenceQueue.metrics();
+    return metrics.incomplete_shutdown
+      || metrics.identity_depth > 0
+      || metrics.depth > 0
+      || this.providerEvidenceStore.outboxPendingCount() > 0;
   }
 
   private async closeStores(): Promise<void> {

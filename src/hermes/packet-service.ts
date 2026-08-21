@@ -6,6 +6,7 @@ import type { AccountVenueSnapshot } from "../domain/models.js";
 import { computeDailyEconomics } from "../policy/daily-economics.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
 import {
   buildDecisionPacket,
   emptyMarketObservationState,
@@ -31,6 +32,13 @@ export class DecisionPacketService {
     private readonly effectiveTradingMode: () => "disabled" | "shadow" | "armed" = () => this.config.tradingMode,
     /** Fires once per trading day, right after the capture lock becomes durable. */
     private readonly onDailyCaptureLatched: () => void = () => {},
+    private readonly authStatus: () => ProjectXAuthStatus = () => ({
+      degraded: false,
+      lastRefreshUtc: null,
+      expiresAtUtc: null,
+      refreshInFlight: false,
+      refreshFailureCount: 0,
+    }),
   ) {}
 
   public current(): DirectDecisionPacket {
@@ -85,6 +93,7 @@ export class DecisionPacketService {
       this.decisionScope(),
       dailyCaptureLocked,
       this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
+      this.authStatus(),
     );
     this.store.recordIssuedPacket(packet);
     return packet;
