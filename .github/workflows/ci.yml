@@ -17,6 +17,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/validate-agent-paths.mjs
       - run: npm audit --omit=dev --audit-level=high
       - name: Run build and tests
         run: |
