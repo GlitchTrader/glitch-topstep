@@ -150,5 +150,5 @@ export function validateProtectiveAmendment(input: AmendmentSafetyInput): Amendm
   if (wrongSide) {
     return { ok: false, code: "target_wrong_side_of_entry" };
   }
-  return { ok: true, amendment_source: source };
+  return { ok: true, amendment_source: amendmentSource };
 }
