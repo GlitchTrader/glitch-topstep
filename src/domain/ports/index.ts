@@ -33,3 +33,8 @@ export type {
   LifecycleStatus,
   LifecycleDisposer,
 } from "./lifecycle-supervisor-port.js";
+export type { AuthenticatedProjectXPort } from "./authenticated-project-x-port.js";
+export type { FlattenSagaPort } from "./flatten-saga-port.js";
+export type { EvidenceOutboxPort } from "./evidence-outbox-port.js";
+export type { OutcomeProjectionPort } from "./outcome-projection-port.js";
+export type { IntentDeliveryStatusPort } from "./intent-delivery-status-port.js";

@@ -21,6 +21,7 @@ const AUDIT_REGRESSION_FILES = [
   "tests/protection-supervisor.test.ts",
   "tests/workflow-decomposition.test.ts",
   "tests/intent-delivery-status.test.ts",
+  "tests/composition-root.test.ts",
 ] as const;
 
 test("TS-AUDIT-11 regression matrix files exist", () => {
