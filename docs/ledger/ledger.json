@@ -1291,7 +1291,7 @@
     {
       "id": "TS-DATA-01",
       "title": "Data temporal alignment and evidence hygiene without participation vetoes",
-      "status": "in_progress",
+      "status": "done",
       "priority": "P1",
       "owner_role": "market_data_architecture",
       "issue": 171,
@@ -1387,7 +1387,8 @@
         "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
-      "implementation_note": "Phases A–C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off."
+      "implementation_note": "Phases A–C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway).",
+      "last_verified_utc": "2026-08-21T01:45:00Z"
     },
     {
       "id": "TS-REAUDIT-01",
