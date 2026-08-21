@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T13:15:00Z",
+  "updated": "2026-08-21T14:10:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -28,7 +28,10 @@
       204,
       206,
       208,
-      210
+      210,
+      211,
+      212,
+      213
     ],
     "profile_merged_prs": [
       131,
@@ -41,9 +44,12 @@
       159,
       161,
       162,
-      163
+      163,
+      164,
+      165,
+      167
     ],
-    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. REAUDIT wave 1 (#210 gateway, #163 profile) landed 2026-08-21 with partial P0/P1 increments; all REAUDIT acceptance criteria remain open until follow-up PRs close each item. Armed promotion blocked.",
+    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. REAUDIT waves 1–2 (#210–#213 gateway, #163–#167 profile) merged 2026-08-21; wave 3 open (#214 gateway, #168 profile). All REAUDIT acceptance criteria remain open until follow-up PRs close each item. Armed promotion blocked.",
     "reaudit_wave_1_2026_08_21": {
       "gateway_pr": 210,
       "gateway_commit": "a346ced",
@@ -69,7 +75,36 @@
       ],
       "issues_remain_open": true
     },
-    "stream_validation": "Post wave 1: gateway npm run check 413 tests green (#210); profile 249 tests green (#163). Acceptance gaps remain on evidence outbox table, auth exposure gate, flatten restart matrix, paired delivery fixtures, fault proof, and signed pair manifest."
+    "reaudit_wave_2_2026_08_21": {
+      "gateway_pr": 213,
+      "gateway_commit": "f90012d",
+      "profile_pr": 167,
+      "profile_commit": "9a9b2b8",
+      "plan": "docs/plans/2026-08-21-reaudit-p0-p1-attack-plan.md",
+      "status": "merged",
+      "items_touched": [
+        "TS-REAUDIT-05",
+        "TS-REAUDIT-06",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-02"
+      ],
+      "issues_remain_open": true
+    },
+    "reaudit_wave_3_2026_08_21": {
+      "gateway_pr": 214,
+      "gateway_commit": "c59e8f7",
+      "profile_pr": 168,
+      "profile_commit": "35bcaa7",
+      "plan": "docs/plans/2026-08-21-reaudit-p0-p1-attack-plan.md",
+      "status": "open_pr",
+      "items_touched": [
+        "TS-REAUDIT-07",
+        "glitch-topstep-hermes-profile:GTHP-AUDIT-04",
+        "glitch-topstep-hermes-profile:GTHP-AUDIT-01",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-01"
+      ],
+      "issues_remain_open": true
+    },
+    "stream_validation": "Post wave 3 PR (#214): gateway npm run check 422 tests green. Waves 1–2 merged (#212/#213 gateway, #165/#167 profile). Acceptance gaps remain: AppService port wiring, orchestration shrink baseline, atomic SQLite authority, wake/session gate parity soak, fault proof, signed pair manifest."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -1695,8 +1730,8 @@
         "tests/workflow-decomposition.test.ts",
         "https://github.com/GlitchTrader/glitch-topstep/issues/190"
       ],
-      "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): IntentDeliveryStatusPort added under src/domain/ports/. Residual: AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, OutcomeProjection ports + composition-root binding tests."
+      "pull_request": 214,
+      "implementation_note": "Wave 1 (#210): IntentDeliveryStatusPort. Wave 3 (#214, open): AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, OutcomeProjection ports; production-ports adapters; composition-root.test.ts (422 tests green). Residual: wire AppService to ports, shrink orchestration baseline, import-cycle gate, semantic-parity proof before removing duplicates."
     },
     {
       "id": "TS-REAUDIT-08",
