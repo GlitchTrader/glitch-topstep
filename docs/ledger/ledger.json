@@ -35,7 +35,8 @@
       214,
       215,
       218,
-      220
+      220,
+      223
     ],
     "profile_merged_prs": [
       131,
@@ -179,7 +180,22 @@
         "TS-TRAIL-D-01"
       ]
     },
-    "stream_validation": "Trail A+D merged (#220/#175). P0 wave 1-5 (#TBD): fault matrix registry + gate, authenticatedClient facade, pair_digest manifest, PRAC soak runbook; profile outbox delivery states (#TBD profile)."
+    "p0_items_1_5_2026_08_21": {
+      "gateway_pr": 223,
+      "gateway_commit": "19aa4f4",
+      "profile_pr": 177,
+      "profile_commit": "bd821a3",
+      "status": "merged",
+      "items": {
+        "1_fault_matrix": "tests/reaudit-fault-matrix.test.ts + npm run reaudit:fault-matrix",
+        "2_auth_facade": "authenticatedClient() proxy on AppService",
+        "3_delivery_outbox": "profile finalize_outbox_after_delivery (delivery_unknown|registered|terminal)",
+        "4_pair_digest": "pair_digest in build-paired-release-manifest.mjs",
+        "5_prac_soak": "docs/evidence/PRAC-SOAK-2026-08-21-single-active-position.md + scripts/prac-soak-checklist.ps1"
+      },
+      "residual_acceptance": "Execute PRAC soak scenarios on credentialed account; run reaudit:fault-matrix in release pipeline; full auth facade on all REST consumers; signed pair manifest (TS-REAUDIT-12)"
+    },
+    "stream_validation": "P0 items 1-5 merged (#223 gateway, #177 profile 2026-08-21). npm run check 440 pass; profile unittest pass. PRAC soak execution pending operator."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",

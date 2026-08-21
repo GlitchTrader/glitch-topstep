@@ -1,0 +1,814 @@
+﻿{
+    "schema_version":  "glitch.direct.health.v2",
+    "compatibility":  {
+                          "gateway_name":  "glitch-topstep",
+                          "gateway_version":  "0.2.2",
+                          "health_schema":  "glitch.direct.health.v2",
+                          "protocol_revision":  "glitch.topstep.paired.v3",
+                          "runtime_intent_schema":  "glitch.intent.v3",
+                          "intent_schemas":  [
+                                                 "glitch.intent.v2",
+                                                 "glitch.intent.v3"
+                                             ],
+                          "decision_packet_schemas":  [
+                                                          "glitch.direct.decision_packet.v1",
+                                                          "glitch.direct.decision_packet.v2"
+                                                      ],
+                          "capabilities":  [
+                                               "packet_supported_actions",
+                                               "position_management",
+                                               "tranche_ownership",
+                                               "native_protection",
+                                               "bracket_verification",
+                                               "durable_mutation_receipts",
+                                               "restart_reconciliation",
+                                               "intent_receipt_lookup",
+                                               "bounded_entry_range_v1",
+                                               "daily_capture_context_v1",
+                                               "explicit_partial_completed_bars_v1",
+                                               "revisioned_outcome_feed_v1",
+                                               "multi_instrument_observation_v1",
+                                               "protected_reduction_saga_v1",
+                                               "immediate_lifecycle_facts_v1"
+                                           ],
+                          "semantic_revisions":  {
+                                                     "bounded_entry_range":  "glitch.topstep.entry_range.v1",
+                                                     "daily_capture":  "glitch.topstep.daily_capture.v1",
+                                                     "outcome_feed":  "glitch.topstep.outcome_feed.v2",
+                                                     "market_universe":  "glitch.topstep.market_universe.v1",
+                                                     "execution_facts":  "glitch.topstep.execution_fact.v1"
+                                                 },
+                          "provider_acceptance_evidence":  {
+                                                               "partial_exit_protection_transition":  "proven_prac_short_long_with_saga",
+                                                               "exact_contract_resolution":  "catalog_fixture_plus_runtime_resolution"
+                                                           },
+                          "paired_manifest_schema":  "glitch.topstep.paired_release.v1",
+                          "distributed_contract":  {
+                                                       "schema_version":  "glitch.topstep.distributed_state_machine.v1",
+                                                       "amendment_source_schema":  "glitch.topstep.amendment_source.v1",
+                                                       "original_risk_envelope_schema":  "glitch.topstep.original_risk_envelope.v1",
+                                                       "model_owner_schema":  "glitch.topstep.model_owner.v1",
+                                                       "outcome_path_chronology_schema":  "glitch.topstep.path_chronology.v1",
+                                                       "cadence":  {
+                                                                       "flat_decision_interval_minutes":  5,
+                                                                       "positioned_management_interval_minutes":  1
+                                                                   },
+                                                       "frozen_policies":  {
+                                                                               "daily_capture_blocks_new_entries":  true,
+                                                                               "automatic_breakeven_intent_free":  true,
+                                                                               "automatic_paths_tighten_only":  true
+                                                                           }
+                                                   }
+                      },
+    "status":  "ok",
+    "trading_mode":  "armed",
+    "runtime_trading_mode":  "armed",
+    "operator_paused":  false,
+    "controls":  {
+                     "pending":  0,
+                     "applying":  0,
+                     "completed":  0,
+                     "rejected":  0,
+                     "failed":  0
+                 },
+    "lifecycle":  {
+                      "state":  "ready",
+                      "changed_utc":  "2026-08-21T17:32:47.153Z",
+                      "detail":  null
+                  },
+    "gateway_mode":  "armed",
+    "gateway_mode_downgrade_reason":  null,
+    "recorded_utc":  "2026-08-21T17:33:18.975Z",
+    "data_quality":  {
+                         "state_complete":  true,
+                         "issues":  [
+
+                                    ],
+                         "quote_age_ms":  2315,
+                         "state_age_ms":  3596,
+                         "operational":  {
+                                             "generation":  1,
+                                             "userStream":  {
+                                                                "state":  "connected",
+                                                                "generation":  1,
+                                                                "lastChangedAt":  "2026-08-21T17:32:46.566Z",
+                                                                "lastEventAt":  null,
+                                                                "lastError":  null
+                                                            },
+                                             "marketStream":  {
+                                                                  "state":  "connected",
+                                                                  "generation":  1,
+                                                                  "lastChangedAt":  "2026-08-21T17:32:46.566Z",
+                                                                  "lastEventAt":  "2026-08-21T17:33:18.974Z",
+                                                                  "lastError":  null
+                                                              },
+                                             "reconciliation":  {
+                                                                    "state":  "succeeded",
+                                                                    "generation":  1,
+                                                                    "lastStartedAt":  "2026-08-21T17:33:15.285Z",
+                                                                    "lastSucceededAt":  "2026-08-21T17:33:15.379Z",
+                                                                    "lastError":  null
+                                                                }
+                                         }
+                     },
+    "execution_recovery":  {
+                               "blockingAmbiguity":  false,
+                               "entrySubmissionPending":  false,
+                               "blockingNewExposure":  false,
+                               "unresolvedMutations":  0,
+                               "ambiguousMutations":  0,
+                               "lastRecoveryUtc":  "2026-08-21T17:32:46.319Z",
+                               "lastRecoveryError":  null
+                           },
+    "provider_evidence":  {
+                              "eventCount":  504323,
+                              "marketEventCount":  503761,
+                              "earliestSequence":  1,
+                              "latestSequence":  3586705,
+                              "latestReceivedUtc":  "2026-08-21T17:33:16.609Z",
+                              "marketEventRetention":  500000,
+                              "marketPruneInterval":  10000,
+                              "maximumMarketEventsBetweenPrunes":  509999
+                          },
+    "provider_evidence_queue":  {
+                                    "depth":  253,
+                                    "identity_depth":  0,
+                                    "oldest_age_ms":  2655,
+                                    "degraded":  false,
+                                    "high_water_mark":  5000,
+                                    "coalesce_watermark":  1000,
+                                    "high_water_hits":  0,
+                                    "enqueued":  4019,
+                                    "persisted":  3765,
+                                    "coalesced":  {
+                                                      "identity":  0,
+                                                      "quote":  0,
+                                                      "depth":  1,
+                                                      "print":  0
+                                                  },
+                                    "dropped":  {
+                                                    "identity":  0,
+                                                    "quote":  0,
+                                                    "depth":  0,
+                                                    "print":  0
+                                                },
+                                    "last_batch_size":  3,
+                                    "last_write_latency_ms":  1,
+                                    "max_write_latency_ms":  48,
+                                    "write_failures":  0,
+                                    "consecutive_write_failures":  0,
+                                    "apply_failures":  0,
+                                    "resume_cursor":  3586705,
+                                    "closed":  false,
+                                    "incomplete_shutdown":  false
+                                },
+    "provider_history":  {
+                             "syncKey":  "projectx-history:26804090",
+                             "cursorUtc":  "2026-08-21T17:32:43.627Z",
+                             "lastAttemptUtc":  "2026-08-21T17:32:46.200Z",
+                             "lastSucceededUtc":  "2026-08-21T17:32:46.200Z",
+                             "lastWindowStartUtc":  "2026-08-21T17:31:04.901Z",
+                             "lastWindowEndUtc":  "2026-08-21T17:32:43.627Z",
+                             "lastError":  null,
+                             "lastOrdersSeen":  0,
+                             "lastTradesSeen":  0,
+                             "lastEventsAppended":  0
+                         },
+    "market_observation":  {
+                               "last_attempt_utc":  "2026-08-21T17:32:46.132Z",
+                               "last_succeeded_utc":  "2026-08-21T17:32:46.132Z",
+                               "last_error":  null,
+                               "observation":  {
+                                                   "schema_version":  "glitch.projectx.market_observation.v1",
+                                                   "generated_utc":  "2026-08-21T17:32:46.132Z",
+                                                   "source":  "projectx_bars",
+                                                   "instrument":  "MNQ",
+                                                   "contract_id":  "CON.F.US.MNQ.U26",
+                                                   "timeframes":  [
+                                                                      {
+                                                                          "timeframe_minutes":  1,
+                                                                          "bars_received":  501,
+                                                                          "bars_accepted":  501,
+                                                                          "rejected_bars":  0,
+                                                                          "latest_bar_utc":  "2026-08-21T17:32:00.000Z",
+                                                                          "latest_bar_partial":  true,
+                                                                          "current_partial_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:32:00.000Z",
+                                                                                                      "open":  29397.5,
+                                                                                                      "high":  29398.25,
+                                                                                                      "low":  29391.25,
+                                                                                                      "close":  29395.75,
+                                                                                                      "volume":  1025
+                                                                                                  },
+                                                                          "prior_completed_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:31:00.000Z",
+                                                                                                      "open":  29396.25,
+                                                                                                      "high":  29398.5,
+                                                                                                      "low":  29395,
+                                                                                                      "close":  29397.25,
+                                                                                                      "volume":  674
+                                                                                                  },
+                                                                          "partial_progress":  0.7688666666666667,
+                                                                          "bar_identity_issues":  [
+
+                                                                                                  ],
+                                                                          "gaps":  [
+
+                                                                                   ],
+                                                                          "features":  {
+                                                                                           "latest_close":  29395.75,
+                                                                                           "change":  -1.5,
+                                                                                           "return_bps":  -0.5102518092678736,
+                                                                                           "true_range":  7,
+                                                                                           "average_true_range_14":  10.5,
+                                                                                           "realized_volatility_20_bps":  1.6968070936426554,
+                                                                                           "rolling_vwap_20":  29393.455495371785,
+                                                                                           "distance_from_rolling_vwap_20_bps":  0.7806175182690134,
+                                                                                           "ema_20":  29396.253886966413,
+                                                                                           "ema_50":  29400.636096714636,
+                                                                                           "ema_200":  29397.68335908213,
+                                                                                           "distance_from_ema_20_bps":  -0.1714119657391213,
+                                                                                           "distance_from_ema_50_bps":  -1.661901701229395,
+                                                                                           "distance_from_ema_200_bps":  -0.6576569515748806,
+                                                                                           "ema_20_slope_bps":  -0.018043332258271438,
+                                                                                           "ema_50_slope_bps":  -0.06783226237496102,
+                                                                                           "ema_200_slope_bps":  -0.00660961323553244,
+                                                                                           "range_position_20":  0.5845070422535211,
+                                                                                           "close_location":  0.6428571428571429,
+                                                                                           "body_fraction":  0.25,
+                                                                                           "upper_wick_fraction":  0.10714285714285714,
+                                                                                           "lower_wick_fraction":  0.6428571428571429,
+                                                                                           "volume_z_score_20":  -0.7566797082699367,
+                                                                                           "progress_adjusted_volume_z_score_20":  -0.4000427103018177
+                                                                                       }
+                                                                      },
+                                                                      {
+                                                                          "timeframe_minutes":  5,
+                                                                          "bars_received":  501,
+                                                                          "bars_accepted":  501,
+                                                                          "rejected_bars":  0,
+                                                                          "latest_bar_utc":  "2026-08-21T17:30:00.000Z",
+                                                                          "latest_bar_partial":  true,
+                                                                          "current_partial_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:30:00.000Z",
+                                                                                                      "open":  29396,
+                                                                                                      "high":  29401.5,
+                                                                                                      "low":  29391.25,
+                                                                                                      "close":  29395.75,
+                                                                                                      "volume":  3740
+                                                                                                  },
+                                                                          "prior_completed_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:25:00.000Z",
+                                                                                                      "open":  29389.25,
+                                                                                                      "high":  29407.5,
+                                                                                                      "low":  29378.25,
+                                                                                                      "close":  29395.25,
+                                                                                                      "volume":  9920
+                                                                                                  },
+                                                                          "partial_progress":  0.5537733333333333,
+                                                                          "bar_identity_issues":  [
+
+                                                                                                  ],
+                                                                          "gaps":  [
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-20T20:55:00.000Z",
+                                                                                           "before_utc":  "2026-08-20T22:00:00.000Z",
+                                                                                           "missing_bars":  12
+                                                                                       }
+                                                                                   ],
+                                                                          "features":  {
+                                                                                           "latest_close":  29395.75,
+                                                                                           "change":  0.5,
+                                                                                           "return_bps":  0.1700955086280947,
+                                                                                           "true_range":  10.25,
+                                                                                           "average_true_range_14":  19.571428571428573,
+                                                                                           "realized_volatility_20_bps":  4.603052594325455,
+                                                                                           "rolling_vwap_20":  29409.598581949696,
+                                                                                           "distance_from_rolling_vwap_20_bps":  -4.708864662367756,
+                                                                                           "ema_20":  29399.59697455774,
+                                                                                           "ema_50":  29398.034035349672,
+                                                                                           "ema_200":  29406.373541586883,
+                                                                                           "distance_from_ema_20_bps":  -1.3085126850778699,
+                                                                                           "distance_from_ema_50_bps":  -0.7769347252696408,
+                                                                                           "distance_from_ema_200_bps":  -3.6126663397848997,
+                                                                                           "ema_20_slope_bps":  -0.13773628022278436,
+                                                                                           "ema_50_slope_bps":  -0.03171152087732891,
+                                                                                           "ema_200_slope_bps":  -0.03630807259195604,
+                                                                                           "range_position_20":  0.21065989847715735,
+                                                                                           "close_location":  0.43902439024390244,
+                                                                                           "body_fraction":  0.024390243902439025,
+                                                                                           "upper_wick_fraction":  0.5365853658536586,
+                                                                                           "lower_wick_fraction":  0.43902439024390244,
+                                                                                           "volume_z_score_20":  -1.453756049382539,
+                                                                                           "progress_adjusted_volume_z_score_20":  -0.9689307016524226
+                                                                                       }
+                                                                      },
+                                                                      {
+                                                                          "timeframe_minutes":  15,
+                                                                          "bars_received":  501,
+                                                                          "bars_accepted":  501,
+                                                                          "rejected_bars":  0,
+                                                                          "latest_bar_utc":  "2026-08-21T17:30:00.000Z",
+                                                                          "latest_bar_partial":  true,
+                                                                          "current_partial_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:30:00.000Z",
+                                                                                                      "open":  29396,
+                                                                                                      "high":  29401.5,
+                                                                                                      "low":  29391.25,
+                                                                                                      "close":  29395.75,
+                                                                                                      "volume":  3740
+                                                                                                  },
+                                                                          "prior_completed_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:15:00.000Z",
+                                                                                                      "open":  29408,
+                                                                                                      "high":  29410.5,
+                                                                                                      "low":  29375,
+                                                                                                      "close":  29395.25,
+                                                                                                      "volume":  27356
+                                                                                                  },
+                                                                          "partial_progress":  0.18459111111111112,
+                                                                          "bar_identity_issues":  [
+
+                                                                                                  ],
+                                                                          "gaps":  [
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-14T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-16T22:00:00.000Z",
+                                                                                           "missing_bars":  196
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-17T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-17T22:00:00.000Z",
+                                                                                           "missing_bars":  4
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-18T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-18T22:00:00.000Z",
+                                                                                           "missing_bars":  4
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-19T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-19T22:00:00.000Z",
+                                                                                           "missing_bars":  4
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-20T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-20T22:00:00.000Z",
+                                                                                           "missing_bars":  4
+                                                                                       }
+                                                                                   ],
+                                                                          "features":  {
+                                                                                           "latest_close":  29395.75,
+                                                                                           "change":  0.5,
+                                                                                           "return_bps":  0.1700955086280947,
+                                                                                           "true_range":  10.25,
+                                                                                           "average_true_range_14":  50.857142857142854,
+                                                                                           "realized_volatility_20_bps":  14.905833205849678,
+                                                                                           "rolling_vwap_20":  29355.26066120862,
+                                                                                           "distance_from_rolling_vwap_20_bps":  13.792873195258085,
+                                                                                           "ema_20":  29402.34714947031,
+                                                                                           "ema_50":  29405.820624351185,
+                                                                                           "ema_200":  29470.71709093305,
+                                                                                           "distance_from_ema_20_bps":  -2.2437492615042993,
+                                                                                           "distance_from_ema_50_bps":  -3.4247044079584024,
+                                                                                           "distance_from_ema_200_bps":  -25.437823824148904,
+                                                                                           "ema_20_slope_bps":  -0.2361785546266945,
+                                                                                           "ema_50_slope_bps":  -0.1397818994604245,
+                                                                                           "ema_200_slope_bps":  -0.2556499849871026,
+                                                                                           "range_position_20":  0.5598086124401914,
+                                                                                           "close_location":  0.43902439024390244,
+                                                                                           "body_fraction":  0.024390243902439025,
+                                                                                           "upper_wick_fraction":  0.5365853658536586,
+                                                                                           "lower_wick_fraction":  0.43902439024390244,
+                                                                                           "volume_z_score_20":  -1.3765697916590434,
+                                                                                           "progress_adjusted_volume_z_score_20":  -1.0248884483332856
+                                                                                       }
+                                                                      },
+                                                                      {
+                                                                          "timeframe_minutes":  60,
+                                                                          "bars_received":  501,
+                                                                          "bars_accepted":  501,
+                                                                          "rejected_bars":  0,
+                                                                          "latest_bar_utc":  "2026-08-21T17:00:00.000Z",
+                                                                          "latest_bar_partial":  true,
+                                                                          "current_partial_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T17:00:00.000Z",
+                                                                                                      "open":  29412,
+                                                                                                      "high":  29423.75,
+                                                                                                      "low":  29375,
+                                                                                                      "close":  29395.75,
+                                                                                                      "volume":  55874
+                                                                                                  },
+                                                                          "prior_completed_bar":  {
+                                                                                                      "timestamp":  "2026-08-21T16:00:00.000Z",
+                                                                                                      "open":  29443.25,
+                                                                                                      "high":  29454.5,
+                                                                                                      "low":  29380.5,
+                                                                                                      "close":  29412.25,
+                                                                                                      "volume":  161750
+                                                                                                  },
+                                                                          "partial_progress":  0.5461477777777778,
+                                                                          "bar_identity_issues":  [
+
+                                                                                                  ],
+                                                                          "gaps":  [
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-23T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-23T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-24T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-26T22:00:00.000Z",
+                                                                                           "missing_bars":  49
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-27T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-27T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-28T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-28T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-29T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-29T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-30T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-07-30T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-07-31T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-02T22:00:00.000Z",
+                                                                                           "missing_bars":  49
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-03T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-03T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-04T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-04T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-05T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-05T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-06T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-06T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-07T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-09T22:00:00.000Z",
+                                                                                           "missing_bars":  49
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-10T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-10T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-11T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-11T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-12T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-12T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-13T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-13T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-14T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-16T22:00:00.000Z",
+                                                                                           "missing_bars":  49
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-17T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-17T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-18T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-18T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-19T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-19T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-20T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-20T22:00:00.000Z",
+                                                                                           "missing_bars":  1
+                                                                                       }
+                                                                                   ],
+                                                                          "features":  {
+                                                                                           "latest_close":  29395.75,
+                                                                                           "change":  -16.5,
+                                                                                           "return_bps":  -5.609907436527297,
+                                                                                           "true_range":  48.75,
+                                                                                           "average_true_range_14":  87.82142857142857,
+                                                                                           "realized_volatility_20_bps":  19.75924730670999,
+                                                                                           "rolling_vwap_20":  29372.588746555855,
+                                                                                           "distance_from_rolling_vwap_20_bps":  7.885329292556993,
+                                                                                           "ema_20":  29409.809836992383,
+                                                                                           "ema_50":  29468.021008317857,
+                                                                                           "ema_200":  29629.84441643084,
+                                                                                           "distance_from_ema_20_bps":  -4.780662326724045,
+                                                                                           "distance_from_ema_50_bps":  -24.5252330644998,
+                                                                                           "distance_from_ema_200_bps":  -79.00629282448224,
+                                                                                           "ema_20_slope_bps":  -0.503202290809939,
+                                                                                           "ema_50_slope_bps":  -1.0009297249391147,
+                                                                                           "ema_200_slope_bps":  -0.7939700498640426,
+                                                                                           "range_position_20":  0.5492957746478874,
+                                                                                           "close_location":  0.4256410256410256,
+                                                                                           "body_fraction":  0.3333333333333333,
+                                                                                           "upper_wick_fraction":  0.24102564102564103,
+                                                                                           "lower_wick_fraction":  0.4256410256410256,
+                                                                                           "volume_z_score_20":  -0.2950234891725733,
+                                                                                           "progress_adjusted_volume_z_score_20":  0.11096488091258813
+                                                                                       }
+                                                                      }
+                                                                  ]
+                                               }
+                           },
+    "order_flow":  {
+                       "last_attempt_utc":  "2026-08-21T17:33:16.657Z",
+                       "last_succeeded_utc":  "2026-08-21T17:33:16.657Z",
+                       "last_error":  null,
+                       "observation":  {
+                                           "schema_version":  "glitch.projectx.order_flow.v1",
+                                           "generated_utc":  "2026-08-21T17:33:16.657Z",
+                                           "source":  "projectx_market_evidence",
+                                           "contract_id":  "CON.F.US.MNQ.U26",
+                                           "lookback_start_utc":  "2026-08-21T17:28:16.657Z",
+                                           "through_sequence":  3586703,
+                                           "events_read":  13263,
+                                           "truncated":  false,
+                                           "source_complete":  true,
+                                           "invalid_events":  0,
+                                           "windows":  [
+                                                           {
+                                                               "window_seconds":  15,
+                                                               "start_utc":  "2026-08-21T17:33:01.657Z",
+                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
+                                                               "trade_count":  85,
+                                                               "total_volume":  89,
+                                                               "buy_volume":  44,
+                                                               "sell_volume":  45,
+                                                               "rolling_delta":  -1,
+                                                               "delta_ratio":  -0.011235955056179775,
+                                                               "average_trade_size":  1.0470588235294118,
+                                                               "max_trade_size":  4,
+                                                               "vwap":  29393.93820224719,
+                                                               "first_price":  29392.75,
+                                                               "last_price":  29391.5,
+                                                               "high_price":  29396.25,
+                                                               "low_price":  29391.5,
+                                                               "price_change":  -1.25,
+                                                               "price_change_bps":  -0.42527494024887086,
+                                                               "trades_per_second":  5.666666666666667
+                                                           },
+                                                           {
+                                                               "window_seconds":  60,
+                                                               "start_utc":  "2026-08-21T17:32:16.657Z",
+                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
+                                                               "trade_count":  167,
+                                                               "total_volume":  181,
+                                                               "buy_volume":  92,
+                                                               "sell_volume":  89,
+                                                               "rolling_delta":  3,
+                                                               "delta_ratio":  0.016574585635359115,
+                                                               "average_trade_size":  1.0838323353293413,
+                                                               "max_trade_size":  9,
+                                                               "vwap":  29393.580110497238,
+                                                               "first_price":  29395.5,
+                                                               "last_price":  29391.5,
+                                                               "high_price":  29396.25,
+                                                               "low_price":  29390.75,
+                                                               "price_change":  -4,
+                                                               "price_change_bps":  -1.36075249613036,
+                                                               "trades_per_second":  2.783333333333333
+                                                           },
+                                                           {
+                                                               "window_seconds":  300,
+                                                               "start_utc":  "2026-08-21T17:28:16.657Z",
+                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
+                                                               "trade_count":  1702,
+                                                               "total_volume":  1784,
+                                                               "buy_volume":  904,
+                                                               "sell_volume":  880,
+                                                               "rolling_delta":  24,
+                                                               "delta_ratio":  0.013452914798206279,
+                                                               "average_trade_size":  1.0481786133960047,
+                                                               "max_trade_size":  10,
+                                                               "vwap":  29398.22701793722,
+                                                               "first_price":  29393.75,
+                                                               "last_price":  29391.5,
+                                                               "high_price":  29406.25,
+                                                               "low_price":  29390.75,
+                                                               "price_change":  -2.25,
+                                                               "price_change_bps":  -0.7654688496704231,
+                                                               "trades_per_second":  5.673333333333333
+                                                           }
+                                                       ],
+                                           "depth":  {
+                                                         "available":  true,
+                                                         "unavailable_reason":  null,
+                                                         "depth_levels_requested":  10,
+                                                         "reconstruction_basis":  "since_latest_reset",
+                                                         "book_complete":  false,
+                                                         "latest_reset_sequence":  3582944,
+                                                         "best_bid":  29391.5,
+                                                         "best_ask":  29392,
+                                                         "spread_ticks":  2,
+                                                         "bid_volume":  26,
+                                                         "ask_volume":  70,
+                                                         "imbalance_ratio":  -0.4583333333333333,
+                                                         "bid_levels":  [
+                                                                            {
+                                                                                "price":  29391.5,
+                                                                                "current_volume":  8
+                                                                            },
+                                                                            {
+                                                                                "price":  29391.25,
+                                                                                "current_volume":  7
+                                                                            },
+                                                                            {
+                                                                                "price":  29391,
+                                                                                "current_volume":  9
+                                                                            },
+                                                                            {
+                                                                                "price":  29390.75,
+                                                                                "current_volume":  2
+                                                                            }
+                                                                        ],
+                                                         "ask_levels":  [
+                                                                            {
+                                                                                "price":  29392,
+                                                                                "current_volume":  6
+                                                                            },
+                                                                            {
+                                                                                "price":  29392.5,
+                                                                                "current_volume":  4
+                                                                            },
+                                                                            {
+                                                                                "price":  29392.75,
+                                                                                "current_volume":  6
+                                                                            },
+                                                                            {
+                                                                                "price":  29393,
+                                                                                "current_volume":  12
+                                                                            },
+                                                                            {
+                                                                                "price":  29393.25,
+                                                                                "current_volume":  4
+                                                                            },
+                                                                            {
+                                                                                "price":  29393.5,
+                                                                                "current_volume":  6
+                                                                            },
+                                                                            {
+                                                                                "price":  29393.75,
+                                                                                "current_volume":  12
+                                                                            },
+                                                                            {
+                                                                                "price":  29394,
+                                                                                "current_volume":  4
+                                                                            },
+                                                                            {
+                                                                                "price":  29394.25,
+                                                                                "current_volume":  10
+                                                                            },
+                                                                            {
+                                                                                "price":  29395,
+                                                                                "current_volume":  6
+                                                                            }
+                                                                        ],
+                                                         "depth_events_applied":  7796,
+                                                         "depth_events_ignored":  3765,
+                                                         "depth_events_invalid":  0
+                                                     },
+                                           "issues":  [
+
+                                                      ],
+                                           "last_trade_utc":  "2026-08-21T17:33:16.564Z"
+                                       }
+                   },
+    "outcome_feed":  {
+                         "pending":  0,
+                         "last_write_error":  null,
+                         "export_backlog":  0,
+                         "export_failures":  0,
+                         "last_export_error":  null,
+                         "quarantine":  null,
+                         "feed":  {
+                                      "current_count":  1,
+                                      "revision_count":  1,
+                                      "high_water_sequence":  1,
+                                      "integrity":  "ok",
+                                      "integrity_error":  null
+                                  }
+                     },
+    "execution_facts":  {
+                            "live":  1,
+                            "superseded":  5,
+                            "high_water_sequence":  6
+                        },
+    "event_ledger":  {
+                         "pending":  0,
+                         "failed_writes":  0,
+                         "consecutive_failures":  0,
+                         "last_write_error":  null,
+                         "last_failure_utc":  null,
+                         "durable":  true
+                     },
+    "persistence":  {
+                        "new_exposure_blocked":  false,
+                        "event_ledger_backlog":  0,
+                        "event_ledger_failed_writes":  0,
+                        "outcome_export_backlog":  0,
+                        "outcome_export_failures":  0,
+                        "outcome_export_quarantine":  null
+                    },
+    "protected_reduction":  {
+                                "active_state":  null,
+                                "active_reduction_id":  null,
+                                "unprotected_open_quantity":  0,
+                                "orphan_protective_orders":  0,
+                                "ambiguous_age_ms":  null,
+                                "fail_closed_rollback":  false
+                            },
+    "safety_supervisor":  {
+                              "mode":  "observe",
+                              "invariants":  [
+                                                 {
+                                                     "id":  "operator_not_paused",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "auth_not_degraded",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "reconciliation_current",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "state_complete",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "protection_coverage",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "no_flatten_pending",
+                                                     "ok":  true
+                                                 },
+                                                 {
+                                                     "id":  "event_ledger_durable",
+                                                     "ok":  true
+                                                 }
+                                             ],
+                              "new_exposure_blocked":  false,
+                              "risk_reduction_permitted":  true,
+                              "would_block_new_exposure":  false,
+                              "agrees_with_execution_gates":  true,
+                              "gate_divergence_detail":  null
+                          },
+    "invariant_metrics":  {
+                              "unprotected_open_quantity":  0,
+                              "unprotected_seconds_estimate":  null,
+                              "flatten_pending_seconds":  null,
+                              "auth_refresh_failures":  0,
+                              "auth_degraded":  false,
+                              "auth_refresh_in_flight":  false,
+                              "reconciliation_age_ms":  3596,
+                              "evidence_queue_depth":  253,
+                              "evidence_queue_degraded":  false,
+                              "rest_snapshot_cache_size":  4,
+                              "rest_snapshot_cache_max":  4096,
+                              "rest_snapshot_cache_evictions":  0,
+                              "supervisor_gate_divergence":  false,
+                              "non_terminal_controls":  0,
+                              "execution_recovery_blocking":  false,
+                              "orphan_protective_orders":  0
+                          }
+}
