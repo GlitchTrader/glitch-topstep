@@ -13,7 +13,13 @@
     "window_ms": 30000,
     "budget_per_window": 50,
     "observed_peak_per_window": 12,
-    "headroom_per_window": 38
+    "headroom_per_window": 38,
+    "window_count": 12
+  },
+  "universe_freshness": {
+    "comparable_as_of_utc": "2026-08-20T12:00:00.000Z",
+    "ranking_freshness_skew_ms": 0,
+    "ranking_freshness_valid": true
   },
   "candidates": [
     {
@@ -38,6 +44,13 @@
         "completed_timeframe_count": 4,
         "gap_count": 0,
         "identity_issue_count": 0
+      },
+      "candidate_alignment": {
+        "observation_age_ms": 0,
+        "quote_age_ms": 2591996000,
+        "latest_1m_age_ms": null,
+        "comparable_as_of_utc": "2026-08-20T12:00:00.000Z",
+        "ranking_freshness_valid": true
       },
       "quote": {
         "contractId": "CON.F.US.MNQ.U26",
@@ -78,6 +91,13 @@
         "gap_count": 0,
         "identity_issue_count": 0
       },
+      "candidate_alignment": {
+        "observation_age_ms": 0,
+        "quote_age_ms": 2591996000,
+        "latest_1m_age_ms": null,
+        "comparable_as_of_utc": "2026-08-20T12:00:00.000Z",
+        "ranking_freshness_valid": true
+      },
       "quote": {
         "contractId": "CON.F.US.MES.U26",
         "symbol": "F.US.MES",
@@ -116,6 +136,13 @@
         "completed_timeframe_count": 4,
         "gap_count": 0,
         "identity_issue_count": 0
+      },
+      "candidate_alignment": {
+        "observation_age_ms": 0,
+        "quote_age_ms": 2591996000,
+        "latest_1m_age_ms": null,
+        "comparable_as_of_utc": "2026-08-20T12:00:00.000Z",
+        "ranking_freshness_valid": true
       },
       "quote": {
         "contractId": "CON.F.US.MCLE.V26",

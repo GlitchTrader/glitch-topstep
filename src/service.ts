@@ -857,10 +857,10 @@ export class GlitchTopstepService {
     return this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
   }
 
-  /** ponytail: one coalesced refresh per /packet; scanner background timer unchanged. */
+  /** ponytail: token-bucket packet refresh; parallel per contract; background timer unchanged. */
   private async ensureSelectedMarketObservationFresh(): Promise<void> {
     if (this.scannerMarketData) {
-      await this.scannerMarketData.refreshSelected(this.config.scope.contractId);
+      await this.scannerMarketData.refreshForPacket(new Date());
       return;
     }
     await this.marketObservation.refresh();

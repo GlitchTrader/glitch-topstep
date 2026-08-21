@@ -1,5 +1,6 @@
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
 import type { AccountVenueSnapshot, QuoteInfo } from "../domain/models.js";
+import { buildCandidateAlignment } from "./candidate-freshness.js";
 import type { MultiInstrumentMarketPacket } from "./multi-instrument-data-plane.js";
 
 export interface ScannerAccountSelection {
@@ -55,12 +56,19 @@ export function buildScannerPacket(input: {
     },
     candidates: input.packet.candidates.map((candidate) => {
       const snapshot = input.candidateSnapshot(candidate.contract_id);
+      const asOf = new Date(input.packet.generated_utc);
       return {
         ...candidate,
         quote: snapshot.quote,
         open_contracts: snapshot.instrumentOpenContracts,
         state_complete: snapshot.stateComplete,
         state_issues: snapshot.stateIssues,
+        candidate_alignment: buildCandidateAlignment(
+          candidate.market_observation,
+          snapshot.quote,
+          asOf,
+          input.packet.universe_freshness.ranking_freshness_valid,
+        ),
       };
     }),
   };
