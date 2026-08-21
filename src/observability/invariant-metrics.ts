@@ -14,6 +14,10 @@ export interface InvariantMetrics {
   reconciliation_age_ms: number | null;
   evidence_queue_depth: number;
   evidence_queue_degraded: boolean;
+  rest_snapshot_cache_size: number;
+  rest_snapshot_cache_max: number;
+  rest_snapshot_cache_evictions: number;
+  supervisor_gate_divergence: boolean;
   non_terminal_controls: number;
   execution_recovery_blocking: boolean;
   orphan_protective_orders: number;
@@ -28,6 +32,8 @@ export interface InvariantMetricsInput {
   controlCounts: { pending: number; applying: number };
   flattenPendingAgeMs: number | null;
   unprotectedSinceUtc?: string | null;
+  restSnapshotCache?: { size: number; max: number; evictions: number };
+  supervisorGateDivergence?: boolean;
   now?: Date;
 }
 
@@ -57,6 +63,10 @@ export function buildInvariantMetrics(input: InvariantMetricsInput): InvariantMe
     reconciliation_age_ms: reconciliationAgeMs,
     evidence_queue_depth: input.evidenceQueue.depth,
     evidence_queue_degraded: input.evidenceQueue.degraded,
+    rest_snapshot_cache_size: input.restSnapshotCache?.size ?? 0,
+    rest_snapshot_cache_max: input.restSnapshotCache?.max ?? 0,
+    rest_snapshot_cache_evictions: input.restSnapshotCache?.evictions ?? 0,
+    supervisor_gate_divergence: input.supervisorGateDivergence ?? false,
     non_terminal_controls: input.controlCounts.pending + input.controlCounts.applying,
     execution_recovery_blocking: input.recovery.blockingNewExposure || input.recovery.blockingAmbiguity,
     orphan_protective_orders: input.protectedReduction.orphan_protective_orders,

@@ -554,6 +554,8 @@ export class GlitchTopstepService {
           controlCounts,
           flattenPendingAgeMs: this.controlStore.oldestPendingFlattenAgeMs(recordedAt.getTime()),
           unprotectedSinceUtc: this.executionStore.unprotectedSinceUtc(),
+          restSnapshotCache: this.restEvidenceRecorder.cacheMetrics(),
+          supervisorGateDivergence: !safetySupervisor.agrees_with_execution_gates,
           now: recordedAt,
         });
         return {
