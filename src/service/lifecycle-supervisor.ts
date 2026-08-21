@@ -59,19 +59,23 @@ export class LifecycleSupervisor {
     return this.disposables.map((entry) => entry.name);
   }
 
-  /** Unwinds every registered resource; a failing disposer never blocks the ones acquired before it. */
+  /** Unwinds registered resources; critical failures stop the stack with the resource retained. */
   private async disposeAll(): Promise<LifecycleDrainResult> {
     const failed: string[] = [];
     const criticalFailed: string[] = [];
     while (this.disposables.length > 0) {
-      const entry = this.disposables.pop() as Disposable;
+      const entry = this.disposables[this.disposables.length - 1] as Disposable;
       try {
         await entry.dispose();
+        this.disposables.pop();
       } catch (error: unknown) {
         failed.push(entry.name);
         if (entry.critical) {
           criticalFailed.push(entry.name);
+          console.error(`lifecycle dispose failed for ${entry.name}`, error);
+          break;
         }
+        this.disposables.pop();
         console.error(`lifecycle dispose failed for ${entry.name}`, error);
       }
     }

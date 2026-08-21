@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import type { AccountVenueSnapshot } from "../domain/models.js";
@@ -289,6 +289,8 @@ export class LocalGatewayServer {
       }
       this.json(response, 404, { error: "not_found" });
     } catch (error) {
+      const correlationId = randomUUID();
+      console.error("gateway_request_failed", { correlationId, error });
       const code = error instanceof PayloadTooLargeError
         ? 413
         : error instanceof InvalidQueryError
@@ -300,7 +302,7 @@ export class LocalGatewayServer {
           : error instanceof InvalidQueryError
             ? "invalid_query"
             : "internal_error",
-        message: error instanceof Error ? error.message : String(error),
+        correlation_id: correlationId,
       });
     }
   }

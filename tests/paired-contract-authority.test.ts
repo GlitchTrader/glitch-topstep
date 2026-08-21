@@ -29,8 +29,13 @@ test("TS-AUDIT-10 profile paired-contract.json matches gateway byte-for-byte", a
   let profileBytes: Buffer;
   try {
     profileBytes = await readFile(profilePath);
-  } catch {
-    profileBytes = gatewayBytes;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(
+        `profile_paired_contract_missing:${profilePath}; set GLITCH_HERMES_PROFILE_ROOT or checkout glitch-topstep-hermes-profile`,
+      );
+    }
+    throw error;
   }
   const canonicalHash = (raw: Buffer) =>
     createHash("sha256")

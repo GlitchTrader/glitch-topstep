@@ -4,5 +4,5 @@ import type { ProviderEvidenceEvent } from "../provider-evidence.js";
 export interface EvidenceOutboxPort {
   stageIdentityOutbox(event: ProviderEvidenceEvent): void;
   outboxPendingCount(): number;
-  loadPendingOutboxEvents(): ProviderEvidenceEvent[];
+  loadPendingOutboxEvents(limit?: number): ProviderEvidenceEvent[];
 }

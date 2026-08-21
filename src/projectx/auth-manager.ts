@@ -60,14 +60,19 @@ export class ProjectXAuthManager {
   }
 
   public async searchAccounts(onlyActiveAccounts = true): Promise<AccountInfo[]> {
+    return this.withAuthenticatedRead(() => this.client.searchAccounts(onlyActiveAccounts));
+  }
+
+  /** Safe read retry once after auth failure (TS-REAUDIT-01). */
+  public async withAuthenticatedRead<T>(operation: () => Promise<T>): Promise<T> {
     await this.ensureAuthenticated();
     try {
-      return await this.client.searchAccounts(onlyActiveAccounts);
+      return await operation();
     } catch (error: unknown) {
-      if (error instanceof ProjectXApiError && error.status === 401) {
-        this.clearSessionForTests();
+      if (error instanceof ProjectXApiError && (error.status === 401 || error.status === 403)) {
+        this.invalidateSession();
         await this.ensureAuthenticated();
-        return this.client.searchAccounts(onlyActiveAccounts);
+        return await operation();
       }
       throw error;
     }
@@ -75,11 +80,11 @@ export class ProjectXAuthManager {
 
   /** Test hook — forces the next call down the re-auth path. */
   public forceExpiredForTests(): void {
-    this.clearSessionForTests();
+    this.invalidateSession();
     this.expiresAtUtc = null;
   }
 
-  private clearSessionForTests(): void {
+  private invalidateSession(): void {
     (this.client as unknown as { token: string | null }).token = null;
     this.expiresAtUtc = null;
   }

@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T16:45:00Z",
+  "updated": "2026-08-21T17:30:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -147,7 +147,35 @@
       ],
       "summary": "Paired 0.2.2 single_active_position: flat eligible entry on MNQ/MES/MCL, one account position, GET /packet?contract_id=, per-contract order flow, delivery handoff."
     },
-    "stream_validation": "Post single_active_position follow-up (#218/#173 on main 2026-08-21): gateway npm run check green; profile unittest green; paired contract 0.2.2/0.2.2. TS-MULTI-04 simultaneous exposure remains blocked. Acceptance gaps remain: credentialed non-MNQ soak, AppService port wiring, atomic SQLite authority, signed pair manifest."
+    "trail_a_d_2026_08_21": {
+      "status": "pending_merge",
+      "gateway_branch": "feat/trail-a-d-integrity-empirical",
+      "profile_branch": "feat/trail-a-d-integrity-empirical",
+      "trail_a": {
+        "C1_model_owner_preempt": "profile: SIGTERM + grace wait + generation fencing before lock steal",
+        "C2_auth_facade": "gateway: withAuthenticatedRead for safe 401/403 retry on reads",
+        "C3_quiescence": "profile: GLITCH_TOPSTEP_SKIP_MARKET_QUIESCENT default false (TS-DATA-01)",
+        "C4_paired_release": "gateway: paired-contract test fails closed when profile checkout missing",
+        "C5_identity_queue": "gateway: identity in-memory cap at highWaterMark; paginated outbox resume (500/page)",
+        "C6_shutdown": "gateway: lifecycle supervisor retains critical disposer on failure",
+        "C7_export_idempotent": "profile: jsonl export queue only when INSERT OR IGNORE inserts"
+      },
+      "trail_d": {
+        "cycle_empirical_jsonl": "profile: cycle-empirical.jsonl per decision and delivery with action, freshness skew, continuity_gap, delivery_classification",
+        "next": "PRAC soak sampling script and MFE/MAE outcome join (no prompt inflation)"
+      },
+      "items_touched": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-02",
+        "TS-REAUDIT-08",
+        "TS-REAUDIT-12",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-01",
+        "glitch-topstep-hermes-profile:GTHP-018",
+        "glitch-topstep-hermes-profile:GTHP-RUNTIME-01",
+        "TS-TRAIL-D-01"
+      ]
+    },
+    "stream_validation": "Post trail A+D (#TBD gateway/profile on 2026-08-21): gateway npm run check green; profile unittest green. Trail A closes export idempotency, model-owner preemption, quiescence default, identity queue cap, conservative shutdown, paired-contract fail-closed test, sanitized gateway errors. Trail D adds cycle-empirical.jsonl. Residual REAUDIT acceptance: full auth facade wiring, kill matrix, PRAC soak, signed pair manifest."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",

@@ -150,6 +150,11 @@ export class EvidenceWriteQueue {
     if (eventClass === "identity" && !options?.skipOutboxStage) {
       this.options.onStageIdentity?.(event);
     }
+    if (eventClass === "identity" && this.identityPending >= this.highWaterMark) {
+      this.raiseDegraded();
+      // ponytail: identity spills via sqlite outbox when in-memory window is full (TS-REAUDIT-02).
+      return "queued";
+    }
     const coalesceKey = coalesceKeyFor(event, eventClass);
 
     if (eventClass !== "identity" && this.pending >= this.coalesceWatermark && coalesceKey !== null) {

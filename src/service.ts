@@ -232,8 +232,14 @@ export class GlitchTopstepService {
 
   private async startResources(): Promise<void> {
     await this.authManager.ensureAuthenticated();
-    for (const event of this.providerEvidenceStore.loadPendingOutboxEvents()) {
-      this.evidenceQueue.submit(event, null, { skipOutboxStage: true });
+    while (true) {
+      const pending = this.providerEvidenceStore.loadPendingOutboxEvents(500);
+      if (pending.length === 0) {
+        break;
+      }
+      for (const event of pending) {
+        this.evidenceQueue.submit(event, null, { skipOutboxStage: true });
+      }
     }
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;
