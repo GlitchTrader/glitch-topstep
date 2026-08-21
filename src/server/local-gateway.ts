@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { join } from "node:path";
 import type { AccountVenueSnapshot } from "../domain/models.js";
 import type { StoredProviderEvidenceEvent, ProviderEvidenceSource } from "../domain/provider-evidence.js";
 import type { ExecutionCoordinator, ExecutionReceipt } from "../execution/coordinator.js";
@@ -17,6 +19,11 @@ const EVIDENCE_SOURCES = new Set<ProviderEvidenceSource>([
 const MAX_BODY_BYTES = 65_536;
 const DEFAULT_EVIDENCE_LIMIT = 100;
 const MAX_EVIDENCE_LIMIT = 1_000;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
+
+export function isLoopbackGatewayHost(host: string): boolean {
+  return LOOPBACK_HOSTS.has(host.toLowerCase());
+}
 
 export interface LocalGatewayOptions {
   host: string;
@@ -106,6 +113,14 @@ export class LocalGatewayServer {
       const url = new URL(request.url ?? "/", `http://${this.options.host}:${this.options.port}`);
       if (request.method === "GET" && url.pathname === "/health") {
         this.json(response, 200, this.health());
+        return;
+      }
+      if (request.method === "GET" && url.pathname === "/console") {
+        if (!isLoopbackGatewayHost(this.options.host)) {
+          this.json(response, 403, { error: "console_loopback_only" });
+          return;
+        }
+        this.html(response, 200, readConsoleHtml());
         return;
       }
       const operatorRoute = url.pathname === "/control"
@@ -358,6 +373,14 @@ export class LocalGatewayServer {
     response.setHeader("Content-Length", payload.length);
     response.end(payload);
   }
+
+  private html(response: ServerResponse, status: number, body: string): void {
+    const payload = Buffer.from(body, "utf8");
+    response.statusCode = status;
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.setHeader("Content-Length", payload.length);
+    response.end(payload);
+  }
 }
 
 class PayloadTooLargeError extends Error {
@@ -367,3 +390,7 @@ class PayloadTooLargeError extends Error {
 }
 
 class InvalidQueryError extends Error {}
+
+function readConsoleHtml(): string {
+  return readFileSync(join(process.cwd(), "console", "index.html"), "utf8");
+}

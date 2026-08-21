@@ -22,7 +22,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
-import { validateProtectiveAmendment } from "./amendment-safety.js";
+import { validateProtectiveAmendment, buildOriginalRiskEnvelope } from "./amendment-safety.js";
 import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
   gatewayModePermitsLiveOrders,
@@ -729,15 +729,34 @@ export class ExecutionCoordinator {
         code: "position_side_unknown",
       });
     }
-    const amendmentSafety = validateProtectiveAmendment({
-      side: scaleInAction === "ENTER_LONG" ? "long" : "short",
-      leg,
-      currentPrice: protectiveLeg.price,
-      newPrice,
-      averageEntry: position?.averagePrice ?? null,
-      bestBid: snapshot.quote?.bestBid ?? null,
-      bestAsk: snapshot.quote?.bestAsk ?? null,
-    });
+    const amendmentSafety = (() => {
+      const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
+      const entryPayload = this.store.registeredIntentPayload(active.intentId);
+      const originalRiskEnvelope = leg === "stop"
+        && entryPayload?.stopLoss !== undefined
+        && position?.averagePrice
+        ? buildOriginalRiskEnvelope({
+          intentId: active.intentId,
+          side,
+          averageEntry: position.averagePrice,
+          stopLoss: entryPayload.stopLoss,
+          tickSize: snapshot.contract.tickSize,
+          scopeIdentity: `${this.config.scope.accountId}:${this.config.scope.contractId}`,
+        })
+        : null;
+      return validateProtectiveAmendment({
+        side,
+        leg,
+        currentPrice: protectiveLeg.price,
+        newPrice,
+        averageEntry: position?.averagePrice ?? null,
+        bestBid: snapshot.quote?.bestBid ?? null,
+        bestAsk: snapshot.quote?.bestAsk ?? null,
+        source: "HERMES_INTENT",
+        tickSize: snapshot.contract.tickSize,
+        originalRiskEnvelope,
+      });
+    })();
     if (!amendmentSafety.ok) {
       return this.record({
         intentId: intent.intentId,
@@ -1271,6 +1290,7 @@ export class ExecutionCoordinator {
         averageEntry: position.averagePrice,
         bestBid: snapshot.quote?.bestBid ?? null,
         bestAsk: snapshot.quote?.bestAsk ?? null,
+        source: "AUTO_BREAKEVEN",
       });
       if (!safety.ok) {
         continue;
