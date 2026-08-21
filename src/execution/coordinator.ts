@@ -110,7 +110,20 @@ export class ExecutionCoordinator {
     }),
     private readonly dailyCaptureLocked: () => boolean = () => false,
     private readonly instrumentUniverse: () => InstrumentUniverse | null = () => null,
-  ) {}
+    contractSnapshot?: (contractId: string) => AccountVenueSnapshot,
+  ) {
+    this.contractSnapshot = contractSnapshot ?? (() => this.snapshot());
+  }
+
+  private readonly contractSnapshot: (contractId: string) => AccountVenueSnapshot;
+
+  private packetSnapshot(issuedPacket: DirectDecisionPacket): AccountVenueSnapshot {
+    return this.contractSnapshot(issuedPacket.contract.id);
+  }
+
+  private packetContractId(issuedPacket: DirectDecisionPacket): string {
+    return issuedPacket.contract.id;
+  }
 
   private currentMode(): TradingMode {
     return this.controlState().mode;
@@ -139,7 +152,7 @@ export class ExecutionCoordinator {
       if (quantity < 1) {
         continue;
       }
-      const own = contractId === this.config.scope.contractId;
+      const own = contractId === packet.contract.id;
       // Same-contract size is admissible only where ownership already proved protection;
       // scale-in itself is gated earlier by validateScaleIn.
       if (own && packet.protection.status !== "proven") {
@@ -232,7 +245,8 @@ export class ExecutionCoordinator {
     const { intent, issuedPacket } = early;
 
     try {
-      const currentSnapshot = this.snapshot();
+      const currentSnapshot = this.packetSnapshot(issuedPacket);
+      const intentContractId = this.packetContractId(issuedPacket);
       const validated = validateEntryRisk(
         intent,
         currentSnapshot,
@@ -241,7 +255,7 @@ export class ExecutionCoordinator {
         {
           expectedAccountId: this.config.scope.accountId,
           expectedAccountName: this.config.scope.accountName,
-          expectedInstrument: this.config.scope.instrument,
+          expectedInstrument: issuedPacket.instrument,
           expectedSnapshotHash: issuedPacket.market.snapshot_hash,
           expectedPacketId: issuedPacket.packet_id,
           expectedContractId: issuedPacket.contract.id,
@@ -253,15 +267,15 @@ export class ExecutionCoordinator {
       );
 
       const foreignExposure = currentSnapshot.positions.some(
-        (position) => position.contractId !== this.config.scope.contractId,
+        (position) => position.contractId !== intentContractId,
       ) || currentSnapshot.openOrders.some(
-        (order) => order.contractId !== this.config.scope.contractId,
+        (order) => order.contractId !== intentContractId,
       );
       const resolvedUniverse = this.instrumentUniverse();
       if (resolvedUniverse) {
         const selection = validatePortfolioSelection({
           universe: resolvedUniverse,
-          selected_contract_id: this.config.scope.contractId,
+          selected_contract_id: validated.contract.id,
           open_contract_ids: [
             ...currentSnapshot.positions.map((position) => position.contractId),
             ...currentSnapshot.openOrders.map((order) => order.contractId),
@@ -392,7 +406,8 @@ export class ExecutionCoordinator {
     intent: TradeIntent,
     issuedPacket: DirectDecisionPacket,
   ): Promise<ExecutionReceipt> {
-    const snapshot = this.snapshot();
+    const contractId = this.packetContractId(issuedPacket);
+    const snapshot = this.packetSnapshot(issuedPacket);
     if (intent.account !== this.config.scope.accountName) {
       return this.record({
         intentId: intent.intentId,
@@ -431,7 +446,7 @@ export class ExecutionCoordinator {
 
     const contractPositions = snapshot.positions.filter(
       (candidate) => candidate.accountId === this.config.scope.accountId
-        && candidate.contractId === this.config.scope.contractId
+        && candidate.contractId === contractId
         && candidate.type !== 0
         && Math.abs(candidate.size) > 0,
     );
@@ -444,7 +459,7 @@ export class ExecutionCoordinator {
     }
     const position = contractPositions[0]!;
     const positionSize = snapshot.instrumentOpenContracts;
-    const netSignedLots = instrumentNetSignedLots(contractPositions, this.config.scope.contractId);
+    const netSignedLots = instrumentNetSignedLots(contractPositions, contractId);
     let exitQuantity = intent.quantity
       ?? (intent.exitFraction !== undefined
         ? Math.max(1, Math.min(positionSize, Math.round(positionSize * intent.exitFraction)))
@@ -526,7 +541,7 @@ export class ExecutionCoordinator {
         survivorTranches[0]!.intent_id,
         snapshot.openOrders,
         this.config.scope.accountId,
-        this.config.scope.contractId,
+        contractId,
         true,
         survivorTranches[0]!.entry_order_id,
       )
@@ -538,7 +553,7 @@ export class ExecutionCoordinator {
         exitIntentId: intent.intentId,
         targetIntentId: intent.targetIntentId ?? null,
         accountId: this.config.scope.accountId,
-        contractId: this.config.scope.contractId,
+        contractId,
         exitQuantity,
         positionSizeBefore: positionSize,
         survivorStopOrderId: survivorProtection?.stop.providerOrderId ?? null,
@@ -573,7 +588,7 @@ export class ExecutionCoordinator {
     const request = partialExit
       ? {
           accountId: this.config.scope.accountId,
-          contractId: this.config.scope.contractId,
+          contractId,
           type: 2,
           side: netSignedLots > 0 ? 1 : 0,
           size: exitQuantity,
@@ -581,7 +596,7 @@ export class ExecutionCoordinator {
         }
       : {
           accountId: this.config.scope.accountId,
-          contractId: this.config.scope.contractId,
+          contractId,
         };
     this.store.prepareMutation(
       intent.intentId,
@@ -662,7 +677,8 @@ export class ExecutionCoordinator {
     issuedPacket: DirectDecisionPacket,
     leg: "stop" | "target",
   ): Promise<ExecutionReceipt> {
-    const snapshot = this.snapshot();
+    const contractId = this.packetContractId(issuedPacket);
+    const snapshot = this.packetSnapshot(issuedPacket);
     const validation = await this.validateAmendmentIntent(intent, issuedPacket, snapshot);
     if (validation) {
       return validation;
@@ -721,7 +737,7 @@ export class ExecutionCoordinator {
     }
     const position = snapshot.positions.find(
       (candidate) => candidate.accountId === this.config.scope.accountId
-        && candidate.contractId === this.config.scope.contractId
+        && candidate.contractId === contractId
         && candidate.type !== 0
         && Math.abs(candidate.size) > 0,
     );
@@ -745,7 +761,7 @@ export class ExecutionCoordinator {
           averageEntry: position.averagePrice,
           stopLoss: entryPayload.stopLoss,
           tickSize: snapshot.contract.tickSize,
-          scopeIdentity: `${this.config.scope.accountId}:${this.config.scope.contractId}`,
+          scopeIdentity: `${this.config.scope.accountId}:${contractId}`,
         })
         : null;
       return validateProtectiveAmendment({

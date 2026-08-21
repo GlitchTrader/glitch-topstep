@@ -13,6 +13,8 @@ import type {
   TopstepPolicyState,
   TradeAction,
 } from "../domain/models.js";
+import type { AccountSelectionMode } from "../market/active-position-scope.js";
+import { RUNTIME_ACCOUNT_SELECTION_MODE } from "../market/active-position-scope.js";
 import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
 import {
   resolvePacketProtectionStatus,
@@ -74,7 +76,7 @@ export interface DirectDecisionPacket {
   };
   account_selection: {
     schema_version: "glitch.topstep.account_selection.v1";
-    mode: "single_contract";
+    mode: AccountSelectionMode;
     selected_instrument: string;
     selected_contract_id: string;
     scope_generation: number;
@@ -632,6 +634,7 @@ export function buildDecisionPacket(
   dailyCaptureLocked = false,
   simultaneousExposureEnabled = false,
   auth: ProjectXAuthStatus | null = null,
+  accountSelectionMode: AccountSelectionMode = RUNTIME_ACCOUNT_SELECTION_MODE,
 ): DirectDecisionPacket {
   const createdUtc = now.toISOString();
   const expiresUtc = new Date(now.getTime() + leaseMs).toISOString();
@@ -727,7 +730,7 @@ export function buildDecisionPacket(
     },
     account_selection: {
       schema_version: "glitch.topstep.account_selection.v1",
-      mode: "single_contract",
+      mode: accountSelectionMode,
       selected_instrument: instrument,
       selected_contract_id: snapshot.contract.id,
       scope_generation: decisionScope?.generation ?? snapshot.operational.generation,

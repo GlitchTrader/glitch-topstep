@@ -62,7 +62,7 @@ for (const tradingMode of ["shadow", "armed"] as const) {
       assert.equal(packet.contract.symbol_id, contract.symbolId);
       assert.equal(packet.account_selection.selected_contract_id, contract.id);
       assert.equal(packet.account_selection.selected_instrument, contract.instrument);
-      assert.equal(packet.account_selection.mode, "single_contract");
+      assert.equal(packet.account_selection.mode, "single_active_position");
       assert.equal(packet.account_selection.simultaneous_exposure_enabled, false);
       assert.equal(packet.execution.gateway_mode_configured, tradingMode);
       store.close();

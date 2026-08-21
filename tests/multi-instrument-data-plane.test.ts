@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { BarInfo, ContractInfo } from "../src/domain/models.js";
 import { resolveInstrumentUniverse } from "../src/domain/instrument-universe.js";
+import { resolveActivePositionScope } from "../src/market/active-position-scope.js";
 import { MultiInstrumentMarketDataPlane } from "../src/market/multi-instrument-data-plane.js";
 import type { RetrieveBarsRequest } from "../src/projectx/client.js";
 
@@ -62,20 +63,35 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
   it("observes every allowlisted contract while arming only the selected one", async () => {
     const { dataPlane, universe } = plane("CON.F.US.MNQ.U26");
 
+    const scope = resolveActivePositionScope({
+      universe,
+      referenceContractId: "CON.F.US.MNQ.U26",
+      referenceInstrument: "MNQ",
+      openContractIds: [],
+      workingOrderContractIds: [],
+    });
     const packet = await dataPlane.refreshAll();
 
     assert.equal(packet.schema_version, "glitch.topstep.market_universe.v1");
     assert.equal(packet.scope_hash, universe.scope_hash);
     assert.deepEqual(
-      packet.candidates.map((candidate) => [candidate.instrument, candidate.execution_mode]),
-      [["MNQ", "selected"], ["MES", "observation_only"], ["MCL", "observation_only"]],
+      packet.candidates.map((candidate) => [candidate.instrument, scope.executionModeFor(candidate.contract_id)]),
+      [["MNQ", "eligible"], ["MES", "eligible"], ["MCL", "eligible"]],
     );
   });
 
   it("keeps contract identity, tick economics, and bars partitioned per contract", async () => {
-    const { dataPlane, requests } = plane("CON.F.US.MCLE.V26");
+    const { dataPlane, requests, universe } = plane("CON.F.US.MCLE.V26");
 
     const packet = await dataPlane.refreshAll();
+    const scope = resolveActivePositionScope({
+      universe,
+      referenceContractId: "CON.F.US.MCLE.V26",
+      referenceInstrument: "MCL",
+      openContractIds: [],
+      workingOrderContractIds: [],
+    });
+    const scoped = dataPlane.current(undefined, scope);
 
     for (const candidate of packet.candidates) {
       const source = AVAILABLE.find((contract) => contract.id === candidate.contract_id)!;
@@ -89,12 +105,10 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
     }
 
     // MCL is the operator alias; only the exact MCLE contract may be armed.
-    assert.equal(
-      packet.candidates.filter((candidate) => candidate.execution_mode === "selected")
-        .map((candidate) => candidate.contract_id)
-        .join(),
-      "CON.F.US.MCLE.V26",
-    );
+    assert.equal(scope.packetTargetContractId, "CON.F.US.MCLE.V26");
+    assert.ok(scoped.candidates.every(
+      (candidate) => scope.executionModeFor(candidate.contract_id) === "eligible",
+    ));
 
     const perContract = new Map<string, number[]>();
     for (const request of requests) {

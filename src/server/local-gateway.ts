@@ -40,6 +40,11 @@ export interface LocalGatewayOptions {
   };
 }
 
+export interface PacketRequest {
+  contractId?: string;
+  instrument?: string;
+}
+
 export class LocalGatewayServer {
   private server: Server | null = null;
   private ownershipService: ProjectXOrderOwnershipService | null;
@@ -49,7 +54,7 @@ export class LocalGatewayServer {
     private readonly options: LocalGatewayOptions,
     private readonly health: () => Record<string, unknown>,
     private readonly snapshot: () => AccountVenueSnapshot,
-    private readonly packet: () => DirectDecisionPacket | Promise<DirectDecisionPacket>,
+    private readonly packet: (request?: PacketRequest) => DirectDecisionPacket | Promise<DirectDecisionPacket>,
     private readonly evidence: (
       limit: number,
       query?: { source?: ProviderEvidenceSource; eventType?: string },
@@ -139,7 +144,9 @@ export class LocalGatewayServer {
         return;
       }
       if (request.method === "GET" && url.pathname === "/packet") {
-        this.json(response, 200, await Promise.resolve(this.packet()));
+        const contractId = url.searchParams.get("contract_id")?.trim() || undefined;
+        const instrument = url.searchParams.get("instrument")?.trim() || undefined;
+        this.json(response, 200, await Promise.resolve(this.packet({ contractId, instrument })));
         return;
       }
       if (request.method === "GET" && url.pathname === "/evidence") {

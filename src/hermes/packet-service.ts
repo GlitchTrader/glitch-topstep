@@ -6,6 +6,8 @@ import type { AccountVenueSnapshot } from "../domain/models.js";
 import { computeDailyEconomics } from "../policy/daily-economics.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+import type { AccountSelectionMode } from "../market/active-position-scope.js";
+import { RUNTIME_ACCOUNT_SELECTION_MODE } from "../market/active-position-scope.js";
 import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
 import {
   buildDecisionPacket,
@@ -15,6 +17,14 @@ import {
   type DirectDecisionPacket,
 } from "./packet-builder.js";
 import type { TrancheView } from "../ownership/tranches.js";
+
+export interface DecisionPacketBuildOptions {
+  snapshot?: AccountVenueSnapshot;
+  instrument?: string;
+  marketObservation?: MarketObservationState;
+  orderFlow?: ProjectXOrderFlowState;
+  accountSelectionMode?: AccountSelectionMode;
+}
 
 export class DecisionPacketService {
   public constructor(
@@ -41,10 +51,14 @@ export class DecisionPacketService {
     }),
   ) {}
 
-  public current(): DirectDecisionPacket {
+  public current(options: DecisionPacketBuildOptions = {}): DirectDecisionPacket {
     const nowMs = this.now();
     const now = new Date(nowMs);
-    const venueSnapshot = this.snapshot();
+    const venueSnapshot = options.snapshot ?? this.snapshot();
+    const instrument = options.instrument ?? this.config.scope.instrument;
+    const marketObservation = options.marketObservation ?? this.marketObservation();
+    const orderFlow = options.orderFlow ?? this.orderFlow();
+    const accountSelectionMode = options.accountSelectionMode ?? RUNTIME_ACCOUNT_SELECTION_MODE;
     const qualityStateComplete = venueSnapshot.stateComplete;
     const bracketVerification: BracketVerificationContext = {
       fillObservedUtc: this.store.earliestPendingEntryFillObservedUtc(),
@@ -80,12 +94,12 @@ export class DecisionPacketService {
       this.config.policy,
       this.config.risk,
       this.recovery(),
-      this.config.scope.instrument,
+      instrument,
       this.effectiveTradingMode(),
       this.config.packetLeaseMs,
       now,
-      this.marketObservation(),
-      this.orderFlow(),
+      marketObservation,
+      orderFlow,
       this.tranches(),
       this.config.session,
       dailyEconomics,
@@ -94,6 +108,7 @@ export class DecisionPacketService {
       dailyCaptureLocked,
       this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
       this.authStatus(),
+      accountSelectionMode,
     );
     this.store.recordIssuedPacket(packet);
     return packet;
