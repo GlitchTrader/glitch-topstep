@@ -1,6 +1,9 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+
+/** ponytail: hot cache only; SQLite feed remains authoritative (TS-REAUDIT-05). */
+const MAX_HOT_OUTCOMES = 2_048;
 import { quarantineCorruptTail, writeFileAtomic, type QuarantineRecord } from "./atomic-file.js";
 import { SqliteOutcomeFeed, type OutcomeFeedStatus, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
 
@@ -168,6 +171,12 @@ export class TradeOutcomeStore {
     try {
       this.feed.publish(outcome, status);
       this.known.set(outcome.intent_id, outcome);
+      if (this.known.size > MAX_HOT_OUTCOMES) {
+        const overflow = this.known.size - MAX_HOT_OUTCOMES;
+        for (const intentId of [...this.known.keys()].slice(0, overflow)) {
+          this.known.delete(intentId);
+        }
+      }
       this.lastWriteError = null;
     } catch (error) {
       this.lastWriteError = error instanceof Error ? error.message : String(error);

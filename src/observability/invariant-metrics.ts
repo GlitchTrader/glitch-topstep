@@ -27,6 +27,7 @@ export interface InvariantMetricsInput {
   recovery: ExecutionRecoveryStatus;
   controlCounts: { pending: number; applying: number };
   flattenPendingAgeMs: number | null;
+  unprotectedSinceUtc?: string | null;
   now?: Date;
 }
 
@@ -36,12 +37,17 @@ export function buildInvariantMetrics(input: InvariantMetricsInput): InvariantMe
   const reconciliationAgeMs = reconciliation.lastSucceededAt
     ? Math.max(0, now.getTime() - Date.parse(reconciliation.lastSucceededAt))
     : null;
+  const unprotectedSinceMs = input.unprotectedSinceUtc
+    ? Math.max(0, now.getTime() - Date.parse(input.unprotectedSinceUtc))
+    : null;
 
   return {
     unprotected_open_quantity: input.protectedReduction.unprotected_open_quantity,
-    unprotected_seconds_estimate: input.protectedReduction.ambiguous_age_ms === null
-      ? null
-      : Math.round(input.protectedReduction.ambiguous_age_ms / 1000),
+    unprotected_seconds_estimate: unprotectedSinceMs !== null
+      ? Math.round(unprotectedSinceMs / 1000)
+      : input.protectedReduction.ambiguous_age_ms === null
+        ? null
+        : Math.round(input.protectedReduction.ambiguous_age_ms / 1000),
     flatten_pending_seconds: input.flattenPendingAgeMs === null
       ? null
       : Math.round(input.flattenPendingAgeMs / 1000),

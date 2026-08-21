@@ -52,4 +52,36 @@ describe("TS-AUDIT-07 flatten control saga", () => {
     assert.equal(phase, "waiting_for_flat");
     assert.equal(flattenControlCanComplete(phase), false);
   });
+
+  it("does not complete on closed receipt with residual owned working orders (TS-REAUDIT-03)", () => {
+    const phase = flattenControlPhaseAfterReceipt("closed", {
+      instrumentOpenContracts: 0,
+      ownWorkingOrders: 1,
+      stateComplete: true,
+    });
+    assert.equal(phase, "waiting_for_flat");
+    assert.equal(flattenControlCanComplete(phase), false);
+  });
+
+  it("table-drives terminality across receipt statuses (TS-REAUDIT-03)", () => {
+    const flatVenue = {
+      instrumentOpenContracts: 0,
+      ownWorkingOrders: 0,
+      stateComplete: true,
+    };
+    for (const status of ["submitted", "accepted", "open_protected", "closed"]) {
+      assert.equal(
+        flattenControlPhaseAfterReceipt(status, flatVenue),
+        "completed",
+        status,
+      );
+    }
+    for (const status of ["rejected", "shadowed", "ambiguous"]) {
+      assert.equal(
+        flattenControlPhaseAfterReceipt(status, flatVenue),
+        "manual_intervention_required",
+        status,
+      );
+    }
+  });
 });

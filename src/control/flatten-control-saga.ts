@@ -33,7 +33,9 @@ export function flattenControlPhaseAfterReceipt(
   ) {
     return "waiting_for_flat";
   }
-  return venue.instrumentOpenContracts === 0 && venue.stateComplete
+  return venue.instrumentOpenContracts === 0
+    && venue.ownWorkingOrders === 0
+    && venue.stateComplete
     ? "completed"
     : "waiting_for_flat";
 }

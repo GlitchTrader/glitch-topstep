@@ -10,6 +10,11 @@ export interface ProjectXAuthStatus {
 }
 
 export class ProjectXAuthManager {
+  /** ponytail: single ProjectX session authority (TS-REAUDIT-01). */
+  public apiClient(): ProjectXApiClient {
+    return this.client;
+  }
+
   private readonly client: ProjectXApiClient;
   private lastRefreshUtc: string | null = null;
   private refreshInFlight: Promise<string> | null = null;
