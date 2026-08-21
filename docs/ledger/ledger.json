@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T16:00:00Z",
+  "updated": "2026-08-21T16:45:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -33,7 +33,8 @@
       212,
       213,
       214,
-      215
+      215,
+      218
     ],
     "profile_merged_prs": [
       131,
@@ -52,7 +53,8 @@
       167,
       168,
       169,
-      171
+      171,
+      173
     ],
     "implementation_note": "Audit remediation waves 0-6 merged 2026-08-20. REAUDIT waves 1-3 (#210-#214 gateway, #163-#168 profile) merged 2026-08-21. Data freshness follow-up (#215 gateway, #169 profile) merged 2026-08-21. Profile continuity_gap operator rule (#171) merged 2026-08-21. All REAUDIT acceptance criteria remain open until follow-up PRs close each item. Armed promotion blocked.",
     "reaudit_wave_1_2026_08_21": {
@@ -130,7 +132,22 @@
       ],
       "summary": "Profile-only CYCLE_OPERATOR_INSTRUCTION rule when continuity_gap.present is true; no gateway wire change."
     },
-    "stream_validation": "Post wave 3 merge (#214/#168), freshness follow-up (#215/#169), and profile continuity_gap operator rule (#171 on main 2026-08-21): gateway npm run check green; profile safe-profile-update v0.2.1 integrity OK; health armed compatible 0.2.1/0.2.1. Acceptance gaps remain: AppService port wiring, orchestration shrink baseline, atomic SQLite authority, wake/session gate parity soak, fault proof, signed pair manifest."
+    "single_active_position_followup_2026_08_21": {
+      "gateway_pr": 218,
+      "gateway_commit": "e20c676",
+      "profile_pr": 173,
+      "profile_commit": "47435fa",
+      "status": "merged",
+      "items_touched": [
+        "TS-MULTI-01",
+        "TS-MULTI-02",
+        "TS-MULTI-03",
+        "glitch-topstep-hermes-profile:GTHP-MULTI-01",
+        "glitch-topstep-hermes-profile:GTHP-DATA-01"
+      ],
+      "summary": "Paired 0.2.2 single_active_position: flat eligible entry on MNQ/MES/MCL, one account position, GET /packet?contract_id=, per-contract order flow, delivery handoff."
+    },
+    "stream_validation": "Post single_active_position follow-up (#218/#173 on main 2026-08-21): gateway npm run check green; profile unittest green; paired contract 0.2.2/0.2.2. TS-MULTI-04 simultaneous exposure remains blocked. Acceptance gaps remain: credentialed non-MNQ soak, AppService port wiring, atomic SQLite authority, signed pair manifest."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
