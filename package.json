@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "test": "node --test dist/tests/*.test.js",
-    "check": "npm run build && npm test",
+    "check": "npm run build && node scripts/validate-agent-paths.mjs && npm test",
     "dev": "npm run build && npm start",
     "start": "node --enable-source-maps dist/src/index.js",
     "replay:evidence": "npm run build && node --enable-source-maps dist/src/cli/replay-provider-evidence.js",
