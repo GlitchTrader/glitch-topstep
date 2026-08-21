@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if (-not $Token) {
-    $envFile = Join-Path $PSScriptRoot ".." ".env"
+    $envFile = Join-Path (Join-Path $PSScriptRoot "..") ".env"
     if (Test-Path $envFile) {
         Get-Content $envFile | ForEach-Object {
             if ($_ -match '^GLITCH_LOCAL_TOKEN=(.+)$') { $Token = $Matches[1].Trim() }
@@ -39,4 +39,4 @@ $checks | Format-Table -AutoSize
 if ($failed.Count -gt 0) {
     throw "PRAC preflight failed: $($failed.check -join ', ')"
 }
-Write-Host "PRAC preflight OK — evidence: $out" -ForegroundColor Green
+Write-Host "PRAC preflight OK - evidence: $out" -ForegroundColor Green
