@@ -17,7 +17,8 @@
     "capture:fixtures": "npm run build && node scripts/capture-projectx-fixtures.mjs",
     "capture:reconnect": "npm run build && node scripts/capture-reconnect-proof.mjs",
     "capture:event-rates": "npm run build && node scripts/capture-event-rates.mjs",
-    "acceptance:r1-04": "npm run build && node scripts/acceptance-r1-04-kill-matrix.mjs"
+    "acceptance:r1-04": "npm run build && node scripts/acceptance-r1-04-kill-matrix.mjs",
+    "reaudit:fault-matrix": "npm run build && node scripts/reaudit-fault-matrix-gate.mjs"
   },
   "dependencies": {
     "@microsoft/signalr": "^10.0.11"

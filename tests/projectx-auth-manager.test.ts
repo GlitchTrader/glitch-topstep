@@ -105,4 +105,16 @@ describe("TS-AUDIT-06 ProjectXAuthManager", () => {
     assert.equal(loginCalls, 2, "one relogin after forced expiry");
     assert.ok(validateCalls >= 1);
   });
+
+  it("authenticatedClient ensures auth before REST calls", async () => {
+    loginCalls = 0;
+    const manager = new ProjectXAuthManager({
+      apiUrl: baseUrl,
+      username: "user",
+      apiKey: "key",
+      requestTimeoutMs: 5_000,
+    });
+    await manager.authenticatedClient().searchAccounts(true);
+    assert.equal(loginCalls, 1);
+  });
 });

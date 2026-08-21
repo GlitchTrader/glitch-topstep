@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +28,10 @@ test("paired release manifest requires evidence and marks human armed gate", asy
         "0.2.0",
         "--profile-manifest-sha256",
         "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "--profile-paired-contract-sha256",
+        createHash("sha256")
+          .update(readFileSync(join(repoRoot, "release", "paired-contract.json")))
+          .digest("hex"),
         "--prompt-version",
         "glitch-topstep-v11",
         "--evidence-ref",
@@ -44,6 +50,8 @@ test("paired release manifest requires evidence and marks human armed gate", asy
       manifest.validation.partial_exit_provider_acceptance,
       "proven_prac_short_long_with_saga",
     );
+    assert.match(manifest.pair_digest, /^[a-f0-9]{64}$/);
+    assert.match(manifest.validation.gateway_paired_contract_sha256, /^[a-f0-9]{64}$/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -67,6 +75,10 @@ test("paired release manifest fails closed without evidence-ref", async () => {
           "0.2.0",
           "--profile-manifest-sha256",
           "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "--profile-paired-contract-sha256",
+          createHash("sha256")
+            .update(readFileSync(join(repoRoot, "release", "paired-contract.json")))
+            .digest("hex"),
           "--prompt-version",
           "glitch-topstep-v11",
           "--output",

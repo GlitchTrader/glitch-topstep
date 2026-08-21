@@ -14,10 +14,46 @@ export const PROJECTX_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 /** Refresh before expiry so concurrent callers never race a dead token (TS-REAUDIT-01). */
 export const PROJECTX_REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
+const AUTHENTICATED_READ_METHODS = new Set([
+  "searchAccounts",
+  "searchAccountsCollection",
+  "listAvailableContracts",
+  "listAvailableContractsCollection",
+  "searchOpenPositions",
+  "searchOpenPositionsCollection",
+  "searchOpenOrders",
+  "searchOpenOrdersCollection",
+  "searchOrders",
+  "searchTrades",
+  "retrieveBars",
+]);
+
 export class ProjectXAuthManager {
-  /** ponytail: single ProjectX session authority (TS-REAUDIT-01). */
+  /** @deprecated Prefer authenticatedClient() for production REST consumers. */
   public apiClient(): ProjectXApiClient {
     return this.client;
+  }
+
+  /** Production REST surface: ensure auth before every call; safe reads retry once on 401/403. */
+  public authenticatedClient(): ProjectXApiClient {
+    const inner = this.client;
+    const manager = this;
+    return new Proxy(inner, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (typeof value !== "function") {
+          return value;
+        }
+        const methodName = String(property);
+        return (...args: unknown[]) => {
+          const invoke = () => (value as (...params: unknown[]) => unknown).apply(target, args);
+          if (AUTHENTICATED_READ_METHODS.has(methodName)) {
+            return manager.withAuthenticatedRead(() => invoke() as Promise<unknown>);
+          }
+          return manager.withAuthenticatedMutation(() => invoke() as Promise<unknown>);
+        };
+      },
+    }) as ProjectXApiClient;
   }
 
   private readonly client: ProjectXApiClient;
@@ -76,6 +112,12 @@ export class ProjectXAuthManager {
       }
       throw error;
     }
+  }
+
+  /** Mutations authenticate once; ambiguous failures reconcile upstream — no blind replay (TS-REAUDIT-01). */
+  public async withAuthenticatedMutation<T>(operation: () => Promise<T>): Promise<T> {
+    await this.ensureAuthenticated();
+    return operation();
   }
 
   /** Test hook — forces the next call down the re-auth path. */
