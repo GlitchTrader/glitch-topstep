@@ -96,6 +96,10 @@ test("TradeOutcomePublisher writes canonical learning-eligible outcome on flat",
   assert.equal(published[0]?.fills?.length, 2);
   assert.equal(published[0]?.mae_usd, 8);
   assert.equal(published[0]?.mfe_usd, 50);
+  assert.equal(published[0]?.path_chronology?.schema_version, "glitch.topstep.path_chronology.v1");
+  assert.equal(published[0]?.path_chronology?.evidence_quality, "partial");
+  assert.equal(published[0]?.path_chronology?.mfe.usd, 50);
+  assert.equal(published[0]?.path_chronology?.mae.usd, 8);
   assert.equal(published[0]?.side, "long");
   assert.ok((published[0]?.initial_risk_usd ?? 0) > 0);
   assert.ok(published[0]?.r_multiple !== null && published[0]?.r_multiple !== undefined);

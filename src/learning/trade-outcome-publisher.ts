@@ -11,6 +11,7 @@ import {
   ticksFromUsd,
   toOutcomeFills,
 } from "./trade-outcome-enrichment.js";
+import { buildPathChronologyFromExcursion } from "./path-chronology.js";
 import type { TradeOutcomeFlatTrigger } from "./trade-outcome-flat.js";
 import {
   TRADE_OUTCOME_PUBLISHER_VERSION,
@@ -40,6 +41,11 @@ export interface PublishTradeOutcomeInput {
   tickValue?: number;
   maeUsd?: number | null;
   mfeUsd?: number | null;
+  mfePrice?: number | null;
+  mfeUtc?: string | null;
+  maePrice?: number | null;
+  maeUtc?: string | null;
+  pathChronologySameEventGap?: boolean;
   hadExitIntentByTranche?: ReadonlyMap<string, boolean>;
   bufferImpactUsd?: number | null;
   decisionLinks?: ReadonlyMap<string, { packet_id: string | null; snapshot_hash: string | null }>;
@@ -184,6 +190,19 @@ export class TradeOutcomePublisher {
     });
     const maeUsd = input.maeUsd ?? existing?.mae_usd ?? null;
     const mfeUsd = input.mfeUsd ?? existing?.mfe_usd ?? null;
+    const mfeTicks = ticksFromUsd(mfeUsd, quantity, tickValue);
+    const maeTicks = ticksFromUsd(maeUsd, quantity, tickValue);
+    const pathChronology = buildPathChronologyFromExcursion({
+      mfe_usd: mfeUsd,
+      mae_usd: maeUsd,
+      mfe_price: input.mfePrice ?? existing?.path_chronology?.mfe.price ?? null,
+      mfe_utc: input.mfeUtc ?? existing?.path_chronology?.mfe.utc ?? null,
+      mae_price: input.maePrice ?? existing?.path_chronology?.mae.price ?? null,
+      mae_utc: input.maeUtc ?? existing?.path_chronology?.mae.utc ?? null,
+      mfe_ticks: mfeTicks,
+      mae_ticks: maeTicks,
+      same_event_gap: input.pathChronologySameEventGap,
+    });
     const excursionComplete = maeUsd !== null && mfeUsd !== null;
     const protectionConfirmed = protectionStatus === "proven";
     const learningEligible = protectionConfirmed
@@ -243,8 +262,8 @@ export class TradeOutcomePublisher {
       slippage_ticks: null,
       mae_usd: maeUsd,
       mfe_usd: mfeUsd,
-      mae_ticks: ticksFromUsd(maeUsd, quantity, tickValue),
-      mfe_ticks: ticksFromUsd(mfeUsd, quantity, tickValue),
+      mae_ticks: maeTicks,
+      mfe_ticks: mfeTicks,
       initial_risk_usd: initialRisk,
       r_multiple: rMultiple(realized, initialRisk),
       buffer_impact_usd: input.bufferImpactUsd ?? null,
@@ -260,6 +279,7 @@ export class TradeOutcomePublisher {
         trade_ids: attributed.map((trade) => trade.id),
         order_ids: [...new Set(attributed.map((trade) => trade.orderId))],
       },
+      ...(pathChronology ? { path_chronology: pathChronology } : {}),
     };
   }
 
@@ -382,6 +402,9 @@ export function isRicherOutcome(candidate: TradeOutcomeV1, existing: TradeOutcom
     && candidate.mfe_usd != null
     && (existing.mae_usd == null || existing.mfe_usd == null)
   ) {
+    return true;
+  }
+  if (candidate.path_chronology && !existing.path_chronology) {
     return true;
   }
   if (
