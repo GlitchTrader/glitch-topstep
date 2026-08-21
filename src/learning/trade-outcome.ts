@@ -1,4 +1,25 @@
 export const TRADE_OUTCOME_SCHEMA = "glitch.topstep.trade_outcome.v1" as const;
+export const PATH_CHRONOLOGY_SCHEMA = "glitch.topstep.path_chronology.v1" as const;
+
+export type PathChronologyEvidenceQuality =
+  | "complete"
+  | "partial"
+  | "unresolved"
+  | "same_event_gap";
+
+export interface PathChronologyExtreme {
+  price: number | null;
+  utc: string | null;
+  usd: number | null;
+  ticks: number | null;
+}
+
+export interface PathChronologyV1 {
+  schema_version: typeof PATH_CHRONOLOGY_SCHEMA;
+  mfe: PathChronologyExtreme;
+  mae: PathChronologyExtreme;
+  evidence_quality: PathChronologyEvidenceQuality;
+}
 
 export type TradeOutcomeExitReason =
   | "take_profit"
@@ -62,6 +83,7 @@ export interface TradeOutcomeV1 {
     trade_ids: number[];
     order_ids: number[];
   };
+  path_chronology?: PathChronologyV1;
 }
 
 export const TRADE_OUTCOME_PUBLISHER_VERSION = "0.1.4-outcome-attribution";
