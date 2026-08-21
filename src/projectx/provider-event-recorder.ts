@@ -43,9 +43,22 @@ export interface RecordRestSnapshotInput {
 }
 
 export class ProviderRestSnapshotRecorder {
+  /** ponytail: LRU cap — upgrade path is TTL by account scope if cardinality grows. */
+  private static readonly MAX_CACHE_ENTRIES = 4_096;
+
   private readonly lastContentHashByIdentity = new Map<string, string>();
 
   public constructor(private readonly sink: ProviderEvidenceSink) {}
+
+  public cacheMetrics(): { size: number; max: number; evictions: number } {
+    return {
+      size: this.lastContentHashByIdentity.size,
+      max: ProviderRestSnapshotRecorder.MAX_CACHE_ENTRIES,
+      evictions: this.cacheEvictions,
+    };
+  }
+
+  private cacheEvictions = 0;
 
   public recordIfChanged(input: RecordRestSnapshotInput): boolean {
     const identity = [
@@ -74,8 +87,23 @@ export class ProviderRestSnapshotRecorder {
       rawPayload: input.rawPayload ?? null,
       normalizedPayload: input.normalizedPayload ?? null,
     });
-    this.lastContentHashByIdentity.set(identity, contentHash);
+    this.rememberContentHash(identity, contentHash);
     return true;
+  }
+
+  private rememberContentHash(identity: string, contentHash: string): void {
+    if (this.lastContentHashByIdentity.has(identity)) {
+      this.lastContentHashByIdentity.delete(identity);
+    }
+    this.lastContentHashByIdentity.set(identity, contentHash);
+    while (this.lastContentHashByIdentity.size > ProviderRestSnapshotRecorder.MAX_CACHE_ENTRIES) {
+      const oldest = this.lastContentHashByIdentity.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      this.lastContentHashByIdentity.delete(oldest);
+      this.cacheEvictions += 1;
+    }
   }
 }
 

@@ -25,6 +25,8 @@ export interface SafetySupervisorEvaluation {
   risk_reduction_permitted: boolean;
   would_block_new_exposure: boolean;
   agrees_with_execution_gates: boolean;
+  /** Set when supervisor new-exposure verdict differs from execution gates (TS-REAUDIT-06). */
+  gate_divergence_detail: string | null;
 }
 
 export interface SafetySupervisorInput {
@@ -90,13 +92,23 @@ export function evaluateSafetySupervisor(input: SafetySupervisorInput): SafetySu
   const riskReductionPermitted = gatewayModePermitsRiskReduction(gatewayMode.effective)
     && input.tradingMode !== "disabled";
 
+  const gateDivergenceDetail = newExposureBlockedByGates === wouldBlockNewExposure
+    ? null
+    : [
+      `gates=${newExposureBlockedByGates ? "blocked" : "open"}`,
+      `supervisor=${wouldBlockNewExposure ? "blocked" : "open"}`,
+      newExposureGate?.detail ? `gate_detail=${newExposureGate.detail}` : null,
+      failedIds.length > 0 ? `supervisor_failed=${failedIds.join(",")}` : null,
+    ].filter(Boolean).join(";");
+
   return {
     mode: "observe",
     invariants,
     new_exposure_blocked: newExposureBlockedByGates,
     risk_reduction_permitted: riskReductionPermitted,
     would_block_new_exposure: wouldBlockNewExposure,
-    agrees_with_execution_gates: wouldBlockNewExposure === newExposureBlockedByGates,
+    agrees_with_execution_gates: gateDivergenceDetail === null,
+    gate_divergence_detail: gateDivergenceDetail,
   };
 }
 
