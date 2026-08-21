@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T17:30:00Z",
+  "updated": "2026-08-21T17:45:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -148,14 +148,14 @@
       "summary": "Paired 0.2.2 single_active_position: flat eligible entry on MNQ/MES/MCL, one account position, GET /packet?contract_id=, per-contract order flow, delivery handoff."
     },
     "trail_a_d_2026_08_21": {
-      "status": "pending_merge",
-      "gateway_branch": "feat/trail-a-d-integrity-empirical",
-      "profile_branch": "feat/trail-a-d-integrity-empirical",
+      "gateway_pr": 220,
+      "profile_pr": 175,
+      "status": "profile_merged_gateway_pending",
       "trail_a": {
         "C1_model_owner_preempt": "profile: SIGTERM + grace wait + generation fencing before lock steal",
         "C2_auth_facade": "gateway: withAuthenticatedRead for safe 401/403 retry on reads",
         "C3_quiescence": "profile: GLITCH_TOPSTEP_SKIP_MARKET_QUIESCENT default false (TS-DATA-01)",
-        "C4_paired_release": "gateway: paired-contract test fails closed when profile checkout missing",
+        "C4_paired_release": "gateway: paired-contract test skips when profile checkout missing; compares when present",
         "C5_identity_queue": "gateway: identity in-memory cap at highWaterMark; paginated outbox resume (500/page)",
         "C6_shutdown": "gateway: lifecycle supervisor retains critical disposer on failure",
         "C7_export_idempotent": "profile: jsonl export queue only when INSERT OR IGNORE inserts"
@@ -175,7 +175,7 @@
         "TS-TRAIL-D-01"
       ]
     },
-    "stream_validation": "Post trail A+D (#TBD gateway/profile on 2026-08-21): gateway npm run check green; profile unittest green. Trail A closes export idempotency, model-owner preemption, quiescence default, identity queue cap, conservative shutdown, paired-contract fail-closed test, sanitized gateway errors. Trail D adds cycle-empirical.jsonl. Residual REAUDIT acceptance: full auth facade wiring, kill matrix, PRAC soak, signed pair manifest."
+    "stream_validation": "Trail A+D profile merged (#175); gateway PR #220 pending merge. npm run check and profile unittest green on branches. Residual REAUDIT acceptance: full auth facade wiring, kill matrix, PRAC soak, signed pair manifest."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
