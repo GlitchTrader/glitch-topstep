@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-20T22:15:00Z",
+  "updated": "2026-08-21T01:15:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -31,8 +31,8 @@
       134,
       135
     ],
-    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. Wave 4 decomposition: TS-AUDIT-09 (#164) flatten/protection/auth-session workflows; GTHP-AUDIT-04 (#124) Hermes workflow modules. Remaining: TS-MULTI-04 (#126 gateway), TS-DATA-01 Phase D (#171 gated).",
-    "stream_validation": "396 gateway tests; Hermes 222 profile tests including workflow decomposition."
+    "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. The independent re-audit found incomplete runtime wiring and edge-state invariants; TS-REAUDIT-01 through TS-REAUDIT-12 are now the active production-hardening authority and armed promotion is blocked.",
+    "stream_validation": "Re-audit baseline: gateway build and 396 tests green with npm audit reporting zero vulnerabilities; Hermes 222 tests green with one expected skip. Targeted probes still reproduced residual-order flatten completion and decision dual-write divergence."
   },
   "authority": {
     "human": "selects account, contract, operating mode, and may submit manual intent",
@@ -1388,8 +1388,518 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
       "implementation_note": "Phases A–C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off."
+    },
+    {
+      "id": "TS-REAUDIT-01",
+      "title": "Wire one authoritative ProjectX auth session into the runtime",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "projectx_integration",
+      "issue": 184,
+      "depends_on": [
+        "TS-AUDIT-06"
+      ],
+      "finding": "ProjectXAuthManager passes isolated tests but AppService and all runtime consumers use a separate ProjectXApiClient and the legacy validation timer.",
+      "resolution": [
+        "Make one authenticated ProjectX facade the composition-root authority for every REST consumer.",
+        "Add proactive refresh margin, bounded jittered backoff, and single-flight refresh.",
+        "Retry only classified safe reads after 401/403; reconcile durable mutation identity before any mutation retry.",
+        "Make persistent auth degradation an authoritative new-exposure block while preserving safe risk-reduction/recovery paths."
+      ],
+      "acceptance": [
+        "One hundred concurrent expiry failures produce exactly one refresh or login.",
+        "Every runtime ProjectX consumer is proven to use the shared facade.",
+        "Safe reads recover once from 401/403 and mutations are never blindly replayed.",
+        "Auth expiry margin, degraded state, and recovery are covered by integration tests."
+      ],
+      "deployment": [
+        "Deploy observe-only telemetry and shadow-compare old/new auth outcomes.",
+        "Run 401/403, transient validation, restart, and token-rotation fault tests.",
+        "Promote the auth gate only after Sim/PRAC soak and a documented rollback."
+      ],
+      "sources": [
+        "src/projectx/auth-manager.ts",
+        "src/projectx/client.ts",
+        "src/service.ts",
+        "tests/projectx-auth-manager.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/184"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-02",
+      "title": "Persist identity evidence backlog before in-memory queuing",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "evidence_persistence",
+      "issue": 185,
+      "depends_on": [
+        "TS-AUDIT-08",
+        "TS-PROD-04",
+        "TS-PROD-05"
+      ],
+      "finding": "Identity evidence can remain only in unbounded memory; drain failure is caught before the evidence SQLite handle is closed, so the claimed resume cursor cannot reconstruct pending events.",
+      "resolution": [
+        "Add a durable evidence outbox/WAL with idempotent event identities and pending/applied states.",
+        "Persist identity before enqueue/apply and keep market coalescing as a separate explicit policy.",
+        "Restore coalescing indexes after failed batches and bound all memory classes.",
+        "Make durable identity backlog an authoritative degraded gate and shutdown blocker."
+      ],
+      "acceptance": [
+        "Kill, ENOSPC, busy, and write-failure injection lose zero identity events.",
+        "Restart drains pending events exactly once without duplicate state application.",
+        "Heap remains stable at measured TS-R2-07 event rates.",
+        "Shutdown cannot report stopped while durable identity backlog remains."
+      ],
+      "deployment": [
+        "Introduce schema and telemetry without behavior change.",
+        "Backfill/replay copied evidence and validate sequence/content hashes.",
+        "Run disk-full, locked-database, crash/restart, and shadow-rate soak.",
+        "Enable authority in a paired release with rollback tooling."
+      ],
+      "sources": [
+        "src/projectx/evidence-write-queue.ts",
+        "src/storage/sqlite-provider-evidence-store.ts",
+        "src/service.ts",
+        "tests/evidence-write-queue.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/185"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-03",
+      "title": "Make residual working orders impossible at flatten completion",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "execution_control",
+      "issue": 186,
+      "depends_on": [
+        "TS-AUDIT-07",
+        "TS-AUDIT-09",
+        "TS-CTRL-01"
+      ],
+      "finding": "The flatten fallback for closed, ignored, and other statuses omits ownWorkingOrders; closed plus flat plus one residual owned order reproduced completed.",
+      "resolution": [
+        "Define one terminal predicate: zero open contracts, zero owned working orders, and complete authoritative state.",
+        "Apply the same predicate to every receipt and restart path.",
+        "Treat unknown statuses as waiting or manual intervention and reconcile/cancel residual owned orders before completion.",
+        "Persist phase deadlines and operator-visible ambiguity."
+      ],
+      "acceptance": [
+        "closed plus one owned working order remains waiting.",
+        "Every receipt status has a table-driven terminality test.",
+        "Partial fill, rejected cancel, stale state, restart, and late residual fill are covered.",
+        "Completed is reachable only through the shared terminal predicate."
+      ],
+      "deployment": [
+        "Land the reproduced case as a red regression.",
+        "Replay historical controls and restart fixtures.",
+        "Run Sim/PRAC flatten with delayed cancellation and stream lag.",
+        "Require zero residual owned orders through the soak before armed promotion."
+      ],
+      "sources": [
+        "src/control/flatten-control-saga.ts",
+        "src/service/flatten-workflow.ts",
+        "src/service.ts",
+        "tests/flatten-saga.test.ts",
+        "tests/flatten-workflow.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/186"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-04",
+      "title": "Expose durable intent delivery status across Gateway and Hermes",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "paired_delivery_recovery",
+      "issue": 187,
+      "depends_on": [
+        "TS-AUDIT-12",
+        "glitch-topstep-hermes-profile:GTHP-AUDIT-03"
+      ],
+      "finding": "The gateway registers intent before execution but receipt-only lookup returns 404 without a receipt; Hermes may treat that as safe deletion after its frame is pruned.",
+      "resolution": [
+        "Add a versioned intent status contract: not_seen, registered, mutation_inflight, ambiguous, and terminal.",
+        "Include retention floor/generation and derive state transactionally from intent, mutation, recovery, and receipt tables.",
+        "Make Hermes retain unavailable, unknown, and all non-terminal states; never delete from receipt-only 404.",
+        "Add paired consumer-driven contract fixtures."
+      ],
+      "acceptance": [
+        "Crash after registration and before receipt returns registered.",
+        "Post-submission crash returns mutation_inflight or ambiguous until recovery.",
+        "Hermes retains every unknown/non-terminal outbox and terminal replay is idempotent.",
+        "Retention tests prove when not_seen is authoritative."
+      ],
+      "deployment": [
+        "Deploy the backward-compatible gateway capability first.",
+        "Publish compatibility capability and paired fixtures.",
+        "Deploy the Hermes consumer with retain-safe fallback.",
+        "Remove old discard semantics only after one full retention window."
+      ],
+      "sources": [
+        "src/server/local-gateway.ts",
+        "src/storage/sqlite-execution-store.ts",
+        "src/execution/coordinator.ts",
+        "glitch-topstep-hermes-profile:scripts/workflows/intent_outbox.py",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/187"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-05",
+      "title": "Bound runtime caches and prove stable heap under continuous trading",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "runtime_performance",
+      "issue": 188,
+      "depends_on": [
+        "TS-REAUDIT-02"
+      ],
+      "finding": "Rearm states, all trade outcomes, and REST content hashes retain historical identities for the process lifetime.",
+      "resolution": [
+        "Clear rearm state on tranche terminal and flat transitions.",
+        "Serve historical outcomes from SQLite with a bounded hot cache.",
+        "Apply active-identity scope or TTL/LRU to REST snapshot hashes.",
+        "Expose cache cardinality, eviction, and heap-slope metrics."
+      ],
+      "acceptance": [
+        "Cardinality returns to documented bounds after positions close.",
+        "Recent outcome behavior remains correct without loading all history.",
+        "No reconciliation identity is evicted prematurely.",
+        "A multi-day synthetic soak shows stable post-GC heap slope."
+      ],
+      "deployment": [
+        "Enable metrics first, choose conservative bounds from observation, soak in shadow, then tighten defaults."
+      ],
+      "sources": [
+        "src/execution/coordinator.ts",
+        "src/storage/trade-outcome-store.ts",
+        "src/projectx/provider-event-recorder.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/188"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-06",
+      "title": "Make safety invariants truthful before promoting them to authority",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "safety_architecture",
+      "issue": 189,
+      "depends_on": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-03"
+      ],
+      "finding": "Safety supervisor is observe-only and unprotected_seconds_estimate uses ambiguity age rather than the time exposure became unprotected.",
+      "resolution": [
+        "Persist unprotected_since_utc when uncovered quantity becomes positive and clear only on proven protection or flat.",
+        "Assign an authoritative owner and gate contract to every invariant.",
+        "Compare reason-level supervisor and execution-gate decisions and alert on divergence.",
+        "Promote invariants individually while preserving risk-reduction escape paths."
+      ],
+      "acceptance": [
+        "Unprotected quantity greater than zero always has a truthful duration across restart.",
+        "Every invariant has table-driven tests and an owner.",
+        "Soak has zero unexplained supervisor/gate divergence.",
+        "Promotion cannot block required EXIT or reconciliation."
+      ],
+      "deployment": [
+        "Instrument first, shadow parity, review disagreements, promote one invariant per release, retain runtime rollback."
+      ],
+      "sources": [
+        "src/safety/safety-supervisor.ts",
+        "src/observability/invariant-metrics.ts",
+        "tests/invariant-metrics.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/189"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-07",
+      "title": "Continue vertical decomposition behind enforced runtime ports",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "architecture",
+      "issue": 190,
+      "depends_on": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-03",
+        "TS-REAUDIT-04",
+        "TS-AUDIT-09"
+      ],
+      "finding": "Large orchestration files still mix policy, I/O, persistence, and recovery; extracted implementations can pass tests without being wired into production.",
+      "resolution": [
+        "Define ports for AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, IntentDeliveryStatus, and OutcomeProjection.",
+        "Make AppService a thin composition root with exactly one production binding per port.",
+        "Move one vertical workflow per PR and enforce dependency boundaries/import-cycle checks.",
+        "Remove duplicate implementations only after binding and semantic-parity proof."
+      ],
+      "acceptance": [
+        "Composition tests prove every production binding is reachable from startup.",
+        "No domain/application/adapter dependency cycles exist.",
+        "Orchestration files shrink against the recorded baseline without wire drift.",
+        "Recovery fixtures remain semantically equivalent."
+      ],
+      "deployment": [
+        "Land small reversible waves in order: auth, flatten, evidence, delivery status, outcome projection; no big-bang rewrite."
+      ],
+      "sources": [
+        "src/service.ts",
+        "src/execution/coordinator.ts",
+        "src/storage/sqlite-execution-store.ts",
+        "tests/workflow-decomposition.test.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/190"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-08",
+      "title": "Fail shutdown when critical disposers do not terminate",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "runtime_lifecycle",
+      "issue": 191,
+      "depends_on": [
+        "TS-REAUDIT-02",
+        "TS-PROD-03"
+      ],
+      "finding": "Lifecycle disposer failures are collected but stopSerial ignores them and may close stores, release the lock, and report stopped.",
+      "resolution": [
+        "Classify critical and best-effort disposers and reject stopped on critical failure or timeout.",
+        "Quiesce ingress, active requests, execution queue, streams/timers, evidence, and stores in that order.",
+        "Preserve failed_shutdown diagnostics and idempotent second-stop/recovery behavior.",
+        "Do not release the runtime lock while another writer can remain live."
+      ],
+      "acceptance": [
+        "Injected critical disposer failure ends in failed_shutdown.",
+        "No store closes before every possible writer is quiescent.",
+        "Repeated stop is deterministic.",
+        "Tests cover active intent, reconnect, evidence backlog, and gateway-close races."
+      ],
+      "deployment": [
+        "Add lifecycle telemetry, run the fault matrix, validate service-manager restart, and publish operator recovery instructions."
+      ],
+      "sources": [
+        "src/service/lifecycle-supervisor.ts",
+        "src/service.ts",
+        "src/server/local-gateway.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/191"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-09",
+      "title": "Publish a versioned distributed state-machine contract",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "paired_architecture",
+      "issue": 192,
+      "depends_on": [
+        "TS-REAUDIT-04",
+        "TS-PROD-07"
+      ],
+      "resolution": [
+        "Publish schemas and transition graphs covering registration, mutation, receipt, outbox, decision, control, and recovery.",
+        "Define authority, terminality, retention, retry, idempotency, forbidden transitions, and repair actions.",
+        "Generate one paired fixture corpus and add compatibility negotiation/deprecation windows."
+      ],
+      "acceptance": [
+        "Gateway and Hermes validate the same corpus in CI.",
+        "Every producer state has a defined consumer response.",
+        "Unknown versions fail closed without deleting recovery state.",
+        "Contract changes require a paired manifest/version bump."
+      ],
+      "deployment": [
+        "Start with intent delivery status, then decision projection and controls; retain compatibility for one full retention window."
+      ],
+      "sources": [
+        "src/domain/state-machines.ts",
+        "src/domain/ports",
+        "glitch-topstep-hermes-profile:scripts/paired_contract.py",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/192"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-10",
+      "title": "Require crash and fault injection before armed promotion",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "quality_engineering",
+      "issue": 193,
+      "depends_on": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-02",
+        "TS-REAUDIT-03",
+        "TS-REAUDIT-04",
+        "TS-REAUDIT-08",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-01",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-04"
+      ],
+      "resolution": [
+        "Add deterministic kill points around delivery, evidence, flatten, auth, and shutdown boundaries.",
+        "Inject 401/403/429, timeout, invalid JSON, ENOSPC, SQLite busy/corruption, stream lag, and process kill.",
+        "Assert paired restart convergence and emit immutable machine-readable proof.",
+        "Separate credential-free CI faults from sanitized Sim/PRAC evidence."
+      ],
+      "acceptance": [
+        "Every critical re-audit scenario is red before correction and green after it.",
+        "Repeated faults converge without duplicate exposure or lost identity evidence.",
+        "Proof includes immutable gateway/profile SHAs.",
+        "Armed release rejects missing or stale fault proof."
+      ],
+      "deployment": [
+        "Stabilize local/CI matrix, run shadow soak, execute approved Sim/PRAC subset, attach proof to the paired manifest."
+      ],
+      "sources": [
+        "tests/audit-regression-matrix.test.ts",
+        "scripts/acceptance-r1-04-kill-matrix.mjs",
+        ".github/workflows/release.yml",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/193"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-11",
+      "title": "Define production SLOs and actionable safety alerts",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "operations",
+      "issue": 194,
+      "depends_on": [
+        "TS-REAUDIT-06",
+        "TS-REAUDIT-08"
+      ],
+      "resolution": [
+        "Define source, unit, valid range, stale behavior, severity, and response for protection, reconciliation, auth, evidence, flatten, and heap SLIs.",
+        "Add alert deduplication, hysteresis, runbook links, and recovery confirmation.",
+        "Tie selected critical breaches to new-exposure block or automatic downgrade while preserving risk reduction."
+      ],
+      "acceptance": [
+        "Fixtures exercise every alert and alerts do not flap in soak.",
+        "Critical pages include a repair action and explain every red health state.",
+        "No metric exports secrets or account PII.",
+        "Risk-reduction paths remain available."
+      ],
+      "deployment": [
+        "Observe thresholds in shadow, tune from Sim/PRAC, enable paging, then selected automatic downgrades."
+      ],
+      "sources": [
+        "src/observability/invariant-metrics.ts",
+        "src/safety/safety-supervisor.ts",
+        "src/service.ts",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/194"
+      ]
+    },
+    {
+      "id": "TS-REAUDIT-12",
+      "title": "Codify paired armed promotion and rollback runbook",
+      "status": "open",
+      "priority": "P0",
+      "owner_role": "release_architecture",
+      "issue": 195,
+      "depends_on": [
+        "TS-REAUDIT-01",
+        "TS-REAUDIT-02",
+        "TS-REAUDIT-03",
+        "TS-REAUDIT-04",
+        "TS-REAUDIT-08",
+        "TS-REAUDIT-09",
+        "TS-REAUDIT-10",
+        "TS-REAUDIT-11",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-01",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-02",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-03",
+        "glitch-topstep-hermes-profile:GTHP-REAUDIT-04"
+      ],
+      "resolution": [
+        "Require both SHAs, versions, effective-config hash, protocol/prompt versions, fault proof, soak evidence, and human approval in one signed manifest.",
+        "Codify disabled to shadow to Sim/PRAC to armed transitions and rollback triggers.",
+        "Add state backup/restore, compatibility validation, dry-run validator, and immutable evidence links.",
+        "Mark standalone artifacts non-promotable and surface the active pair in health."
+      ],
+      "acceptance": [
+        "Release rejects missing or nullable pair fields and stale proof.",
+        "Rollback rehearsal restores a known-good pair without losing durable recovery state.",
+        "No automated process can self-promote to armed.",
+        "The runbook is successfully exercised outside production."
+      ],
+      "deployment": [
+        "Ship validator non-blocking, rehearse rollback, require the manifest in both repositories, then protect armed-production with the gate."
+      ],
+      "sources": [
+        ".github/workflows/release.yml",
+        "docs/OPERATIONS.md",
+        "glitch-topstep-hermes-profile:.github/workflows/release.yml",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/195",
+        "https://github.com/GlitchTrader/glitch-topstep-hermes-profile/issues/142"
+      ]
     }
   ],
+  "reaudit_program_2026_08_20": {
+    "status": "planned_armed_blocked",
+    "audit_commit": "60a87e3408f4892ff2a2efbcf0bfb1565fcd9d36",
+    "paired_audit_commit": "ce8a26759302dd369e53d9b543b198936fcfae80",
+    "issues": [
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191,
+      192,
+      193,
+      194,
+      195
+    ],
+    "phases": [
+      {
+        "order": 1,
+        "name": "critical_state_integrity",
+        "items": [
+          "glitch-topstep-hermes-profile:GTHP-REAUDIT-01",
+          "TS-REAUDIT-01",
+          "TS-REAUDIT-02",
+          "TS-REAUDIT-03",
+          "TS-REAUDIT-04",
+          "TS-REAUDIT-08"
+        ],
+        "exit_gate": "All crash-consistency and terminality regressions green; no armed promotion."
+      },
+      {
+        "order": 2,
+        "name": "bounded_runtime_and_truthful_safety",
+        "items": [
+          "TS-REAUDIT-05",
+          "TS-REAUDIT-06",
+          "glitch-topstep-hermes-profile:GTHP-REAUDIT-02"
+        ],
+        "exit_gate": "Stable heap/disk/read latency and zero unexplained safety-gate divergence in shadow soak."
+      },
+      {
+        "order": 3,
+        "name": "architecture_and_pair_contract",
+        "items": [
+          "TS-REAUDIT-07",
+          "TS-REAUDIT-09"
+        ],
+        "exit_gate": "Exactly one production binding per port and paired consumer-driven contract corpus green."
+      },
+      {
+        "order": 4,
+        "name": "quality_and_operations",
+        "items": [
+          "TS-REAUDIT-10",
+          "TS-REAUDIT-11",
+          "glitch-topstep-hermes-profile:GTHP-REAUDIT-04"
+        ],
+        "exit_gate": "Fault matrix, SLO alerts, and platform CI gates green with immutable proof."
+      },
+      {
+        "order": 5,
+        "name": "paired_release_and_promotion",
+        "items": [
+          "glitch-topstep-hermes-profile:GTHP-REAUDIT-03",
+          "TS-REAUDIT-12"
+        ],
+        "exit_gate": "Rollback rehearsed, paired Sim/PRAC soak accepted, signed manifest complete, human armed approval."
+      }
+    ],
+    "global_stop_line": "Do not promote to armed while any P0 re-audit item is open or while current paired fault/soak/rollback evidence is absent."
+  },
   "roadmap_only": [
     "provider-event replay and archive",
     "versioned Topstep policy and session calendar beyond operator_configured"
