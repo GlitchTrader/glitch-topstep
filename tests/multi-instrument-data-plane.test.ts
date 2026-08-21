@@ -150,6 +150,19 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
     assert.equal(byInstrument.get("MCL")!.observation_quality.status, "ready");
   });
 
+  it("refreshForPacket publishes universe and candidate alignment metadata", async () => {
+    const { dataPlane } = plane("CON.F.US.MNQ.U26");
+
+    const packet = await dataPlane.refreshForPacket(new Date(NOW));
+
+    assert.ok(packet.universe_freshness.ranking_freshness_valid);
+    assert.equal(packet.universe_freshness.ranking_freshness_skew_ms, 0);
+    for (const candidate of packet.candidates) {
+      assert.ok(candidate.candidate_alignment.observation_age_ms !== null);
+      assert.equal(candidate.candidate_alignment.ranking_freshness_valid, true);
+    }
+  });
+
   it("refreshSelected refreshes only the requested contract", async () => {
     const universe = resolveInstrumentUniverse(["MNQ", "MES"], AVAILABLE, 1);
     const time = clock();

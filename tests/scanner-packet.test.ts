@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import { resolveInstrumentUniverse } from "../src/domain/instrument-universe.js";
 import type { AccountVenueSnapshot, ContractInfo } from "../src/domain/models.js";
 import type { MultiInstrumentMarketPacket } from "../src/market/multi-instrument-data-plane.js";
+import { buildCandidateAlignment, buildUniverseFreshness } from "../src/market/candidate-freshness.js";
 import { buildScannerPacket, type ScannerPacket } from "../src/market/scanner-packet.js";
 import { snapshot } from "./fixtures.js";
 
@@ -33,10 +34,13 @@ function candidateSnapshot(contractId: string): AccountVenueSnapshot {
 }
 
 function marketPacket(): MultiInstrumentMarketPacket {
+  const generatedUtc = "2026-08-20T12:00:00.000Z";
+  const asOf = new Date(generatedUtc);
+  const universeFreshness = buildUniverseFreshness([0, 0, 0], asOf);
   return {
     schema_version: "glitch.topstep.market_universe.v1",
     market_data_mode: "simulated",
-    generated_utc: "2026-08-20T12:00:00.000Z",
+    generated_utc: generatedUtc,
     generation: universe.generation,
     scope_hash: universe.scope_hash,
     scheduler: {
@@ -49,31 +53,42 @@ function marketPacket(): MultiInstrumentMarketPacket {
       budget_per_window: 50,
       observed_peak_per_window: 12,
       headroom_per_window: 38,
+      window_count: 12,
     },
-    candidates: universe.contracts.map((contract) => ({
-      instrument: contract.instrument,
-      contract_id: contract.contract_id,
-      symbol_id: contract.symbol_id,
-      tick_size: contract.tick_size,
-      tick_value: contract.tick_value,
-      execution_mode: contract.instrument === "MNQ" ? "selected" : "observation_only",
-      market_observation: {
+    universe_freshness: universeFreshness,
+    candidates: universe.contracts.map((contract) => {
+      const marketObservation = {
         last_attempt_utc: "2026-08-20T12:00:00.000Z",
         last_succeeded_utc: "2026-08-20T12:00:00.000Z",
         last_error: null,
         observation: null,
-      },
-      observation_quality: {
-        status: "ready",
-        observation_ready: true,
-        last_succeeded_utc: "2026-08-20T12:00:00.000Z",
-        last_error: null,
-        timeframe_count: 4,
-        completed_timeframe_count: 4,
-        gap_count: 0,
-        identity_issue_count: 0,
-      },
-    })),
+      };
+      return {
+        instrument: contract.instrument,
+        contract_id: contract.contract_id,
+        symbol_id: contract.symbol_id,
+        tick_size: contract.tick_size,
+        tick_value: contract.tick_value,
+        execution_mode: contract.instrument === "MNQ" ? "selected" : "observation_only",
+        market_observation: marketObservation,
+        observation_quality: {
+          status: "ready" as const,
+          observation_ready: true,
+          last_succeeded_utc: "2026-08-20T12:00:00.000Z",
+          last_error: null,
+          timeframe_count: 4,
+          completed_timeframe_count: 4,
+          gap_count: 0,
+          identity_issue_count: 0,
+        },
+        candidate_alignment: buildCandidateAlignment(
+          marketObservation,
+          null,
+          asOf,
+          universeFreshness.ranking_freshness_valid,
+        ),
+      };
+    }),
   };
 }
 
