@@ -1,6 +1,6 @@
 {
   "name": "glitch-topstep",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "description": "Topstep-first AI trading gateway built directly on ProjectX/TopstepX.",
