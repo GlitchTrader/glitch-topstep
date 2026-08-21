@@ -66,6 +66,19 @@
     "exact_contract_resolution": "catalog_fixture_plus_runtime_resolution"
   },
   "paired_manifest_schema": "glitch.topstep.paired_release.v1",
+  "distributed_contract": {
+    "schema_version": "glitch.topstep.distributed_state_machine.v1",
+    "document": "release/distributed-state-machine.v1.json",
+    "amendment_source_schema": "glitch.topstep.amendment_source.v1",
+    "original_risk_envelope_schema": "glitch.topstep.original_risk_envelope.v1",
+    "model_owner_schema": "glitch.topstep.model_owner.v1",
+    "selected_candidate_handoff_schema": "glitch.topstep.selected_candidate_handoff.v1",
+    "outcome_path_chronology_schema": "glitch.topstep.path_chronology.v1",
+    "cadence": {
+      "flat_decision_interval_minutes": 5,
+      "positioned_management_interval_minutes": 1
+    }
+  },
   "operations": {
     "gitattributes_sha256": "D92933938CF9DFA663B502EB71126808685DD4998C7D7CFF22F2612ADEEC6E14",
     "gitattributes_bytes_hex": "2a20746578740a"
