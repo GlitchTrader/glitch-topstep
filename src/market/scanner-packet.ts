@@ -1,11 +1,16 @@
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
 import type { AccountVenueSnapshot, QuoteInfo } from "../domain/models.js";
+import {
+  RUNTIME_ACCOUNT_SELECTION_MODE,
+  type AccountSelectionMode,
+  type ActivePositionScope,
+} from "./active-position-scope.js";
 import { buildCandidateAlignment } from "./candidate-freshness.js";
 import type { MultiInstrumentMarketPacket } from "./multi-instrument-data-plane.js";
 
 export interface ScannerAccountSelection {
   schema_version: "glitch.topstep.account_selection.v1";
-  mode: "single_contract";
+  mode: AccountSelectionMode;
   selected_instrument: string;
   selected_contract_id: string;
   scope_generation: number;
@@ -29,27 +34,28 @@ export type ScannerPacket = Omit<MultiInstrumentMarketPacket, "candidates"> & {
 
 /**
  * The gateway-to-Hermes scanner boundary. Every allowlisted contract is published with its own
- * observation and venue state; exactly one carries `execution_mode: "selected"`. Ranking and
- * candidate choice belong to Hermes, so this composition stays strictly descriptive.
+ * observation and venue state. When flat every candidate is eligible; when positioned exactly one
+ * is selected and the rest require a flat account.
  */
 export function buildScannerPacket(input: {
   packet: MultiInstrumentMarketPacket;
   accountId: number;
-  selectedInstrument: string;
-  selectedContractId: string;
+  scope: ActivePositionScope;
   universe: InstrumentUniverse;
   simultaneousExposureEnabled: boolean;
   candidateSnapshot: (contractId: string) => AccountVenueSnapshot;
+  accountSelectionMode?: AccountSelectionMode;
 }): ScannerPacket {
+  const accountSelectionMode = input.accountSelectionMode ?? RUNTIME_ACCOUNT_SELECTION_MODE;
   return {
     ...input.packet,
     account_id: input.accountId,
     simultaneous_exposure_enabled: input.simultaneousExposureEnabled,
     account_selection: {
       schema_version: "glitch.topstep.account_selection.v1",
-      mode: "single_contract",
-      selected_instrument: input.selectedInstrument,
-      selected_contract_id: input.selectedContractId,
+      mode: accountSelectionMode,
+      selected_instrument: input.scope.packetTargetInstrument,
+      selected_contract_id: input.scope.packetTargetContractId,
       scope_generation: input.universe.generation,
       scope_hash: input.universe.scope_hash,
       simultaneous_exposure_enabled: input.simultaneousExposureEnabled,
@@ -59,6 +65,7 @@ export function buildScannerPacket(input: {
       const asOf = new Date(input.packet.generated_utc);
       return {
         ...candidate,
+        execution_mode: input.scope.executionModeFor(candidate.contract_id),
         quote: snapshot.quote,
         open_contracts: snapshot.instrumentOpenContracts,
         state_complete: snapshot.stateComplete,

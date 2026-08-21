@@ -7,6 +7,7 @@ import { resolveInstrumentUniverse } from "../src/domain/instrument-universe.js"
 import type { AccountVenueSnapshot, ContractInfo } from "../src/domain/models.js";
 import type { MultiInstrumentMarketPacket } from "../src/market/multi-instrument-data-plane.js";
 import { buildCandidateAlignment, buildUniverseFreshness } from "../src/market/candidate-freshness.js";
+import { resolveActivePositionScope } from "../src/market/active-position-scope.js";
 import { buildScannerPacket, type ScannerPacket } from "../src/market/scanner-packet.js";
 import { snapshot } from "./fixtures.js";
 
@@ -69,7 +70,7 @@ function marketPacket(): MultiInstrumentMarketPacket {
         symbol_id: contract.symbol_id,
         tick_size: contract.tick_size,
         tick_value: contract.tick_value,
-        execution_mode: contract.instrument === "MNQ" ? "selected" : "observation_only",
+        execution_mode: "eligible" as const,
         market_observation: marketObservation,
         observation_quality: {
           status: "ready" as const,
@@ -93,11 +94,17 @@ function marketPacket(): MultiInstrumentMarketPacket {
 }
 
 export function build(): ScannerPacket {
+  const scope = resolveActivePositionScope({
+    universe,
+    referenceContractId: "CON.F.US.MNQ.U26",
+    referenceInstrument: "MNQ",
+    openContractIds: ["CON.F.US.MNQ.U26"],
+    workingOrderContractIds: [],
+  });
   return buildScannerPacket({
     packet: marketPacket(),
     accountId: 101,
-    selectedInstrument: "MNQ",
-    selectedContractId: "CON.F.US.MNQ.U26",
+    scope,
     universe,
     simultaneousExposureEnabled: false,
     candidateSnapshot,
@@ -105,11 +112,11 @@ export function build(): ScannerPacket {
 }
 
 describe("GTHP-MULTI-01 gateway scanner boundary", () => {
-  it("publishes every allowlisted candidate with exactly one armed contract", () => {
+  it("publishes every allowlisted candidate with single-active-position modes", () => {
     const packet = build();
 
     assert.equal(packet.account_selection.schema_version, "glitch.topstep.account_selection.v1");
-    assert.equal(packet.account_selection.mode, "single_contract");
+    assert.equal(packet.account_selection.mode, "single_active_position");
     assert.equal(packet.account_selection.simultaneous_exposure_enabled, false);
     assert.equal(packet.account_selection.scope_hash, universe.scope_hash);
     assert.equal(packet.simultaneous_exposure_enabled, false);
@@ -118,7 +125,7 @@ describe("GTHP-MULTI-01 gateway scanner boundary", () => {
     assert.equal(selected.length, 1);
     assert.equal(selected[0]!.contract_id, packet.account_selection.selected_contract_id);
     assert.deepEqual(
-      packet.candidates.filter((candidate) => candidate.execution_mode === "observation_only")
+      packet.candidates.filter((candidate) => candidate.execution_mode === "flat_required")
         .map((candidate) => candidate.instrument),
       ["MES", "MCL"],
     );

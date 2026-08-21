@@ -70,6 +70,7 @@ import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { ProjectXAuthManager, type ProjectXAuthStatus } from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
+import { resolveActivePositionScope, type ActivePositionScope } from "./market/active-position-scope.js";
 import { buildScannerPacket, type ScannerPacket } from "./market/scanner-packet.js";
 import type { MarketObservationState } from "./domain/market-observation.js";
 
@@ -104,6 +105,7 @@ export class GlitchTopstepService {
   private instrumentUniverse: InstrumentUniverse | null = null;
   private scannerMarketData: MultiInstrumentMarketDataPlane | null = null;
   private orderFlow: ProjectXOrderFlowService | null = null;
+  private orderFlows = new Map<string, ProjectXOrderFlowService>();
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private coordinator: ExecutionCoordinator | null = null;
@@ -272,15 +274,19 @@ export class GlitchTopstepService {
       contract.id,
       this.config.scope.liveMarketData,
     );
-    this.orderFlow = new ProjectXOrderFlowService(
-      join(this.config.dataDir, "projectx-evidence.sqlite"),
-      {
-        contractId: this.config.scope.contractId,
-        tickSize: contract.tickSize,
-        maxEvents: ORDER_FLOW_MAX_EVENTS,
-        depthLevels: ORDER_FLOW_DEPTH_LEVELS,
-      },
-    );
+    this.orderFlows = new Map(this.instrumentUniverse.contracts.map((candidate) => [
+      candidate.contract_id,
+      new ProjectXOrderFlowService(
+        join(this.config.dataDir, "projectx-evidence.sqlite"),
+        {
+          contractId: candidate.contract_id,
+          tickSize: candidate.tick_size,
+          maxEvents: ORDER_FLOW_MAX_EVENTS,
+          depthLevels: ORDER_FLOW_DEPTH_LEVELS,
+        },
+      ),
+    ]));
+    this.orderFlow = this.orderFlows.get(contract.id) ?? null;
 
     const receivedAt = new Date().toISOString();
     this.recordRestSnapshot(
@@ -323,7 +329,7 @@ export class GlitchTopstepService {
     await Promise.all([
       this.historySync.sync(),
       this.refreshMarketObservations(),
-      this.orderFlow.refresh(),
+      ...[...this.orderFlows.values()].map((service) => service.refresh()),
     ]);
     const initialRecovery = await recoverExecutionMutations(
       this.executionStore,
@@ -410,7 +416,7 @@ export class GlitchTopstepService {
             }),
             this.historySync.sync(),
             this.refreshMarketObservations(),
-            this.orderFlow?.refresh() ?? Promise.resolve(null),
+            ...[...this.orderFlows.values()].map((service) => service.refresh()),
           ]);
           this.packets?.invalidateAll();
         },
@@ -473,7 +479,7 @@ export class GlitchTopstepService {
     });
 
     this.orderFlowTimer = setInterval(() => {
-      void this.orderFlow?.refresh();
+      void Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
     }, ORDER_FLOW_REFRESH_MS);
     this.orderFlowTimer.unref();
     this.lifecycle.register("order_flow_timer", () => {
@@ -492,6 +498,7 @@ export class GlitchTopstepService {
       () => ({ paused: this.controlPaused, mode: this.runtimeTradingMode }),
       () => this.packets?.current().execution.daily_capture_locked ?? false,
       () => this.instrumentUniverse,
+      (contractId) => this.state.buildSnapshot(this.config.scope.accountId, contractId),
     );
     this.coordinator = coordinator;
     this.gateway = new LocalGatewayServer(
@@ -609,12 +616,9 @@ export class GlitchTopstepService {
         };
       },
       snapshot,
-      async () => {
-        await this.ensureSelectedMarketObservationFresh();
-        if (!this.packets) {
-          throw new Error("packet_service_unavailable");
-        }
-        return this.packets.current();
+      async (request) => {
+        await this.ensurePacketMarketObservationFresh(request);
+        return this.buildDecisionPacketForScope(this.activePositionScope(request));
       },
       (limit, query) => {
         if (query?.source || query?.eventType) {
@@ -673,7 +677,7 @@ export class GlitchTopstepService {
         provider_evidence: this.providerEvidenceStore.status(),
         provider_history: this.historySync.currentStatus(),
         market_observation: this.currentMarketObservation(),
-        order_flow: this.orderFlow.current(),
+        order_flow: this.orderFlowForContract(this.config.scope.contractId),
       },
     });
     this.lifecycle.transition("ready");
@@ -858,12 +862,79 @@ export class GlitchTopstepService {
   }
 
   /** ponytail: token-bucket packet refresh; parallel per contract; background timer unchanged. */
-  private async ensureSelectedMarketObservationFresh(): Promise<void> {
+  private async ensurePacketMarketObservationFresh(
+    request?: { contractId?: string; instrument?: string },
+  ): Promise<void> {
     if (this.scannerMarketData) {
-      await this.scannerMarketData.refreshForPacket(new Date());
+      const scope = this.activePositionScope(request);
+      await this.scannerMarketData.refreshForPacket(new Date(), scope);
       return;
     }
     await this.marketObservation.refresh();
+  }
+
+  private activePositionScope(request?: {
+    contractId?: string;
+    instrument?: string;
+  }): ActivePositionScope {
+    if (!this.instrumentUniverse) {
+      throw new Error("instrument_universe_unavailable");
+    }
+    const referenceSnapshot = this.state.buildSnapshot(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    const openContractIds = referenceSnapshot.positions
+      .filter((position) => (
+        position.accountId === this.config.scope.accountId
+        && position.type !== 0
+        && position.size !== 0
+      ))
+      .map((position) => position.contractId);
+    const workingOrderContractIds = referenceSnapshot.openOrders
+      .filter((order) => order.accountId === this.config.scope.accountId)
+      .map((order) => order.contractId);
+    return resolveActivePositionScope({
+      universe: this.instrumentUniverse,
+      referenceContractId: this.config.scope.contractId,
+      referenceInstrument: this.config.scope.instrument,
+      requestedContractId: request?.contractId,
+      requestedInstrument: request?.instrument,
+      openContractIds,
+      workingOrderContractIds,
+    });
+  }
+
+  private marketObservationForContract(contractId: string) {
+    return this.scannerMarketData?.current().candidates
+      .find((candidate) => candidate.contract_id === contractId)
+      ?.market_observation
+      ?? this.marketObservation.current();
+  }
+
+  private orderFlowForContract(contractId: string) {
+    return this.orderFlows.get(contractId)?.current()
+      ?? this.orderFlow?.current()
+      ?? {
+        last_attempt_utc: null,
+        last_succeeded_utc: null,
+        last_error: "order_flow_service_unavailable",
+        observation: null,
+      };
+  }
+
+  private buildDecisionPacketForScope(scope: ActivePositionScope) {
+    if (!this.packets) {
+      throw new Error("packet_service_unavailable");
+    }
+    const contractId = scope.packetTargetContractId;
+    const snapshot = this.state.buildSnapshot(this.config.scope.accountId, contractId);
+    return this.packets.current({
+      snapshot,
+      instrument: scope.packetTargetInstrument,
+      marketObservation: this.marketObservationForContract(contractId),
+      orderFlow: this.orderFlowForContract(contractId),
+    });
   }
 
   private currentMarketObservation(): MarketObservationState {
@@ -877,11 +948,11 @@ export class GlitchTopstepService {
     if (!this.scannerMarketData || !this.instrumentUniverse) {
       throw new Error("scanner_not_ready");
     }
+    const scope = this.activePositionScope();
     return buildScannerPacket({
-      packet: this.scannerMarketData.current(),
+      packet: this.scannerMarketData.current(new Date(), scope),
       accountId: this.config.scope.accountId,
-      selectedInstrument: this.config.scope.instrument,
-      selectedContractId: this.config.scope.contractId,
+      scope,
       universe: this.instrumentUniverse,
       simultaneousExposureEnabled: this.config.multiInstrument?.simultaneousExposureEnabled ?? false,
       candidateSnapshot: (contractId) => this.state.buildSnapshot(this.config.scope.accountId, contractId),
@@ -901,8 +972,19 @@ export class GlitchTopstepService {
     if (stored.account_id !== this.config.scope.accountId) {
       return this.controlStore.transition(stored.control_id, "rejected", "control_account_mismatch");
     }
-    if (stored.contract_id !== null && stored.contract_id !== this.config.scope.contractId) {
-      return this.controlStore.transition(stored.control_id, "rejected", "control_contract_outside_scope");
+    if (stored.contract_id !== null) {
+      const allowlisted = this.instrumentUniverse?.contracts.some(
+        (candidate) => candidate.contract_id === stored.contract_id,
+      ) ?? false;
+      const referenceSnapshot = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      const accountPositioned = referenceSnapshot.totalOpenContracts > 0
+        || referenceSnapshot.openOrders.some((order) => order.accountId === this.config.scope.accountId);
+      if (!allowlisted || (accountPositioned && stored.contract_id !== this.activePositionScope().packetTargetContractId)) {
+        return this.controlStore.transition(stored.control_id, "rejected", "control_contract_outside_scope");
+      }
     }
     if (stored.status === "completed" || stored.status === "rejected" || stored.status === "failed") {
       return stored;

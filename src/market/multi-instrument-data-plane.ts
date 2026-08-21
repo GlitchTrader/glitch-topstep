@@ -18,6 +18,7 @@ import {
   type HistoryScheduleOptions,
   type RateAwareSchedulerStatus,
 } from "./rate-aware-scheduler.js";
+import type { ActivePositionScope } from "./active-position-scope.js";
 import { summarizeScannerObservation, type ScannerObservationQuality } from "./scanner-quality.js";
 
 export interface MultiInstrumentMarketPacket {
@@ -34,7 +35,7 @@ export interface MultiInstrumentMarketPacket {
     symbol_id: string;
     tick_size: number;
     tick_value: number;
-    execution_mode: "selected" | "observation_only";
+    execution_mode: "selected" | "eligible" | "flat_required";
     market_observation: MarketObservationState;
     observation_quality: ScannerObservationQuality;
     candidate_alignment: CandidateAlignmentPacket;
@@ -90,10 +91,13 @@ export class MultiInstrumentMarketDataPlane {
     });
   }
 
-  /** Packet-time refresh: selected always; observation-only when stale; parallel per contract. */
-  public refreshForPacket(now: Date = new Date()): Promise<MultiInstrumentMarketPacket> {
+  /** Packet-time refresh: packet target always; other contracts when stale; parallel per contract. */
+  public refreshForPacket(
+    now: Date = new Date(),
+    scope?: Pick<ActivePositionScope, "packetTargetContractId" | "executionModeFor">,
+  ): Promise<MultiInstrumentMarketPacket> {
     return this.enqueueUniverseRefresh(async () => {
-      const contractIds = this.contractIdsForPacketRefresh(now);
+      const contractIds = this.contractIdsForPacketRefresh(now, scope?.packetTargetContractId);
       const requestCount = contractIds.length * TIMEFRAMES_PER_INSTRUMENT;
       const minHeadroom = this.scheduler.canSchedule(requestCount, PROJECTX_HISTORY_MIN_HEADROOM)
         ? PROJECTX_HISTORY_MIN_HEADROOM
@@ -102,12 +106,12 @@ export class MultiInstrumentMarketDataPlane {
         minHeadroom === 0
         && !this.scheduler.canSchedule(requestCount, 0)
       ) {
-        contractIds.splice(0, contractIds.length, this.selectedContractId);
+        contractIds.splice(0, contractIds.length, scope?.packetTargetContractId ?? this.selectedContractId);
       }
       await this.withScheduleMinHeadroom(minHeadroom, () => (
         this.refreshContractsParallel(contractIds)
       ));
-      return this.current(now);
+      return this.current(now, scope);
     });
   }
 
@@ -120,7 +124,10 @@ export class MultiInstrumentMarketDataPlane {
     });
   }
 
-  public current(now: Date = new Date()): MultiInstrumentMarketPacket {
+  public current(
+    now: Date = new Date(),
+    scope?: Pick<ActivePositionScope, "executionModeFor">,
+  ): MultiInstrumentMarketPacket {
     const universeFreshness = buildUniverseFreshness(
       this.universe.contracts.map((contract) => (
         observationAgeMs(this.observations.get(contract.contract_id)!.current(), now.getTime())
@@ -143,7 +150,9 @@ export class MultiInstrumentMarketDataPlane {
           symbol_id: contract.symbol_id,
           tick_size: contract.tick_size,
           tick_value: contract.tick_value,
-          execution_mode: contract.contract_id === this.selectedContractId ? "selected" : "observation_only",
+          execution_mode: scope
+            ? scope.executionModeFor(contract.contract_id)
+            : (contract.contract_id === this.selectedContractId ? "selected" : "flat_required"),
           market_observation: marketObservation,
           observation_quality: summarizeScannerObservation(marketObservation),
           candidate_alignment: buildCandidateAlignment(
@@ -162,11 +171,11 @@ export class MultiInstrumentMarketDataPlane {
     await this.scheduler.waitForIdle();
   }
 
-  private contractIdsForPacketRefresh(now: Date): string[] {
+  private contractIdsForPacketRefresh(now: Date, primaryContractId = this.selectedContractId): string[] {
     const asOfMs = now.getTime();
     return this.universe.contracts
       .filter((contract) => {
-        if (contract.contract_id === this.selectedContractId) {
+        if (contract.contract_id === primaryContractId) {
           return true;
         }
         const age = observationAgeMs(this.observations.get(contract.contract_id)!.current(), asOfMs);

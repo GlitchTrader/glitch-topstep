@@ -92,7 +92,7 @@ describe("decision packet issuance", () => {
     assert.equal(first.account_selection.schema_version, "glitch.topstep.account_selection.v1");
     assert.equal(first.account_selection.selected_instrument, "MNQ");
     assert.equal(first.account_selection.selected_contract_id, "CON.F.US.MNQ.U26");
-    assert.equal(first.account_selection.mode, "single_contract");
+    assert.equal(first.account_selection.mode, "single_active_position");
     assert.equal(first.account_selection.simultaneous_exposure_enabled, false);
     assert.equal(first.data_quality.state_complete, true);
     assert.equal(first.data_quality.quote_age_ms, 1_000);

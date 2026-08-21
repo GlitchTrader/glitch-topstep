@@ -74,7 +74,7 @@
       "symbol_id": "F.US.MES",
       "tick_size": 0.25,
       "tick_value": 1.25,
-      "execution_mode": "observation_only",
+      "execution_mode": "flat_required",
       "market_observation": {
         "last_attempt_utc": "2026-08-20T12:00:00.000Z",
         "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
@@ -120,7 +120,7 @@
       "symbol_id": "F.US.MCLE",
       "tick_size": 0.01,
       "tick_value": 1,
-      "execution_mode": "observation_only",
+      "execution_mode": "flat_required",
       "market_observation": {
         "last_attempt_utc": "2026-08-20T12:00:00.000Z",
         "last_succeeded_utc": "2026-08-20T12:00:00.000Z",
@@ -165,7 +165,7 @@
   "simultaneous_exposure_enabled": false,
   "account_selection": {
     "schema_version": "glitch.topstep.account_selection.v1",
-    "mode": "single_contract",
+    "mode": "single_active_position",
     "selected_instrument": "MNQ",
     "selected_contract_id": "CON.F.US.MNQ.U26",
     "scope_generation": 1,
