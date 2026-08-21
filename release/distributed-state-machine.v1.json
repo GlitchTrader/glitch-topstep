@@ -1,0 +1,89 @@
+{
+  "schema_version": "glitch.topstep.distributed_state_machine.v1",
+  "authority": "glitch-topstep gateway runtime; profile consumes read-only",
+  "state_machines": {
+    "lifecycle": "src/domain/state-machines.ts:LIFECYCLE_TRANSITIONS",
+    "intent_admission": "src/domain/state-machines.ts:INTENT_ADMISSION_TRANSITIONS",
+    "execution_saga": "src/domain/state-machines.ts:EXECUTION_SAGA_TRANSITIONS",
+    "protection_saga": "src/domain/state-machines.ts:PROTECTION_SAGA_TRANSITIONS",
+    "reconciliation": "src/domain/state-machines.ts:RECONCILIATION_TRANSITIONS",
+    "outcome_feed": "src/domain/state-machines.ts:OUTCOME_FEED_TRANSITIONS",
+    "protected_reduction": "src/domain/state-machines.ts:PROTECTED_REDUCTION_TRANSITIONS"
+  },
+  "wire_contracts": {
+    "packet_lease": {
+      "schema_version": "glitch.direct.decision_packet.v2",
+      "fields": ["packet_id", "created_utc", "expires_utc", "snapshot_hash"]
+    },
+    "intent_registration": {
+      "schema_version": "glitch.intent.v3",
+      "receipt_schema": "glitch.topstep.delivery_receipt.v2"
+    },
+    "outbox_recovery": {
+      "profile_authority": "state/outbox/*.json",
+      "gateway_receipt": "/intent/receipt"
+    }
+  },
+  "field_contracts": {
+    "amendment_source": {
+      "schema_version": "glitch.topstep.amendment_source.v1",
+      "enum": [
+        "HERMES_INTENT",
+        "AUTO_BREAKEVEN",
+        "AUTO_DAILY_CAPTURE",
+        "PROTECTION_REPAIR"
+      ],
+      "tighten_only_sources": ["AUTO_BREAKEVEN", "AUTO_DAILY_CAPTURE", "PROTECTION_REPAIR"]
+    },
+    "original_risk_envelope": {
+      "schema_version": "glitch.topstep.original_risk_envelope.v1",
+      "required": [
+        "envelope_id",
+        "max_protected_loss_ticks",
+        "stop_boundary_price",
+        "fees_slippage_reserve_ticks",
+        "scope_identity",
+        "version"
+      ]
+    },
+    "selected_candidate_handoff": {
+      "schema_version": "glitch.topstep.selected_candidate_handoff.v1",
+      "required": [
+        "comparison_decision_id",
+        "candidate_root",
+        "executable_contract_id",
+        "lease_generation",
+        "range_identity",
+        "expires_utc"
+      ]
+    },
+    "model_owner": {
+      "schema_version": "glitch.topstep.model_owner.v1",
+      "required": [
+        "owner_kind",
+        "invocation_id",
+        "process_id",
+        "process_start_utc",
+        "priority",
+        "state"
+      ],
+      "owner_kinds": ["direct_cycle", "learning", "wake_monitor", "repair"],
+      "states": ["waiting", "active", "deferred", "preempted", "recovered", "failed", "completed"]
+    },
+    "outcome_path_chronology": {
+      "schema_version": "glitch.topstep.path_chronology.v1",
+      "evidence_quality_flags": ["complete", "partial", "unresolved", "same_event_gap"]
+    }
+  },
+  "cadence": {
+    "flat_decision_interval_minutes": 5,
+    "positioned_management_interval_minutes": 1,
+    "configuration_only": true,
+    "not_trade_eligibility_gates": true
+  },
+  "frozen_policies": {
+    "daily_capture_blocks_new_entries": true,
+    "automatic_breakeven_intent_free": true,
+    "automatic_paths_tighten_only": true
+  }
+}

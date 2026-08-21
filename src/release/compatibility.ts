@@ -1,5 +1,6 @@
 import packageJson from "../../package.json" with { type: "json" };
 import pairedContract from "../../release/paired-contract.json" with { type: "json" };
+import { DISTRIBUTED_STATE_MACHINE } from "./distributed-contract.js";
 
 export type PairedContract = typeof pairedContract;
 
@@ -18,6 +19,16 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
   semantic_revisions: Object.freeze({ ...PAIRED_CONTRACT.semantic_revisions }),
   provider_acceptance_evidence: Object.freeze({ ...PAIRED_CONTRACT.provider_acceptance_evidence }),
   paired_manifest_schema: PAIRED_CONTRACT.paired_manifest_schema,
+  distributed_contract: Object.freeze({
+    schema_version: PAIRED_CONTRACT.distributed_contract.schema_version,
+    amendment_source_schema: PAIRED_CONTRACT.distributed_contract.amendment_source_schema,
+    original_risk_envelope_schema: PAIRED_CONTRACT.distributed_contract.original_risk_envelope_schema,
+    model_owner_schema: PAIRED_CONTRACT.distributed_contract.model_owner_schema,
+    outcome_path_chronology_schema:
+      PAIRED_CONTRACT.distributed_contract.outcome_path_chronology_schema,
+    cadence: Object.freeze({ ...PAIRED_CONTRACT.distributed_contract.cadence }),
+    frozen_policies: Object.freeze({ ...DISTRIBUTED_STATE_MACHINE.frozen_policies }),
+  }),
 });
 
 export type GatewayCompatibility = typeof GATEWAY_COMPATIBILITY;
