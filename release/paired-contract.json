@@ -20,7 +20,7 @@
     "version": "0.2.1",
     "setup_schema": "glitch.topstep.hermes.setup.v1",
     "operator_schema": "glitch.topstep.hermes.operator.v2",
-    "prompt_version": "glitch-topstep-v10",
+    "prompt_version": "glitch-topstep-v11",
     "min_gateway_version": "0.2.0",
     "tested_gateway_version": "0.2.1",
     "hermes_requires": ">=0.18.2",
@@ -67,7 +67,7 @@
   },
   "paired_manifest_schema": "glitch.topstep.paired_release.v1",
   "operations": {
-    "gitattributes_sha256": "705FD4D6451A31D36B3DF7DE96F83F30AC976C9B4A6D1E51671D8E2F33E2D0DA",
+    "gitattributes_sha256": "D92933938CF9DFA663B502EB71126808685DD4998C7D7CFF22F2612ADEEC6E14",
     "gitattributes_bytes_hex": "2a20746578740a"
   }
 }
