@@ -15,6 +15,10 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import { queryExitTargetedIntentIds } from "../ownership/tranches.js";
 import { lifecycleFactId, type LifecycleDiagnostics } from "../execution/lifecycle-facts.js";
 import {
+  deriveIntentDeliveryState,
+  type IntentDeliveryStatusV1,
+} from "../domain/intent-delivery-status.js";
+import {
   transitionProtectedReduction,
   type ProtectedReductionRecord,
   type ProtectedReductionState,
@@ -189,6 +193,36 @@ export class SqliteExecutionStore {
       WHERE intent_id = ?
     `).get(intentId) as SqlRow | undefined;
     return row ? this.parseJson<T>(row.payload_json, "execution_receipt") : null;
+  }
+
+  public intentDeliveryStatus(intentId: string): IntentDeliveryStatusV1 {
+    const intent = this.database.prepare(`
+      SELECT 1 AS present
+      FROM intents
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    const receipt = this.database.prepare(`
+      SELECT status
+      FROM execution_receipts
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    const mutation = this.database.prepare(`
+      SELECT state
+      FROM execution_outbox
+      WHERE intent_id = ?
+    `).get(intentId) as SqlRow | undefined;
+    return {
+      schema_version: "glitch.topstep.intent_delivery_status.v1",
+      intent_id: intentId,
+      status: deriveIntentDeliveryState({
+        hasIntent: Boolean(intent),
+        mutationState: mutation ? String(mutation.state) : null,
+        receiptStatus: receipt ? String(receipt.status) : null,
+      }),
+      receipt_status: receipt ? String(receipt.status) : null,
+      mutation_state: mutation ? String(mutation.state) : null,
+      retention_generation: 1,
+    };
   }
 
   public decisionLinkForIntent(intentId: string): {
@@ -989,6 +1023,20 @@ export class SqliteExecutionStore {
       SELECT value FROM runtime_meta WHERE key = ?
     `).get(key) as SqlRow | undefined;
     return row?.value === null || row?.value === undefined ? null : String(row.value);
+  }
+
+  public unprotectedSinceUtc(): string | null {
+    return this.meta("unprotected_since_utc");
+  }
+
+  public updateUnprotectedSince(unprotectedQty: number, atUtc: string): void {
+    if (unprotectedQty > 0) {
+      if (!this.meta("unprotected_since_utc")) {
+        this.setMeta("unprotected_since_utc", atUtc);
+      }
+      return;
+    }
+    this.setMeta("unprotected_since_utc", null);
   }
 
   private setMeta(key: string, value: string | null): void {

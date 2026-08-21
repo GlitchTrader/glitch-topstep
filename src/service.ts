@@ -67,7 +67,7 @@ import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
-import type { ProjectXAuthStatus } from "./projectx/auth-manager.js";
+import { ProjectXAuthManager, type ProjectXAuthStatus } from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
 import { buildScannerPacket, type ScannerPacket } from "./market/scanner-packet.js";
@@ -87,6 +87,7 @@ const ORDER_FLOW_MAX_EVENTS = 50_000;
 const ORDER_FLOW_DEPTH_LEVELS = 10;
 
 export class GlitchTopstepService {
+  private readonly authManager: ProjectXAuthManager;
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
@@ -122,9 +123,6 @@ export class GlitchTopstepService {
   private storesClosed = false;
   private controlPaused = false;
   private runtimeTradingMode: TradingMode;
-  private authRefreshFailureCount = 0;
-  private lastAuthRefreshUtc: string | null = null;
-  private authDegraded = false;
   private readonly lifecycle = new LifecycleSupervisor();
   private readonly runtimeLock: RuntimeScopeLock;
   private stopping: Promise<void> | null = null;
@@ -133,11 +131,12 @@ export class GlitchTopstepService {
   public constructor(private readonly config: AppConfig) {
     this.runtimeTradingMode = config.tradingMode;
     this.runtimeLock = new RuntimeScopeLock(config.dataDir, config.scope.accountId);
-    this.api = new ProjectXApiClient({
+    this.authManager = new ProjectXAuthManager({
       apiUrl: config.projectX.apiUrl,
       username: config.projectX.username,
       apiKey: config.projectX.apiKey,
     });
+    this.api = this.authManager.apiClient();
     this.ledger = new JsonlEventStore(config.dataDir);
     this.executionStore = new SqliteExecutionStore(
       join(config.dataDir, "glitch-topstep.sqlite"),
@@ -227,7 +226,7 @@ export class GlitchTopstepService {
   }
 
   private async startResources(): Promise<void> {
-    await this.api.login();
+    await this.authManager.ensureAuthenticated();
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;
     const contracts = contractsCol.items;
@@ -519,6 +518,10 @@ export class GlitchTopstepService {
           ambiguous_age_ms: null,
           fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
         };
+        this.executionStore.updateUnprotectedSince(
+          protectedReduction.unprotected_open_quantity,
+          recordedAt.toISOString(),
+        );
         const authStatus = this.authStatus();
         const flattenPending = this.controlStore.hasPendingFlatten();
         const controlCounts = this.controlStore.status();
@@ -543,6 +546,7 @@ export class GlitchTopstepService {
           recovery: executionRecovery,
           controlCounts,
           flattenPendingAgeMs: this.controlStore.oldestPendingFlattenAgeMs(recordedAt.getTime()),
+          unprotectedSinceUtc: this.executionStore.unprotectedSinceUtc(),
           now: recordedAt,
         });
         return {
@@ -634,16 +638,9 @@ export class GlitchTopstepService {
     });
 
     this.tokenRefreshTimer = setInterval(() => {
-      void this.api.validateSession()
-        .then(() => {
-          this.lastAuthRefreshUtc = new Date().toISOString();
-          this.authDegraded = false;
-        })
-        .catch((error: unknown) => {
-          this.authRefreshFailureCount += 1;
-          this.authDegraded = true;
-          console.error("ProjectX session validation failed", error);
-        });
+      void this.authManager.ensureAuthenticated().catch((error: unknown) => {
+        console.error("ProjectX session validation failed", error);
+      });
     }, 12 * 60 * 60 * 1000);
     this.tokenRefreshTimer.unref();
     this.lifecycle.register("token_refresh_timer", () => {
@@ -689,7 +686,10 @@ export class GlitchTopstepService {
     try {
       // Intents already queued must settle before the stores they write to close.
       await this.coordinator?.drainExecutionQueue();
-      await this.lifecycle.drain("disposing_runtime_resources");
+      const failedDisposers = await this.lifecycle.drain("disposing_runtime_resources");
+      if (failedDisposers.length > 0) {
+        throw new Error(`lifecycle_dispose_failed:${failedDisposers.join(",")}`);
+      }
       await Promise.all([
         this.historySync.waitForIdle(),
         this.marketObservation.waitForIdle(),
@@ -723,9 +723,7 @@ export class GlitchTopstepService {
     if (!this.storesClosed) {
       // Queued evidence is durable before the handle closes; a failed drain reports the
       // resumable cursor instead of discarding what is still pending.
-      await this.evidenceQueue.close().catch((error: unknown) => {
-        console.error("Provider evidence queue drain failed", error);
-      });
+      await this.evidenceQueue.close();
       this.providerEvidenceStore.close();
       await this.tradeOutcomeStore.close();
       this.controlStore.close();
@@ -741,13 +739,7 @@ export class GlitchTopstepService {
    * live under `degraded_armed`.
    */
   private authStatus(): ProjectXAuthStatus {
-    return {
-      degraded: this.authDegraded,
-      lastRefreshUtc: this.lastAuthRefreshUtc,
-      expiresAtUtc: null,
-      refreshInFlight: false,
-      refreshFailureCount: this.authRefreshFailureCount,
-    };
+    return this.authManager.status();
   }
 
   private handleEvidenceQueueDegraded(metrics: EvidenceQueueMetrics): void {

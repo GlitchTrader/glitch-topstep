@@ -203,6 +203,15 @@ export class LocalGatewayServer {
         this.json(response, 200, this.executionFacts(afterSequence, limit));
         return;
       }
+      if (request.method === "GET" && url.pathname === "/intent/status") {
+        const intentId = url.searchParams.get("intent_id")?.trim();
+        if (!intentId) {
+          this.json(response, 400, { error: "intent_id_required" });
+          return;
+        }
+        this.json(response, 200, this.coordinator.intentDeliveryStatus(intentId));
+        return;
+      }
       if (request.method === "GET" && url.pathname === "/intent/receipt") {
         const intentId = url.searchParams.get("intent_id")?.trim();
         if (!intentId) {

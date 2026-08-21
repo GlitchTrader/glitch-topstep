@@ -211,3 +211,40 @@ python scripts/evaluate-frozen-cognition.py `
 5. Archive the diff under `docs/evidence/TS-EVAL-01-*.md` when closing acceptance.
 
 Fixture corpus for CI: `glitch-topstep-hermes-profile/tests/fixtures/frozen_corpus/`.
+
+## Runtime SLOs and alerts (TS-REAUDIT-11)
+
+Observe-only thresholds for `/health` invariant metrics until paired soak promotes them:
+
+| SLI | Warn | Critical | Hysteresis |
+|-----|------|----------|------------|
+| `unprotected_seconds_estimate` | > 30s | > 120s | clear after 60s covered |
+| `flatten_pending_seconds` | > 45s | > 180s | clear when control terminal |
+| `evidence_queue_depth` | > 1000 | high-water mark | clear below low-water |
+| `reconciliation_age_ms` | > 120_000 | > 300_000 | clear after one success |
+| `auth_degraded` | true | true + new exposure attempt | clear after successful refresh |
+
+Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle state.
+
+## Armed promotion and rollback (TS-REAUDIT-12)
+
+**Pre-arm checklist**
+
+1. Gateway + profile paired manifest byte-identical (`release/paired-contract.json`, profile `compatibility.py`).
+2. All P0 REAUDIT ledger items `done`; fault matrix proof archived under `docs/evidence/`.
+3. PRAC soak with zero residual owned orders through flatten controls.
+4. `preflight-pairing.py` green against local gateway.
+
+**Promotion**
+
+1. Set `GLITCH_TRADING_MODE=armed` only after operator sign-off on evidence ref in `release/paired-release.json`.
+2. Record gateway commit + profile commit in both release manifests.
+3. Keep `GlitchTopstep_Gateway` (node `start.ps1`) as the sole gateway process — Hermes `gateway run` tasks stay disabled.
+
+**Rollback**
+
+1. `GLITCH_TRADING_MODE=shadow` (or stop gateway) — blocks new exposure immediately.
+2. Issue `POST /control` flatten if any open exposure remains.
+3. Reinstall prior paired profile via robocopy + prior gateway tag/commit.
+4. Verify `/health` `execution_recovery.blockingNewExposure=false` before re-arming.
+

@@ -193,6 +193,10 @@ export class ExecutionCoordinator {
     return this.store.receiptForIntent<ExecutionReceipt>(intentId);
   }
 
+  public intentDeliveryStatus(intentId: string) {
+    return this.store.intentDeliveryStatus(intentId);
+  }
+
   private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
     const early = evaluateIntentAdmissionEarly(input, {
       registerIntent: (intent, receivedUtc) => this.store.registerIntent(intent, receivedUtc),
@@ -946,6 +950,9 @@ export class ExecutionCoordinator {
 
   private async rearmTrancheProtectionSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
     if (this.currentMode() !== "armed" || snapshot.instrumentOpenContracts === 0) {
+      if (snapshot.instrumentOpenContracts === 0) {
+        this.rearmStates.clear();
+      }
       return false;
     }
     const nonProtective = snapshot.openOrders.filter(
