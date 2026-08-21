@@ -940,7 +940,7 @@ describe("daily capture lock (TS-CAP-02)", () => {
         new_stop_price: 20_020,
       });
       assert.equal(receipt.status, "rejected");
-      assert.equal(receipt.code, "stop_would_widen");
+      assert.equal(receipt.code, "original_risk_envelope_missing");
       assert.equal(modifyCalls, 0);
     } finally {
       store.close();
