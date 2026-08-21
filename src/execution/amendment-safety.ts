@@ -88,10 +88,11 @@ export function validateProtectiveAmendment(input: AmendmentSafetyInput): Amendm
     averageEntry,
     bestBid,
     bestAsk,
-    source = "HERMES_INTENT",
+    source,
     tickSize,
     originalRiskEnvelope,
   } = input;
+  const amendmentSource = source ?? "HERMES_INTENT";
 
   if (currentPrice === null || !(currentPrice > 0)) {
     return { ok: false, code: "amendment_current_price_missing" };
@@ -101,7 +102,7 @@ export function validateProtectiveAmendment(input: AmendmentSafetyInput): Amendm
     const widens = side === "long"
       ? newPrice < currentPrice
       : newPrice > currentPrice;
-    if (widens && isTightenOnlyAmendmentSource(source)) {
+    if (widens && (source === undefined || isTightenOnlyAmendmentSource(source))) {
       return { ok: false, code: "stop_would_widen" };
     }
     if (widens && source === "HERMES_INTENT") {
@@ -131,7 +132,7 @@ export function validateProtectiveAmendment(input: AmendmentSafetyInput): Amendm
     if (marketable) {
       return { ok: false, code: "stop_wrong_side_of_market" };
     }
-    return { ok: true, amendment_source: source };
+    return { ok: true, amendment_source: amendmentSource };
   }
 
   const worsens = side === "long"
