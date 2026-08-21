@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T01:15:00Z",
+  "updated": "2026-08-21T11:30:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -23,13 +23,20 @@
       178,
       179,
       180,
-      181
+      181,
+      203,
+      204,
+      206,
+      208
     ],
     "profile_merged_prs": [
       131,
       133,
       134,
-      135
+      135,
+      153,
+      155,
+      158
     ],
     "implementation_note": "Audit remediation waves 0–6 merged 2026-08-20. The independent re-audit found incomplete runtime wiring and edge-state invariants; TS-REAUDIT-01 through TS-REAUDIT-12 are now the active production-hardening authority and armed promotion is blocked.",
     "stream_validation": "Re-audit baseline: gateway build and 396 tests green with npm audit reporting zero vulnerabilities; Hermes 222 tests green with one expected skip. Targeted probes still reproduced residual-order flatten completion and decision dual-write divergence."
@@ -1684,7 +1691,7 @@
     {
       "id": "TS-REAUDIT-09",
       "title": "Publish a versioned distributed state-machine contract",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "paired_architecture",
       "issue": 192,
@@ -1705,6 +1712,11 @@
       ],
       "deployment": [
         "Start with intent delivery status, then decision projection and controls; retain compatibility for one full retention window."
+      ],
+      "evidence": [
+        "release/distributed-state-machine.v1.json and release/paired-contract.json distributed_contract block.",
+        "src/release/distributed-contract.ts + tests/distributed-contract.test.ts.",
+        "Gateway #204; profile #153."
       ],
       "sources": [
         "src/domain/state-machines.ts",
