@@ -155,12 +155,16 @@ export class SqliteProviderEvidenceStore {
     return Number(row.count);
   }
 
-  public loadPendingOutboxEvents(): ProviderEvidenceEvent[] {
+  public loadPendingOutboxEvents(limit = 500): ProviderEvidenceEvent[] {
+    if (!Number.isInteger(limit) || limit < 1 || limit > 5_000) {
+      throw new Error("provider_evidence_outbox_limit_invalid");
+    }
     const rows = this.database.prepare(`
       SELECT payload_json FROM evidence_outbox
       WHERE state = 'pending'
       ORDER BY created_utc ASC, outbox_key ASC
-    `).all() as Array<{ payload_json: string }>;
+      LIMIT ?
+    `).all(limit) as Array<{ payload_json: string }>;
     return rows.map((row) => JSON.parse(row.payload_json) as ProviderEvidenceEvent);
   }
 
