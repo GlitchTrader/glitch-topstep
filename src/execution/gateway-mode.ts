@@ -1,5 +1,6 @@
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { AccountVenueSnapshot, RiskSettings, TradingMode } from "../domain/models.js";
+import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
 import { validateScaleIn } from "../ownership/scale-in.js";
 import { isReconciliationCurrent } from "../state/venue-state.js";
 import {
@@ -61,13 +62,14 @@ export function buildExecutionGates(
   tradingMode: "disabled" | "shadow" | "armed",
   maxContracts: number,
   now: Date = new Date(),
+  auth?: Pick<ProjectXAuthStatus, "degraded">,
 ): ExecutionGate[] {
   const quality = evaluateSnapshotDataQuality(snapshot, risk, now);
   const gatewayMode = resolveGatewayMode(tradingMode, snapshot, risk, now);
   return [
     ...armedSafetyGates(snapshot, risk, quality),
     riskReductionGate(tradingMode, gatewayMode.effective, snapshot),
-    newExposureGate(snapshot, recovery, tradingMode, quality, maxContracts),
+    newExposureGate(snapshot, recovery, tradingMode, quality, maxContracts, auth),
   ];
 }
 
@@ -134,9 +136,13 @@ function newExposureGate(
   tradingMode: "disabled" | "shadow" | "armed",
   quality: SnapshotDataQuality,
   maxContracts: number,
+  auth?: Pick<ProjectXAuthStatus, "degraded">,
 ): ExecutionGate {
   const remainingCapacity = Math.max(0, maxContracts - snapshot.totalOpenContracts);
   const failed: string[] = [];
+  if (auth?.degraded) {
+    failed.push("auth_degraded");
+  }
   if (tradingMode === "disabled") {
     failed.push("trading_disabled");
   }

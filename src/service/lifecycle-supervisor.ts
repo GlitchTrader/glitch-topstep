@@ -8,9 +8,20 @@ export interface LifecycleStatus {
 
 export type LifecycleDisposer = () => Promise<void> | void;
 
+export interface LifecycleDisposerOptions {
+  /** When true, failure aborts shutdown and retains recovery state (TS-REAUDIT-08). */
+  critical?: boolean;
+}
+
+export interface LifecycleDrainResult {
+  failed: string[];
+  criticalFailed: string[];
+}
+
 interface Disposable {
   name: string;
   dispose: LifecycleDisposer;
+  critical: boolean;
 }
 
 export class LifecycleSupervisor {
@@ -36,8 +47,12 @@ export class LifecycleSupervisor {
   }
 
   /** Records a resource so partial startups and shutdowns unwind in reverse acquisition order. */
-  public register(name: string, dispose: LifecycleDisposer): void {
-    this.disposables.push({ name, dispose });
+  public register(
+    name: string,
+    dispose: LifecycleDisposer,
+    options: LifecycleDisposerOptions = {},
+  ): void {
+    this.disposables.push({ name, dispose, critical: options.critical ?? false });
   }
 
   public registeredNames(): string[] {
@@ -45,23 +60,27 @@ export class LifecycleSupervisor {
   }
 
   /** Unwinds every registered resource; a failing disposer never blocks the ones acquired before it. */
-  private async disposeAll(): Promise<string[]> {
+  private async disposeAll(): Promise<LifecycleDrainResult> {
     const failed: string[] = [];
+    const criticalFailed: string[] = [];
     while (this.disposables.length > 0) {
       const entry = this.disposables.pop() as Disposable;
       try {
         await entry.dispose();
       } catch (error: unknown) {
         failed.push(entry.name);
+        if (entry.critical) {
+          criticalFailed.push(entry.name);
+        }
         console.error(`lifecycle dispose failed for ${entry.name}`, error);
       }
     }
-    return failed;
+    return { failed, criticalFailed };
   }
 
   /** Startup aborted: release whatever was already acquired and park in failed_startup. */
   public async rollbackAfterFailure(reason: string): Promise<LifecycleStatus> {
-    const failed = await this.disposeAll();
+    const { failed } = await this.disposeAll();
     return this.transition(
       "failed_startup",
       failed.length > 0 ? `${reason};dispose_failed:${failed.join(",")}` : reason,
@@ -73,7 +92,7 @@ export class LifecycleSupervisor {
    * transition (stopped / failed_shutdown) because it also closes what it opened
    * outside this stack.
    */
-  public async drain(detail: string | null = null): Promise<string[]> {
+  public async drain(detail: string | null = null): Promise<LifecycleDrainResult> {
     this.transition("draining", detail);
     return this.disposeAll();
   }

@@ -54,14 +54,26 @@ test("drain enters draining, unwinds in reverse and leaves the terminal state to
     disposed.push("gateway");
   });
 
-  const failed = await supervisor.drain("stop_requested");
+  const result = await supervisor.drain("stop_requested");
 
-  assert.deepEqual(failed, []);
+  assert.deepEqual(result, { failed: [], criticalFailed: [] });
   assert.deepEqual(disposed, ["gateway", "timer"]);
   assert.equal(supervisor.status().state, "draining");
   assert.equal(supervisor.status().detail, "stop_requested");
 
   supervisor.transition("stopped");
   assert.equal(supervisor.status().state, "stopped");
-  assert.deepEqual(await supervisor.drain(), []);
+  assert.deepEqual(await supervisor.drain(), { failed: [], criticalFailed: [] });
+});
+
+test("critical disposer failure is surfaced separately (TS-REAUDIT-08)", async () => {
+  const supervisor = new LifecycleSupervisor();
+  supervisor.register("timer", () => undefined);
+  supervisor.register("realtime", () => {
+    throw new Error("stream_stop_failed");
+  }, { critical: true });
+
+  const result = await supervisor.drain("stop_requested");
+  assert.deepEqual(result.failed, ["realtime"]);
+  assert.deepEqual(result.criticalFailed, ["realtime"]);
 });

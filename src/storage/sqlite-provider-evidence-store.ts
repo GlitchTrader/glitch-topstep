@@ -112,11 +112,56 @@ export class SqliteProviderEvidenceStore {
       return [];
     }
     const prepared = events.map(prepareEvidence);
-    const stored = this.inTransaction(() => prepared.map((item) => this.insertPrepared(item)));
+    const stored = this.inTransaction(() => {
+      const rows = prepared.map((item) => this.insertPrepared(item));
+      for (let index = 0; index < events.length; index += 1) {
+        const event = events[index];
+        const row = rows[index];
+        if (!event || !row) {
+          continue;
+        }
+        if (event.source !== "projectx_market_stream") {
+          this.markOutboxApplied(identityOutboxKey(event), row.sequence);
+        }
+      }
+      return rows;
+    });
     for (const event of events) {
       this.maybePruneMarketEvent(event.source);
     }
     return stored;
+  }
+
+  /** TS-REAUDIT-02: durable outbox row before identity events enter the memory queue. */
+  public stageIdentityOutbox(event: ProviderEvidenceEvent): void {
+    if (event.source === "projectx_market_stream") {
+      throw new Error("evidence_outbox_identity_only");
+    }
+    const key = identityOutboxKey(event);
+    const payloadJson = JSON.stringify(event);
+    this.inTransaction(() => {
+      this.database.prepare(`
+        INSERT OR IGNORE INTO evidence_outbox (
+          outbox_key, event_class, payload_json, state, created_utc
+        ) VALUES (?, 'identity', ?, 'pending', ?)
+      `).run(key, payloadJson, event.receivedUtc);
+    });
+  }
+
+  public outboxPendingCount(): number {
+    const row = this.database.prepare(`
+      SELECT COUNT(*) AS count FROM evidence_outbox WHERE state = 'pending'
+    `).get() as { count: number | bigint };
+    return Number(row.count);
+  }
+
+  public loadPendingOutboxEvents(): ProviderEvidenceEvent[] {
+    const rows = this.database.prepare(`
+      SELECT payload_json FROM evidence_outbox
+      WHERE state = 'pending'
+      ORDER BY created_utc ASC, outbox_key ASC
+    `).all() as Array<{ payload_json: string }>;
+    return rows.map((row) => JSON.parse(row.payload_json) as ProviderEvidenceEvent);
   }
 
   public appendIfChanged(
@@ -604,8 +649,31 @@ export class SqliteProviderEvidenceStore {
       VALUES (2, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
       VALUES (3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+      CREATE TABLE IF NOT EXISTS evidence_outbox (
+        outbox_key TEXT PRIMARY KEY,
+        event_class TEXT NOT NULL CHECK(event_class IN ('identity')),
+        payload_json TEXT NOT NULL,
+        state TEXT NOT NULL CHECK(state IN ('pending', 'applied')),
+        created_utc TEXT NOT NULL,
+        applied_sequence INTEGER
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS idx_evidence_outbox_pending
+        ON evidence_outbox(state, created_utc)
+        WHERE state = 'pending';
+
+      INSERT OR IGNORE INTO provider_evidence_migrations(version, applied_utc)
+      VALUES (4, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
       `);
     });
+  }
+
+  private markOutboxApplied(outboxKey: string, appliedSequence: number): void {
+    this.database.prepare(`
+      UPDATE evidence_outbox
+      SET state = 'applied', applied_sequence = ?
+      WHERE outbox_key = ? AND state = 'pending'
+    `).run(appliedSequence, outboxKey);
   }
 
   private backfillTradeRelations(): void {
@@ -784,6 +852,19 @@ function isSecretKey(key: string): boolean {
 
 function safeJson(value: unknown): string {
   return JSON.stringify(value ?? null) ?? "null";
+}
+
+function identityOutboxKey(event: ProviderEvidenceEvent): string {
+  const prepared = prepareEvidence(event);
+  return createHash("sha256")
+    .update([
+      event.source,
+      event.eventType,
+      String(event.providerEntityId ?? ""),
+      event.receivedUtc,
+      prepared.payloadHash,
+    ].join("|"))
+    .digest("hex");
 }
 
 function integerOption(

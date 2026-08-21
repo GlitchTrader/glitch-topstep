@@ -60,6 +60,8 @@ export interface EvidenceWriteQueueOptions {
   onRecovered?: (metrics: EvidenceQueueMetrics) => void;
   onWriteError?: (error: unknown, pending: number) => void;
   onApplyError?: (error: unknown, event: ProviderEvidenceEvent) => void;
+  /** TS-REAUDIT-02: sqlite outbox insert before identity enqueue. */
+  onStageIdentity?: (event: ProviderEvidenceEvent) => void;
   now?: () => number;
 }
 
@@ -136,11 +138,18 @@ export class EvidenceWriteQueue {
   }
 
   /** Enqueue and run `onDurable` only after the event is committed. */
-  public submit(event: ProviderEvidenceEvent, onDurable: (() => void) | null): EvidenceSubmitOutcome {
+  public submit(
+    event: ProviderEvidenceEvent,
+    onDurable: (() => void) | null,
+    options?: { skipOutboxStage?: boolean },
+  ): EvidenceSubmitOutcome {
     if (this.closed) {
       throw new Error("evidence_queue_closed");
     }
     const eventClass = classify(event);
+    if (eventClass === "identity" && !options?.skipOutboxStage) {
+      this.options.onStageIdentity?.(event);
+    }
     const coalesceKey = coalesceKeyFor(event, eventClass);
 
     if (eventClass !== "identity" && this.pending >= this.coalesceWatermark && coalesceKey !== null) {
