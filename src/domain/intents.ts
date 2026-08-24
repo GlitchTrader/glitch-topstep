@@ -115,7 +115,9 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit 
     aggressiveCase: stringField(value, "aggressive_case", 500),
     conservativeCase: stringField(value, "conservative_case", 500),
     decisiveEvidence: stringField(value, "decisive_evidence", 5000),
-    disconfirmingEvidence: stringField(value, "disconfirming_evidence", 500),
+    // ponytail: profile truncates audit strings to 5000 (GATEWAY_AUDIT_FIELD_MAX_LENGTH);
+    // 500 rejected overnight ENTER with prior_hypothesis continuity text.
+    disconfirmingEvidence: stringField(value, "disconfirming_evidence", 5000),
     changeCondition: stringField(value, "change_condition", 500),
     finalChoice,
   };

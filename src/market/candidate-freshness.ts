@@ -1,8 +1,11 @@
 import type { MarketObservationState } from "../domain/market-observation.js";
 import type { QuoteInfo } from "../domain/models.js";
 
-export const PACKET_OBSERVATION_STALE_MS = 45_000;
 export const RANKING_FRESHNESS_MAX_SKEW_MS = 30_000;
+// ponytail: must stay <= RANKING_FRESHNESS_MAX_SKEW_MS. Refreshing MES/MCL only after
+// 45s while skew invalidated at 30s produced overnight ranking_freshness_valid=false
+// in the 30–45s band (MNQ refreshed every packet, secondaries left behind).
+export const PACKET_OBSERVATION_STALE_MS = RANKING_FRESHNESS_MAX_SKEW_MS;
 export const TIMEFRAMES_PER_INSTRUMENT = 4;
 
 export interface CandidateAlignmentPacket {

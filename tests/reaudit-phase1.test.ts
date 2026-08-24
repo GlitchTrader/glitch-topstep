@@ -66,6 +66,39 @@ describe("TS-REAUDIT-02 evidence outbox", () => {
     assert.equal(store.outboxPendingCount(), 0);
     store.close();
   });
+
+  it("startup outbox replay drains between batches so pending clears", async () => {
+    const { SqliteProviderEvidenceStore } = await import("../src/storage/sqlite-provider-evidence-store.js");
+    const { EvidenceWriteQueue } = await import("../src/projectx/evidence-write-queue.js");
+    const store = new SqliteProviderEvidenceStore(":memory:");
+    const event: ProviderEvidenceEvent = {
+      receivedUtc: "2026-08-21T12:00:02.000Z",
+      providerTimestampUtc: null,
+      source: "projectx_lifecycle",
+      eventType: "user_reconnected_and_subscribed",
+      generation: 1,
+      accountId: 1,
+      contractId: null,
+      providerEntityId: null,
+      rawPayload: {},
+      normalizedPayload: {},
+    };
+    store.stageIdentityOutbox(event);
+    const queue = new EvidenceWriteQueue(store);
+    // Mirror service.startResources outbox flush (submit + await drain per batch).
+    while (true) {
+      const pending = store.loadPendingOutboxEvents(500);
+      if (pending.length === 0) {
+        break;
+      }
+      for (const item of pending) {
+        queue.submit(item, null, { skipOutboxStage: true });
+      }
+      await queue.drain();
+    }
+    assert.equal(store.outboxPendingCount(), 0);
+    store.close();
+  });
 });
 
 describe("TS-REAUDIT-01 auth exposure gate", () => {

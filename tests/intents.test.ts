@@ -78,6 +78,22 @@ describe("Glitch intent contract", () => {
     );
   });
 
+  it("accepts disconfirming_evidence up to the profile audit cap of 5000", () => {
+    const long = "x".repeat(5000);
+    const intent = {
+      ...baseIntent(),
+      decision_audit: { ...baseIntent().decision_audit, disconfirming_evidence: long },
+    };
+    assert.equal(parseTradeIntent(intent).decisionAudit.disconfirmingEvidence.length, 5000);
+    assert.throws(
+      () => parseTradeIntent({
+        ...intent,
+        decision_audit: { ...intent.decision_audit, disconfirming_evidence: `${long}y` },
+      }),
+      /invalid_string_field/,
+    );
+  });
+
   it("rejects unknown fields, profile mismatches, prompt mismatches, and choice mismatches", () => {
     assert.throws(() => parseTradeIntent({ ...baseIntent(), surprise: true }), /unknown_intent_field/);
     assert.throws(
