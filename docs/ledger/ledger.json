@@ -1,10 +1,14 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-24T16:45:00Z",
+  "updated": "2026-08-24T19:15:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-24",
+    "entry_delivery_drift_prompt_v15": {
+      "status": "implemented_local",
+      "summary": "Bump GLITCH_TOPSTEP_PROMPT_VERSION to glitch-topstep-v15 with paired-contract profile 0.2.5 for NT delivery-drift entry band pairing."
+    },
     "nt_cognition_p1_p2_prompt_v14": {
       "status": "implemented_local",
       "summary": "Bump GLITCH_TOPSTEP_PROMPT_VERSION to glitch-topstep-v14 with paired-contract profile 0.2.4 for POSITION_MANAGEMENT_V1 / lifecycle-facts cognition pairing."
