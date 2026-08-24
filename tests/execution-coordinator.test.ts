@@ -91,7 +91,7 @@ function intent(
     confidence: 0.6,
     snapshot_hash: snapshotHash,
     model_version: "test",
-    prompt_version: "glitch-topstep-v11",
+    prompt_version: "glitch-topstep-v12",
     reason: "Test concurrent entry.",
     decision_audit: {
       bull_case: "Bull case.",
@@ -370,7 +370,7 @@ describe("execution coordinator serialization", () => {
         confidence: 0.4,
         snapshot_hash: "expired-or-unknown-hash",
         model_version: "test",
-        prompt_version: "glitch-topstep-v11",
+        prompt_version: "glitch-topstep-v12",
         reason: "No trade this cycle.",
         decision_audit: {
           bull_case: "Bull case.",
@@ -924,7 +924,7 @@ describe("daily capture lock (TS-CAP-02)", () => {
         confidence: 0.6,
         snapshot_hash: packet.market.snapshot_hash,
         model_version: "test",
-        prompt_version: "glitch-topstep-v11",
+        prompt_version: "glitch-topstep-v12",
         reason: "Widen the stop after capture.",
         decision_audit: {
           bull_case: "Bull case.",

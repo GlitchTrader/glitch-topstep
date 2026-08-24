@@ -19,7 +19,7 @@ function intent(id: string, action: "ENTER_LONG" | "EXIT" = "ENTER_LONG"): Trade
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v11",
+    promptVersion: "glitch-topstep-v12",
     reason: "Test.",
     decisionAudit: {
       bullCase: "Bull.",

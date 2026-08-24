@@ -30,7 +30,7 @@ function intent(
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v11",
+    promptVersion: "glitch-topstep-v12",
     reason: "Ownership fixture.",
     decisionAudit: {
       bullCase: "Bull.",
@@ -480,7 +480,7 @@ describe("multi-tranche ownership reconstruction", () => {
         confidence: 0.7,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v11",
+        promptVersion: "glitch-topstep-v12",
         reason: "Exit second tranche.",
         decisionAudit: {
           bullCase: "Bull.",
