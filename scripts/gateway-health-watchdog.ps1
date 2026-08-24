@@ -1,9 +1,9 @@
 # Poll /health and restart the gateway process when ProjectX streams stay dead.
 # Intended as a process-level fallback when in-process hub restart cannot recover.
-# Register with install-gateway-watchdog.ps1 or run from Task Scheduler every 1–2 minutes.
+# Launch via install-gateway-watchdog.ps1 (VBS wrapper keeps the console fully hidden).
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
+    [string]$RepoRoot = "",
     [string]$HealthUrl = "http://127.0.0.1:8790/health",
     [int]$Port = 8790,
     [int]$DegradedGraceMinutes = 3,
@@ -11,7 +11,19 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# param defaults evaluate before $PSScriptRoot is bound; resolve paths in-body.
+if (-not $RepoRoot) {
+    $RepoRoot = Split-Path -Parent $PSScriptRoot
+}
 Set-Location $RepoRoot
+
+function Write-WatchdogLog {
+    param([string]$Message)
+    $logDir = Join-Path $RepoRoot "data"
+    New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+    $line = "{0:o} {1}" -f [DateTimeOffset]::UtcNow, $Message
+    Add-Content -Path (Join-Path $logDir "gateway-watchdog.log") -Value $line -Encoding utf8
+}
 
 function Read-LocalToken {
     $envPath = Join-Path $RepoRoot ".env"
@@ -54,66 +66,82 @@ function Restart-GatewayProcess {
     foreach ($listener in $listeners) {
         $procId = [int]$listener.OwningProcess
         if ($procId -gt 0) {
-            Write-Host "watchdog stopping PID $procId on :$Port"
+            Write-WatchdogLog "stopping PID $procId on :$Port"
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
     }
     Start-Sleep -Seconds 2
     $startScript = Join-Path $RepoRoot "start.ps1"
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -File $startScript -SkipBuild | Out-Host
+    # Hidden child — never pipe to Out-Host (that forces a console).
+    $proc = Start-Process -FilePath "powershell.exe" `
+        -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", $startScript, "-SkipBuild") `
+        -WorkingDirectory $RepoRoot `
+        -WindowStyle Hidden `
+        -PassThru `
+        -Wait
+    Write-WatchdogLog "start.ps1 exit=$($proc.ExitCode)"
+    if ($proc.ExitCode -ne 0) {
+        throw "start.ps1 failed with exit $($proc.ExitCode)"
+    }
 }
 
-if (-not $StatePath) {
-    $dataDir = Join-Path $RepoRoot "data"
-    New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
-    $StatePath = Join-Path $dataDir "gateway-watchdog-state.json"
-}
+try {
+    if (-not $StatePath) {
+        $dataDir = Join-Path $RepoRoot "data"
+        New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+        $StatePath = Join-Path $dataDir "gateway-watchdog-state.json"
+    }
 
-$token = Read-LocalToken
-$health = Get-Health -Token $token
-$now = [DateTimeOffset]::UtcNow
-$dead = Test-StreamDead -Health $health
+    $token = Read-LocalToken
+    $health = Get-Health -Token $token
+    $now = [DateTimeOffset]::UtcNow
+    $dead = Test-StreamDead -Health $health
 
-$state = @{
-    schema_version = "glitch.topstep.gateway_watchdog.v1"
-    first_dead_utc = $null
-    last_check_utc = $now.ToString("o")
-    last_restart_utc = $null
-}
-if (Test-Path $StatePath) {
-    try {
-        $loaded = Get-Content $StatePath -Raw | ConvertFrom-Json
-        if ($loaded.first_dead_utc) { $state.first_dead_utc = [string]$loaded.first_dead_utc }
-        if ($loaded.last_restart_utc) { $state.last_restart_utc = [string]$loaded.last_restart_utc }
-    } catch { }
-}
+    $state = @{
+        schema_version = "glitch.topstep.gateway_watchdog.v1"
+        first_dead_utc = $null
+        last_check_utc = $now.ToString("o")
+        last_restart_utc = $null
+    }
+    if (Test-Path $StatePath) {
+        try {
+            $loaded = Get-Content $StatePath -Raw | ConvertFrom-Json
+            if ($loaded.first_dead_utc) { $state.first_dead_utc = [string]$loaded.first_dead_utc }
+            if ($loaded.last_restart_utc) { $state.last_restart_utc = [string]$loaded.last_restart_utc }
+        } catch { }
+    }
 
-if (-not $dead) {
+    if (-not $dead) {
+        $state.first_dead_utc = $null
+        ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
+        $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
+        Write-WatchdogLog "ok status=$status"
+        exit 0
+    }
+
+    if (-not $state.first_dead_utc) {
+        $state.first_dead_utc = $now.ToString("o")
+        ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
+        Write-WatchdogLog "degraded grace started at $($state.first_dead_utc)"
+        exit 0
+    }
+
+    $firstDead = [DateTimeOffset]::Parse([string]$state.first_dead_utc)
+    $ageMinutes = ($now - $firstDead).TotalMinutes
+    if ($ageMinutes -lt $DegradedGraceMinutes) {
+        ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
+        Write-WatchdogLog ("degraded {0:N1}m < grace {1}m" -f $ageMinutes, $DegradedGraceMinutes)
+        exit 0
+    }
+
+    Write-WatchdogLog ("restarting after {0:N1}m degraded" -f $ageMinutes)
+    Restart-GatewayProcess
     $state.first_dead_utc = $null
+    $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
     ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-    $status = if ($null -eq $health) { "unreachable_then_recovered_or_ok" } else { $health.status }
-    Write-Host "watchdog ok status=$status"
+    Write-WatchdogLog "restart complete"
     exit 0
+} catch {
+    Write-WatchdogLog "error: $($_.Exception.Message)"
+    exit 1
 }
-
-if (-not $state.first_dead_utc) {
-    $state.first_dead_utc = $now.ToString("o")
-    ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-    Write-Host "watchdog degraded observed; grace started at $($state.first_dead_utc)"
-    exit 0
-}
-
-$firstDead = [DateTimeOffset]::Parse([string]$state.first_dead_utc)
-$ageMinutes = ($now - $firstDead).TotalMinutes
-if ($ageMinutes -lt $DegradedGraceMinutes) {
-    ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-    Write-Host ("watchdog degraded for {0:N1}m < grace {1}m; waiting" -f $ageMinutes, $DegradedGraceMinutes)
-    exit 0
-}
-
-Write-Host ("watchdog restarting gateway after {0:N1}m degraded" -f $ageMinutes)
-Restart-GatewayProcess
-$state.first_dead_utc = $null
-$state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
-($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-Write-Host "watchdog restart complete"
