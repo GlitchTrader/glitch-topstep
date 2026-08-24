@@ -47,7 +47,7 @@ function intent(id = "00000000-0000-4000-8000-000000000001"): TradeIntent {
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v14",
+    promptVersion: "glitch-topstep-v15",
     reason: "Test.",
     decisionAudit: {
       bullCase: "Bull.",
