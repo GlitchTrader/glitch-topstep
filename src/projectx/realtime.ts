@@ -29,9 +29,12 @@ import {
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
 import {
+  DEFAULT_HUB_START_TIMEOUT_MS,
   DEFAULT_STREAM_LIVENESS_MS,
+  DEFAULT_STUCK_STREAM_MS,
   nextSignalRReconnectDelayMs,
   shouldForceMarketLivenessRestart,
+  shouldForceStuckStreamRestart,
   shouldScheduleHubRestart,
 } from "./stream-supervisor.js";
 
@@ -49,6 +52,8 @@ export interface ProjectXRealtimeOptions {
   onStateInvalidated?: () => void | Promise<void>;
   onBeforePositionApply?: (position: PositionInfo, receivedUtc: string) => void | Promise<void>;
   livenessMs?: number;
+  stuckStreamMs?: number;
+  hubStartTimeoutMs?: number;
   isMarketExpectedLive?: () => boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -346,26 +351,51 @@ export class ProjectXRealtimeClient {
     }
     const livenessMs = this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS;
     this.livenessTimer = setInterval(() => {
-      this.checkMarketLiveness();
+      this.checkStreamLiveness();
     }, Math.min(5_000, livenessMs));
     this.livenessTimer.unref();
   }
 
-  private checkMarketLiveness(): void {
-    const market = this.state.operationalStatus().marketStream;
-    if (!shouldForceMarketLivenessRestart({
+  private checkStreamLiveness(): void {
+    const nowMs = (this.options.now ?? Date.now)();
+    const operational = this.state.operationalStatus();
+    const market = operational.marketStream;
+    const user = operational.userStream;
+    const livenessMs = this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS;
+    const stuckMs = this.options.stuckStreamMs ?? DEFAULT_STUCK_STREAM_MS;
+
+    if (shouldForceMarketLivenessRestart({
       stopped: this.stopped,
       expectedLive: this.options.isMarketExpectedLive?.() ?? true,
       streamState: market.state,
       lastEventAt: this.state.lastQuoteReceivedAt(this.options.contractId) ?? market.lastEventAt,
       connectedSinceUtc: market.lastChangedAt,
-      nowMs: (this.options.now ?? Date.now)(),
-      livenessMs: this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS,
+      nowMs,
+      livenessMs,
     })) {
-      return;
+      this.recordLifecycleSafely("market", "liveness_restart");
+      void this.restartHub("market");
+    } else if (shouldForceStuckStreamRestart({
+      stopped: this.stopped,
+      streamState: market.state,
+      lastChangedAt: market.lastChangedAt,
+      nowMs,
+      stuckMs,
+    })) {
+      this.recordLifecycleSafely("market", "stuck_stream_restart");
+      void this.restartHub("market");
     }
-    this.recordLifecycleSafely("market", "liveness_restart");
-    void this.restartHub("market");
+
+    if (shouldForceStuckStreamRestart({
+      stopped: this.stopped,
+      streamState: user.state,
+      lastChangedAt: user.lastChangedAt,
+      nowMs,
+      stuckMs,
+    })) {
+      this.recordLifecycleSafely("user", "stuck_stream_restart");
+      void this.restartHub("user");
+    }
   }
 
   private async restartHub(kind: VenueStreamKind): Promise<void> {
@@ -375,7 +405,6 @@ export class ProjectXRealtimeClient {
     })) {
       return;
     }
-    this.restartInFlight[kind] = true;
     let retry = false;
     const connection = kind === "user" ? this.userConnection : this.marketConnection;
     const subscribe = kind === "user"
@@ -384,19 +413,34 @@ export class ProjectXRealtimeClient {
     const sleep = this.options.sleep ?? ((ms: number) => new Promise<void>((resolve) => {
       setTimeout(resolve, ms);
     }));
+    const hubStartTimeoutMs = this.options.hubStartTimeoutMs ?? DEFAULT_HUB_START_TIMEOUT_MS;
+    const delay = nextSignalRReconnectDelayMs(this.restartAttempts[kind]);
+    this.restartAttempts[kind] += 1;
+    if (delay > 0) {
+      await sleep(delay);
+    }
+    if (this.stopped) {
+      return;
+    }
+    if (!shouldScheduleHubRestart({
+      stopped: this.stopped,
+      restartInFlight: this.restartInFlight[kind],
+    })) {
+      return;
+    }
+    this.restartInFlight[kind] = true;
     try {
-      const delay = nextSignalRReconnectDelayMs(this.restartAttempts[kind]);
-      this.restartAttempts[kind] += 1;
-      if (delay > 0) {
-        await sleep(delay);
-      }
-      if (this.stopped) {
-        return;
-      }
       this.state.markStreamConnecting(kind);
       await connection.stop().catch(() => undefined);
-      await connection.start();
-      await subscribe();
+      // ponytail: SignalR start() can hang forever with restartInFlight stuck; bound the attempt.
+      await withTimeout(
+        (async () => {
+          await connection.start();
+          await subscribe();
+        })(),
+        hubStartTimeoutMs,
+        `${kind}_hub_start_timeout`,
+      );
       this.recordLifecycle(kind, "reconnected_and_subscribed");
       this.state.markStreamConnected(kind);
       this.restartAttempts[kind] = 0;
@@ -513,6 +557,24 @@ export class ProjectXRealtimeClient {
         : []),
     ]));
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(label));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 function errorPayload(error: unknown): unknown {
