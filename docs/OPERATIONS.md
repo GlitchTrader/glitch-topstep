@@ -245,7 +245,7 @@ Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle s
 
 In-process: SignalR auto-reconnect + `restartHub` with a hub-start timeout; market quote silence and stuck `connecting`/`disconnected` hubs force restart after ~15s / ~90s.
 
-Process fallback: `scripts/gateway-health-watchdog.ps1` polls `/health` and restarts via `start.ps1 -SkipBuild` when degraded with stream disconnect + `quote_stale` for ≥3 minutes. Register with `powershell -File scripts/install-gateway-watchdog.ps1`.
+Process fallback: `scripts/gateway-health-watchdog.ps1` polls `/health` and restarts via `start.ps1 -SkipBuild` when degraded with stream disconnect + `quote_stale` for ≥3 minutes. Register with `powershell -File scripts/install-gateway-watchdog.ps1` (task launches via hidden `wscript` wrapper; logs to `data/gateway-watchdog.log`).
 
 **Rollback**
 
