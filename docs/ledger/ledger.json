@@ -1550,8 +1550,8 @@
         "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
-      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule. 2026-08-24 ops: PACKET_OBSERVATION_STALE_MS aligned to RANKING_FRESHNESS_MAX_SKEW_MS (30s) to close overnight 30–45s skew band; evidence outbox startup await drain to stop listen hang. 2026-08-24 audit: decision_audit per-field max removed (NT parity; body still 64KB); profile no longer truncates audit strings before POST.",
-      "last_verified_utc": "2026-08-24T12:40:00Z"
+      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule. 2026-08-24 ops: PACKET_OBSERVATION_STALE_MS aligned to RANKING_FRESHNESS_MAX_SKEW_MS (30s) to close overnight 30–45s skew band; evidence outbox startup await drain to stop listen hang. 2026-08-24 audit: decision_audit per-field max removed (NT parity; body still 64KB); profile no longer truncates audit strings before POST. 2026-08-24 prompt v12: NT-parity compact audit (one evidence-dense sentence per case field; INSTRUMENT_COMPARISON_V1 under 8000 / TRIGGER_REVIEW under 6000).",
+      "last_verified_utc": "2026-08-24T14:30:00Z"
     },
     {
       "id": "TS-REAUDIT-01",

@@ -20,7 +20,7 @@
     "version": "0.2.2",
     "setup_schema": "glitch.topstep.hermes.setup.v1",
     "operator_schema": "glitch.topstep.hermes.operator.v2",
-    "prompt_version": "glitch-topstep-v11",
+    "prompt_version": "glitch-topstep-v12",
     "min_gateway_version": "0.2.0",
     "tested_gateway_version": "0.2.2",
     "hermes_requires": ">=0.18.2",
