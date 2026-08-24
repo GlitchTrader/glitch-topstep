@@ -74,6 +74,15 @@ function stringField(value: Record<string, unknown>, key: string, maxLength = 10
   return field;
 }
 
+/** NT parity: decision_audit has no per-field max; only non-empty string. Body cap is MAX_BODY_BYTES. */
+function auditStringField(value: Record<string, unknown>, key: string): string {
+  const field = value[key];
+  if (typeof field !== "string" || field.trim().length === 0) {
+    throw new IntentParseError("invalid_string_field", key);
+  }
+  return field;
+}
+
 function optionalNumber(value: Record<string, unknown>, key: string): number | undefined {
   const field = value[key];
   if (field === undefined) {
@@ -109,16 +118,14 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit 
     throw new IntentParseError("final_choice_must_equal_action", "decision_audit.final_choice", "decision_audit.final_choice");
   }
   return {
-    bullCase: stringField(value, "bull_case", 500),
-    bearCase: stringField(value, "bear_case", 500),
-    flatCase: stringField(value, "flat_case", 500),
-    aggressiveCase: stringField(value, "aggressive_case", 500),
-    conservativeCase: stringField(value, "conservative_case", 500),
-    decisiveEvidence: stringField(value, "decisive_evidence", 5000),
-    // ponytail: profile truncates audit strings to 5000 (GATEWAY_AUDIT_FIELD_MAX_LENGTH);
-    // 500 rejected overnight ENTER with prior_hypothesis continuity text.
-    disconfirmingEvidence: stringField(value, "disconfirming_evidence", 5000),
-    changeCondition: stringField(value, "change_condition", 500),
+    bullCase: auditStringField(value, "bull_case"),
+    bearCase: auditStringField(value, "bear_case"),
+    flatCase: auditStringField(value, "flat_case"),
+    aggressiveCase: auditStringField(value, "aggressive_case"),
+    conservativeCase: auditStringField(value, "conservative_case"),
+    decisiveEvidence: auditStringField(value, "decisive_evidence"),
+    disconfirmingEvidence: auditStringField(value, "disconfirming_evidence"),
+    changeCondition: auditStringField(value, "change_condition"),
     finalChoice,
   };
 }
