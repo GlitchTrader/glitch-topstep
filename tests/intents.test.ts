@@ -78,17 +78,25 @@ describe("Glitch intent contract", () => {
     );
   });
 
-  it("accepts disconfirming_evidence up to the profile audit cap of 5000", () => {
-    const long = "x".repeat(5000);
+  it("accepts long decision_audit strings without per-field max (NT parity)", () => {
+    const long = "x".repeat(8000);
     const intent = {
       ...baseIntent(),
-      decision_audit: { ...baseIntent().decision_audit, disconfirming_evidence: long },
+      decision_audit: {
+        ...baseIntent().decision_audit,
+        flat_case: long,
+        disconfirming_evidence: long,
+        decisive_evidence: long,
+      },
     };
-    assert.equal(parseTradeIntent(intent).decisionAudit.disconfirmingEvidence.length, 5000);
+    const parsed = parseTradeIntent(intent);
+    assert.equal(parsed.decisionAudit.flatCase.length, 8000);
+    assert.equal(parsed.decisionAudit.disconfirmingEvidence.length, 8000);
+    assert.equal(parsed.decisionAudit.decisiveEvidence.length, 8000);
     assert.throws(
       () => parseTradeIntent({
         ...intent,
-        decision_audit: { ...intent.decision_audit, disconfirming_evidence: `${long}y` },
+        decision_audit: { ...intent.decision_audit, flat_case: "   " },
       }),
       /invalid_string_field/,
     );
