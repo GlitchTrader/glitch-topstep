@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
-import { ProjectXApiClient } from "../src/projectx/client.js";
+import { ProjectXApiClient, ProjectXApiError } from "../src/projectx/client.js";
+import { readLimitedResponseText, ResponseTooLargeError } from "../src/projectx/response-limit.js";
 
 const loginEnvelope = {
   success: true,
@@ -8,6 +9,23 @@ const loginEnvelope = {
   errorMessage: null,
   token: "session-token",
 };
+
+describe("ProjectX response limit", () => {
+  it("rejects oversized streamed responses", async () => {
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(1024));
+        controller.enqueue(new Uint8Array(1024));
+        controller.close();
+      },
+    });
+    const response = new Response(body, { status: 200 });
+    await assert.rejects(
+      () => readLimitedResponseText(response, 1500),
+      (error: unknown) => error instanceof ResponseTooLargeError,
+    );
+  });
+});
 
 describe("ProjectXApiClient", () => {
   afterEach(() => {

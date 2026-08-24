@@ -3,12 +3,15 @@
  * Run `npm run reaudit:fault-matrix` for the gate script + proof artifact.
  */
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const GATE_PROOF_FILES = JSON.parse(
+  readFileSync(join(ROOT, "scripts/reaudit-fault-matrix-proofs.json"), "utf8"),
+) as string[];
 
 export const REAUDIT_FAULT_MATRIX = [
   {
@@ -51,9 +54,39 @@ export const REAUDIT_FAULT_MATRIX = [
     proof: "tests/paired-release-manifest.test.ts",
     scenario: "pair_digest + evidence-ref required in manifest",
   },
+  {
+    id: "projectx_response_limit",
+    proof: "tests/projectx-client.test.ts",
+    scenario: "Oversized ProjectX response rejected before full buffering",
+  },
+  {
+    id: "gateway_shutdown_deadline",
+    proof: "tests/gateway-shutdown-deadline.test.ts",
+    scenario: "HTTP shutdown completes within deadline with stuck connections",
+  },
+  {
+    id: "audit_wave_abc_observability",
+    proof: "tests/audit-wave-abc.test.ts",
+    scenario: "Log sanitization, retry policy, and actionable health alerts",
+  },
+  {
+    id: "rollback_rehearsal_manifest",
+    proof: "scripts/rollback-rehearsal.mjs",
+    scenario: "Paired manifest and operations runbook present for rollback rehearsal",
+  },
 ] as const;
 
 describe("TS-REAUDIT-10 fault matrix registry", () => {
+  it("gate proof list covers every registry proof file", () => {
+    const registryProofs = [...new Set(REAUDIT_FAULT_MATRIX.map((row) => row.proof))];
+    for (const proof of registryProofs) {
+      assert.ok(
+        GATE_PROOF_FILES.includes(proof),
+        `gate missing registry proof: ${proof}`,
+      );
+    }
+  });
+
   for (const row of REAUDIT_FAULT_MATRIX) {
     it(`${row.id} declares proof file ${row.proof}`, () => {
       const path = join(ROOT, row.proof);

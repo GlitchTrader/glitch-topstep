@@ -45,6 +45,8 @@ jobs:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - run: mkdir -p release
+      - run: npm run reaudit:fault-matrix -- --output release/reaudit-fault-matrix-proof.json
       - name: Build package, SBOM, checksums, and immutable pair manifest
         env:
           EVIDENCE_REF: ${{ inputs.evidence_ref }}

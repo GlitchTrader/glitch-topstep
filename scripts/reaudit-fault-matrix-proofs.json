@@ -1,0 +1,13 @@
+[
+  "tests/reaudit-fault-matrix.test.ts",
+  "tests/projectx-auth-manager.test.ts",
+  "tests/reaudit-phase1.test.ts",
+  "tests/lifecycle-supervisor.test.ts",
+  "tests/flatten-workflow.test.ts",
+  "tests/kill-matrix.test.ts",
+  "tests/paired-release-manifest.test.ts",
+  "tests/projectx-client.test.ts",
+  "tests/gateway-shutdown-deadline.test.ts",
+  "tests/audit-wave-abc.test.ts",
+  "scripts/rollback-rehearsal.mjs"
+]

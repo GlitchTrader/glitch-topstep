@@ -67,6 +67,7 @@ import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
+import { buildHealthAlerts } from "./observability/health-alerts.js";
 import { ProjectXAuthManager, type ProjectXAuthStatus } from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
@@ -622,6 +623,7 @@ export class GlitchTopstepService {
           protected_reduction: protectedReduction,
           safety_supervisor: safetySupervisor,
           invariant_metrics: invariantMetrics,
+          health_alerts: buildHealthAlerts(invariantMetrics),
         };
       },
       snapshot,
