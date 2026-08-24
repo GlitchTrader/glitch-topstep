@@ -1,10 +1,15 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-24T12:40:00Z",
+  "updated": "2026-08-24T16:45:00Z",
   "release_target": "beta",
   "reconciliation": {
-    "date": "2026-08-20",
+    "date": "2026-08-24",
+    "nt_cognition_p1_p2_prompt_v14": {
+      "status": "implemented_local",
+      "summary": "Bump GLITCH_TOPSTEP_PROMPT_VERSION to glitch-topstep-v14 with paired-contract profile 0.2.4 for POSITION_MANAGEMENT_V1 / lifecycle-facts cognition pairing."
+    },
+    "date_prior": "2026-08-20",
     "merged_prs": [
       148,
       149,

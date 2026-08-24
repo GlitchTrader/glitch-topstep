@@ -10,7 +10,7 @@ import { GATEWAY_COMPATIBILITY, PAIRED_CONTRACT } from "../src/release/compatibi
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PROFILE_ROOT = process.env.GLITCH_HERMES_PROFILE_ROOT
-  ?? path.resolve(ROOT, "..", "..", "OneDrive", "Documentos", "GitHub", "glitch-topstep-hermes-profile");
+  ?? path.resolve(ROOT, "..", "glitch-topstep-hermes-profile");
 
 test("TS-AUDIT-10 paired-contract.json drives gateway compatibility", () => {
   assert.equal(GATEWAY_COMPATIBILITY.protocol_revision, PAIRED_CONTRACT.protocol_revision);
