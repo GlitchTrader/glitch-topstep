@@ -240,6 +240,9 @@ export class GlitchTopstepService {
       for (const event of pending) {
         this.evidenceQueue.submit(event, null, { skipOutboxStage: true });
       }
+      // ponytail: submit only schedules the writer; without await drain this loop never
+      // yields, outbox stays pending, and startup busy-hangs before listen().
+      await this.evidenceQueue.drain();
     }
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;

@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-21T18:30:00Z",
+  "updated": "2026-08-24T12:40:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-20",
@@ -1550,8 +1550,8 @@
         "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
-      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule.",
-      "last_verified_utc": "2026-08-21T01:45:00Z"
+      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule. 2026-08-24 ops: PACKET_OBSERVATION_STALE_MS aligned to RANKING_FRESHNESS_MAX_SKEW_MS (30s) to close overnight 30–45s skew band; disconfirming_evidence audit cap raised to 5000 to match profile; evidence outbox startup await drain to stop listen hang.",
+      "last_verified_utc": "2026-08-24T12:40:00Z"
     },
     {
       "id": "TS-REAUDIT-01",
