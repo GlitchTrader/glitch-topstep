@@ -241,6 +241,12 @@ Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle s
 2. Record gateway commit + profile commit in both release manifests.
 3. Keep `GlitchTopstep_Gateway` (node `start.ps1`) as the sole gateway process — Hermes `gateway run` tasks stay disabled.
 
+**Stream disconnect recovery**
+
+In-process: SignalR auto-reconnect + `restartHub` with a hub-start timeout; market quote silence and stuck `connecting`/`disconnected` hubs force restart after ~15s / ~90s.
+
+Process fallback: `scripts/gateway-health-watchdog.ps1` polls `/health` and restarts via `start.ps1 -SkipBuild` when degraded with stream disconnect + `quote_stale` for ≥3 minutes. Register with `powershell -File scripts/install-gateway-watchdog.ps1`.
+
 **Rollback**
 
 1. `GLITCH_TRADING_MODE=shadow` (or stop gateway) — blocks new exposure immediately.
