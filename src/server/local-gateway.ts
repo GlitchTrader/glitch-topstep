@@ -9,6 +9,7 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import type { OutcomeRevisionPage } from "../storage/sqlite-outcome-feed.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
+import { formatLogError } from "../observability/log-sanitize.js";
 
 const EVIDENCE_SOURCES = new Set<ProviderEvidenceSource>([
   "projectx_rest",
@@ -17,6 +18,7 @@ const EVIDENCE_SOURCES = new Set<ProviderEvidenceSource>([
   "projectx_lifecycle",
 ]);
 const MAX_BODY_BYTES = 65_536;
+const SHUTDOWN_DEADLINE_MS = 30_000;
 const DEFAULT_EVIDENCE_LIMIT = 100;
 const MAX_EVIDENCE_LIMIT = 1_000;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
@@ -30,6 +32,7 @@ export interface LocalGatewayOptions {
   port: number;
   token: string;
   operatorToken?: string;
+  shutdownDeadlineMs?: number;
   ownership?: {
     executionDatabasePath: string;
     evidenceDatabasePath: string;
@@ -49,6 +52,7 @@ export class LocalGatewayServer {
   private server: Server | null = null;
   private ownershipService: ProjectXOrderOwnershipService | null;
   private readonly ownsOwnershipService: boolean;
+  private readonly activeConnections = new Set<ServerResponse>();
 
   public constructor(
     private readonly options: LocalGatewayOptions,
@@ -91,6 +95,10 @@ export class LocalGatewayServer {
       return;
     }
     this.server = createServer((request, response) => {
+      this.activeConnections.add(response);
+      response.on("close", () => {
+        this.activeConnections.delete(response);
+      });
       void this.handle(request, response);
     });
     await new Promise<void>((resolve, reject) => {
@@ -103,10 +111,24 @@ export class LocalGatewayServer {
     const server = this.server;
     this.server = null;
     if (server) {
-      await new Promise<void>((resolve, reject) => {
+      const closePromise = new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+      const timeout = setTimeout(() => {
+        for (const connection of this.activeConnections) {
+          connection.destroy();
+        }
+        if (typeof server.closeAllConnections === "function") {
+          server.closeAllConnections();
+        }
+      }, this.options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS);
+      try {
+        await closePromise;
+      } finally {
+        clearTimeout(timeout);
+      }
     }
+    this.activeConnections.clear();
     if (this.ownsOwnershipService) {
       this.ownershipService?.close();
     }
@@ -290,7 +312,7 @@ export class LocalGatewayServer {
       this.json(response, 404, { error: "not_found" });
     } catch (error) {
       const correlationId = randomUUID();
-      console.error("gateway_request_failed", { correlationId, error });
+      console.error("gateway_request_failed", { correlationId, error: formatLogError(error) });
       const code = error instanceof PayloadTooLargeError
         ? 413
         : error instanceof InvalidQueryError

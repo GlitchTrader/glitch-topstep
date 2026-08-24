@@ -51,6 +51,26 @@ export const REAUDIT_FAULT_MATRIX = [
     proof: "tests/paired-release-manifest.test.ts",
     scenario: "pair_digest + evidence-ref required in manifest",
   },
+  {
+    id: "projectx_response_limit",
+    proof: "tests/projectx-client.test.ts",
+    scenario: "Oversized ProjectX response rejected before full buffering",
+  },
+  {
+    id: "gateway_shutdown_deadline",
+    proof: "tests/gateway-shutdown-deadline.test.ts",
+    scenario: "HTTP shutdown completes within deadline with stuck connections",
+  },
+  {
+    id: "audit_wave_abc_observability",
+    proof: "tests/audit-wave-abc.test.ts",
+    scenario: "Log sanitization, retry policy, and actionable health alerts",
+  },
+  {
+    id: "rollback_rehearsal_manifest",
+    proof: "scripts/rollback-rehearsal.mjs",
+    scenario: "Paired manifest and operations runbook present for rollback rehearsal",
+  },
 ] as const;
 
 describe("TS-REAUDIT-10 fault matrix registry", () => {

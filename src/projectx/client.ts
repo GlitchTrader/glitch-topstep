@@ -15,6 +15,9 @@ import {
   parsePosition,
   parseTrade,
 } from "./schemas.js";
+import { readLimitedResponseText, ResponseTooLargeError } from "./response-limit.js";
+import { shouldRetryRead } from "./retry-policy.js";
+import { formatLogError } from "../observability/log-sanitize.js";
 
 export interface ProjectXClientOptions {
   apiUrl: string;
@@ -265,10 +268,10 @@ export class ProjectXApiClient {
         lastError = error;
         if (
           error instanceof ProjectXApiError
-          && error.status === 429
           && attempt < maxAttempts - 1
+          && (error.status === 429 || shouldRetryRead(error, attempt, maxAttempts))
         ) {
-          console.error(`ProjectX ${path} rate limited; retrying (${attempt + 1})`);
+          console.error(`ProjectX ${path} transient failure; retrying (${attempt + 1}): ${formatLogError(error)}`);
           continue;
         }
         throw error;
@@ -292,7 +295,12 @@ export class ProjectXApiClient {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(this.requestTimeoutMs),
     });
-    const text = await response.text();
+    const text = await readLimitedResponseText(response).catch((error: unknown) => {
+      if (error instanceof ResponseTooLargeError) {
+        throw new ProjectXApiError("response_too_large", error.message, response.status);
+      }
+      throw error;
+    });
     let payload: unknown;
     try {
       payload = text ? JSON.parse(text) : {};
