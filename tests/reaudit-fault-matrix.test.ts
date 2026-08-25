@@ -71,6 +71,21 @@ export const REAUDIT_FAULT_MATRIX = [
     scenario: "Log sanitization, retry policy, and actionable health alerts",
   },
   {
+    id: "audit_2026_08_25_mutation_no_retry",
+    proof: "tests/projectx-client.test.ts",
+    scenario: "Mutation placeOrder does not retry HTTP 429",
+  },
+  {
+    id: "audit_2026_08_25_evidence_physical_bound",
+    proof: "tests/invariant-metrics.test.ts",
+    scenario: "Evidence queue exposes physical_depth for bounded memory observability",
+  },
+  {
+    id: "audit_2026_08_25_packet_retention",
+    proof: "tests/sqlite-execution-store.test.ts",
+    scenario: "Expired issued_packets pruned while recovery refs preserved",
+  },
+  {
     id: "rollback_rehearsal_manifest",
     proof: "scripts/rollback-rehearsal.mjs",
     scenario: "Paired manifest and operations runbook present for rollback rehearsal",
@@ -79,6 +94,18 @@ export const REAUDIT_FAULT_MATRIX = [
     id: "profile_fault_injection",
     proof: "tests/test_fault_injection.py",
     scenario: "Profile export crash, lock steal, and delivery ambiguous recovery",
+    repo: "profile",
+  },
+  {
+    id: "audit_2026_08_25_bootstrap_export",
+    proof: "tests/test_fault_injection.py",
+    scenario: "bootstrap_decisions drains jsonl_export_queue after crash",
+    repo: "profile",
+  },
+  {
+    id: "audit_2026_08_25_preemption_tree_kill",
+    proof: "tests/test_fault_injection.py",
+    scenario: "Preemption uses terminate_pid_tree (taskkill /T on Windows)",
     repo: "profile",
   },
 ] as const;
