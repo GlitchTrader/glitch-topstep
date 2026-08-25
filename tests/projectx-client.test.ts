@@ -32,6 +32,37 @@ describe("ProjectXApiClient", () => {
     mock.restoreAll();
   });
 
+  it("does not retry mutation placeOrder on HTTP 429", async () => {
+    let calls = 0;
+    mock.method(globalThis, "fetch", async (_input: unknown, init?: RequestInit) => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response(JSON.stringify(loginEnvelope), { status: 200 });
+      }
+      return new Response("{}", { status: 429 });
+    });
+
+    const client = new ProjectXApiClient({
+      apiUrl: "https://api.example.com",
+      username: "user",
+      apiKey: "key",
+      requestTimeoutMs: 5_000,
+      rateLimitRetryMs: [0, 0, 0],
+    });
+    await client.login();
+    await assert.rejects(
+      () => client.placeOrder({
+        accountId: 1,
+        contractId: "MNQ",
+        type: 1,
+        side: 0,
+        size: 1,
+      } as never),
+      (error: unknown) => error instanceof ProjectXApiError && error.status === 429,
+    );
+    assert.equal(calls, 2);
+  });
+
   it("retries HTTP 429 before succeeding", async () => {
     let calls = 0;
     mock.method(globalThis, "fetch", async () => {

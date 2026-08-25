@@ -27,6 +27,7 @@ const protectedReduction: ProtectedReductionHealth = {
 
 const evidenceQueue: EvidenceQueueMetrics = {
   depth: 3,
+  physical_depth: 3,
   identity_depth: 0,
   oldest_age_ms: 1_000,
   degraded: true,
@@ -72,6 +73,7 @@ test("TS-AUDIT-14 invariant metrics expose trading risk signals without secrets"
   assert.equal(metrics.auth_refresh_failures, 2);
   assert.equal(metrics.auth_degraded, true);
   assert.equal(metrics.evidence_queue_depth, 3);
+  assert.equal(metrics.evidence_queue_physical_depth, 3);
   assert.equal(metrics.evidence_queue_degraded, true);
   assert.equal(metrics.non_terminal_controls, 1);
   assert.equal(metrics.orphan_protective_orders, 1);

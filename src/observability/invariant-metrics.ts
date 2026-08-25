@@ -13,6 +13,7 @@ export interface InvariantMetrics {
   auth_refresh_in_flight: boolean;
   reconciliation_age_ms: number | null;
   evidence_queue_depth: number;
+  evidence_queue_physical_depth: number;
   evidence_queue_degraded: boolean;
   rest_snapshot_cache_size: number;
   rest_snapshot_cache_max: number;
@@ -62,6 +63,7 @@ export function buildInvariantMetrics(input: InvariantMetricsInput): InvariantMe
     auth_refresh_in_flight: input.auth.refreshInFlight,
     reconciliation_age_ms: reconciliationAgeMs,
     evidence_queue_depth: input.evidenceQueue.depth,
+    evidence_queue_physical_depth: input.evidenceQueue.physical_depth,
     evidence_queue_degraded: input.evidenceQueue.degraded,
     rest_snapshot_cache_size: input.restSnapshotCache?.size ?? 0,
     rest_snapshot_cache_max: input.restSnapshotCache?.max ?? 0,

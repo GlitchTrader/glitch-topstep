@@ -28,6 +28,7 @@ export type EvidenceSubmitOutcome = "queued" | "coalesced" | "dropped";
 
 export interface EvidenceQueueMetrics {
   depth: number;
+  physical_depth: number;
   identity_depth: number;
   oldest_age_ms: number;
   degraded: boolean;
@@ -83,6 +84,8 @@ const DEFAULT_BATCH_SIZE = 256;
 const DEFAULT_BATCH_INTERVAL_MS = 5;
 const DRAIN_WRITE_FAILURE_LIMIT = 3;
 const COMPACT_THRESHOLD = 1_024;
+/** ponytail: hard cap on backing array; superseded slots reclaimed aggressively (audit 2026-08-25 C2). */
+const MAX_PHYSICAL_ENTRIES = 8_192;
 
 export class EvidenceWriteQueue {
   private readonly entries: QueueEntry[] = [];
@@ -200,6 +203,7 @@ export class EvidenceWriteQueue {
   public metrics(): EvidenceQueueMetrics {
     return {
       depth: this.pending,
+      physical_depth: this.entries.length - this.head,
       identity_depth: this.identityPending,
       oldest_age_ms: this.oldestAgeMs(),
       degraded: this.degraded,
@@ -275,6 +279,7 @@ export class EvidenceWriteQueue {
       stored = this.writer.appendBatch(batch.map((entry) => entry.event));
     } catch (error) {
       this.restore(batch, startHead);
+      this.compactSuperseded();
       this.writeFailures += 1;
       this.consecutiveWriteFailures += 1;
       this.raiseDegraded();
@@ -339,11 +344,37 @@ export class EvidenceWriteQueue {
   }
 
   private compact(): void {
+    this.compactSuperseded();
     if (this.head < COMPACT_THRESHOLD) {
       return;
     }
     this.entries.splice(0, this.head);
     this.head = 0;
+  }
+
+  private compactSuperseded(): void {
+    while (this.head < this.entries.length && this.entries[this.head]?.superseded) {
+      this.head += 1;
+    }
+    if (this.head >= COMPACT_THRESHOLD) {
+      this.entries.splice(0, this.head);
+      this.head = 0;
+    }
+    while (this.entries.length - this.head > MAX_PHYSICAL_ENTRIES) {
+      const dropIndex = this.head;
+      if (dropIndex >= this.entries.length) {
+        break;
+      }
+      const entry = this.entries[dropIndex];
+      if (!entry || !entry.superseded) {
+        break;
+      }
+      this.head += 1;
+    }
+    if (this.head >= COMPACT_THRESHOLD) {
+      this.entries.splice(0, this.head);
+      this.head = 0;
+    }
   }
 
   private oldestAgeMs(): number {

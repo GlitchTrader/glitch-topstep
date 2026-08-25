@@ -107,6 +107,19 @@ export class SqliteExecutionStore {
     `).run(atUtc);
   }
 
+  /** Remove expired invalidated packets not referenced by active intents (audit 2026-08-25 W2). */
+  public pruneExpiredPackets(nowUtc: string): number {
+    const result = this.database.prepare(`
+      DELETE FROM issued_packets
+      WHERE expires_utc < ?
+        AND invalidated_utc IS NOT NULL
+        AND snapshot_hash NOT IN (
+          SELECT snapshot_hash FROM intents WHERE snapshot_hash IS NOT NULL AND snapshot_hash != ''
+        )
+    `).run(nowUtc);
+    return Number(result.changes ?? 0);
+  }
+
   public registerIntent(intent: TradeIntent, receivedUtc: string): IntentRegistrationResult {
     const bodyHash = computeIntentBodyHash(intent);
     return this.inTransaction(() => {

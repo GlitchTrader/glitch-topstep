@@ -16,7 +16,7 @@ import {
   parseTrade,
 } from "./schemas.js";
 import { readLimitedResponseText, ResponseTooLargeError } from "./response-limit.js";
-import { shouldRetryRead } from "./retry-policy.js";
+import { shouldRetryPost } from "./retry-policy.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 
 export interface ProjectXClientOptions {
@@ -269,7 +269,7 @@ export class ProjectXApiClient {
         if (
           error instanceof ProjectXApiError
           && attempt < maxAttempts - 1
-          && (error.status === 429 || shouldRetryRead(error, attempt, maxAttempts))
+          && shouldRetryPost(path, error, attempt, maxAttempts)
         ) {
           console.error(`ProjectX ${path} transient failure; retrying (${attempt + 1}): ${formatLogError(error)}`);
           continue;
