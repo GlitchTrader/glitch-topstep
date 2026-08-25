@@ -1,11 +1,11 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-25T01:10:42.134Z",
-  "gateway_commit": "847ed5c51632425de07a1399dd0bf2c5581d9a1b",
+  "recorded_utc": "2026-08-25T23:57:54.322Z",
+  "gateway_commit": "169eabd0c1f64f61a5becfdeac3fe4315df3dbac",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
-      "sha256": "30903446ac12a383b701337e14d67c57994990d0e1737f37b74c521d7dd84da4"
+      "sha256": "67958b4131c558b0ce7862853bce9892b7be59207289e3492252a12d27088de9"
     },
     {
       "file": "tests/projectx-auth-manager.test.ts",
@@ -33,7 +33,7 @@
     },
     {
       "file": "tests/projectx-client.test.ts",
-      "sha256": "3dd46452a0777b3fb12abe0785a1163a2cc4e8b2585a8c3a1fb64a97d52e4cfc"
+      "sha256": "f6c176f9afac674edd4fc7433a44d0cbd34a36ed315c77c19c9ea3d3e9173a46"
     },
     {
       "file": "tests/gateway-shutdown-deadline.test.ts",
@@ -41,18 +41,26 @@
     },
     {
       "file": "tests/audit-wave-abc.test.ts",
-      "sha256": "95a3f6cf118c0e326e40f74bcf8c48e3b3d82fe93116c7b3aecd6ecb0a04229c"
+      "sha256": "6f09fbed52bb4675e9bfbddff75c0fb693b762ba80cc331ae06d88a2bad3630f"
+    },
+    {
+      "file": "tests/invariant-metrics.test.ts",
+      "sha256": "e9b86e295c7267ddf467de20b772bb67390a15860a053be41973c085505fe7b2"
+    },
+    {
+      "file": "tests/sqlite-execution-store.test.ts",
+      "sha256": "3a2b12d4fa52e97922a50af36ec563de29d3e51e2106b15d34bc551938c68bb1"
     },
     {
       "file": "scripts/rollback-rehearsal.mjs",
       "sha256": "9b057b065e56dfe00b2db7fe359e7971ec951a0a89c85091281c094775d12376"
     }
   ],
-  "profile_commit": "b0ecbfdcf2dc6341ae87cd577ea4b3a05ef5331f",
+  "profile_commit": "6552c752e443cda7687a1881e5e34bf80f71883d",
   "profile_proofs": [
     {
       "file": "tests/test_fault_injection.py",
-      "sha256": "a0a791bf168175c9acec815b9aad3a63e82700c1d99a6ec86c071b48cc245f8e"
+      "sha256": "9e9183745a74f8dbe8ef398aecb3c4254b553ea150d6dd0c0f119605f58c9c6d"
     }
   ]
 }
