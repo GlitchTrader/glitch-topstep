@@ -52,4 +52,11 @@ Evidence: `docs/evidence/PRAC-SOAK-2026-08-21/gateway-health-preflight.json`
 
 ## Armed promotion status
 
-**Evidence complete; operator sign-off pending.** Runtime is `armed` on operator device. Immutable pair manifest published in CI artifact; attach to issue #116 and record operator approval on `paired-release.json` before closing `TS-REAUDIT-12`.
+**Complete — operator sign-off recorded.** Runtime is `armed` on operator device. Immutable pair manifest published in CI artifact; evidence attached to issue #116; operator approval recorded on `release/paired-release.json` and archived copy under `docs/evidence/paired-release-5813d83/`.
+
+| Field | Value |
+|-------|-------|
+| `operator_id` | `arifreund18` |
+| `signed_at_utc` | `2026-08-25T01:46:34.491Z` |
+| `armed_promotion_approved` | `true` |
+| `pair_digest` | `78739f348407f450e677da40d59b4e6939c17fa4959a80d6e154337510cb0a2a` |

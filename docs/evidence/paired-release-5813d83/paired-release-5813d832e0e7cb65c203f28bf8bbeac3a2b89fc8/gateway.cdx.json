@@ -1,0 +1,1163 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:493f108a-eab9-4413-b7d2-13b145c3cbce",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-25T01:22:44.667Z",
+    "lifecycles": [
+      {
+        "phase": "build"
+      }
+    ],
+    "tools": [
+      {
+        "vendor": "npm",
+        "name": "cli",
+        "version": "10.9.8"
+      }
+    ],
+    "component": {
+      "bom-ref": "glitch-topstep@0.2.2",
+      "type": "library",
+      "name": "glitch-topstep",
+      "version": "0.2.2",
+      "scope": "required",
+      "description": "Topstep-first AI trading gateway built directly on ProjectX/TopstepX.",
+      "purl": "pkg:npm/glitch-topstep@0.2.2",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": ""
+        },
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        }
+      ],
+      "externalReferences": []
+    }
+  },
+  "components": [
+    {
+      "bom-ref": "@microsoft/signalr@10.0.11",
+      "type": "library",
+      "name": "@microsoft/signalr",
+      "version": "10.0.11",
+      "scope": "required",
+      "author": "Microsoft",
+      "description": "ASP.NET Core SignalR Client",
+      "purl": "pkg:npm/%40microsoft/signalr@10.0.11",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@microsoft/signalr"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@microsoft/signalr/-/signalr-10.0.11.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/dotnet/aspnetcore.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/dotnet/aspnetcore/tree/main/src/SignalR#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/dotnet/aspnetcore/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "16e94e276104b4abcb41cb307bf53bbfca73c97ca4ec9b9ae7181624f3f0c9053fd99f4e46f29c563c8eef956f2ec7a6f8227539145ec49fbb073d4509e8b66b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "@types/node@26.2.0",
+      "type": "library",
+      "name": "@types/node",
+      "version": "26.2.0",
+      "scope": "optional",
+      "description": "TypeScript definitions for node",
+      "purl": "pkg:npm/%40types/node@26.2.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@types/node"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/node/-/node-26.2.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "e48be2ba54d9791369daf009e75e1c73f1d4958e6767d7c26eaf433320b9d81ae1159002a379c8d11eea0718509a8fdddbb3457bdeaeaff6fb5b0c6495d6be92"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "abort-controller@3.0.0",
+      "type": "library",
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "scope": "required",
+      "author": "Toru Nagashima",
+      "description": "An implementation of WHATWG AbortController interface.",
+      "purl": "pkg:npm/abort-controller@3.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/abort-controller"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/abort-controller/-/abort-controller-3.0.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mysticatea/abort-controller.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/mysticatea/abort-controller#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mysticatea/abort-controller/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "87c950f2d69c6589d1def3504e089b8feb4e0c7239ffe974e80bb63dcae2bff1a67add1e6a3e13c161f8d6c3bdc271c3890b048f5f6ad1daf375675e007b707a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "event-target-shim@5.0.1",
+      "type": "library",
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "scope": "required",
+      "author": "Toru Nagashima",
+      "description": "An implementation of WHATWG EventTarget interface.",
+      "purl": "pkg:npm/event-target-shim@5.0.1",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/event-target-shim"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mysticatea/event-target-shim.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/mysticatea/event-target-shim"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mysticatea/event-target-shim/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "8bfd976e74b3feec51094ebe35d54980a5834cce36efe32a61b910cc3df6d43b8240952a3ae24a200d08336f96db1b581dd28e999e1d47a7c4c6c7784972fe59"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "eventsource@2.0.2",
+      "type": "library",
+      "name": "eventsource",
+      "version": "2.0.2",
+      "scope": "required",
+      "author": "Aslak Hellesøy",
+      "description": "W3C compliant EventSource client for Node.js and browser (polyfill)",
+      "purl": "pkg:npm/eventsource@2.0.2",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/eventsource"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/eventsource/-/eventsource-2.0.2.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/EventSource/eventsource.git"
+        },
+        {
+          "type": "website",
+          "url": "http://github.com/EventSource/eventsource"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "http://github.com/EventSource/eventsource/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "2335260463d1dfea141bd754797ca7c8d99ff75ff7cd448983594292dccac38ece5ee85ca39e14debf41ecee175fe45bd48b66f4e6766f44644ecd746c808ec4"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "fetch-cookie@2.2.0",
+      "type": "library",
+      "name": "fetch-cookie",
+      "version": "2.2.0",
+      "scope": "required",
+      "author": "Val",
+      "description": "Decorator for a `fetch` function to support automatic cookies.",
+      "purl": "pkg:npm/fetch-cookie@2.2.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/fetch-cookie"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/fetch-cookie/-/fetch-cookie-2.2.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/valeriangalliat/fetch-cookie.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/valeriangalliat/fetch-cookie#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/valeriangalliat/fetch-cookie/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "87d0207e3511b82800dbed884a5f066dabe951d47e58600cd8c716fe8be7e2d55c71e829f19a8229648147cb9174cf1d0cd971e5674a456c41614c2d78b0c235"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Unlicense"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "node-fetch@2.7.0",
+      "type": "library",
+      "name": "node-fetch",
+      "version": "2.7.0",
+      "scope": "required",
+      "author": "David Frank",
+      "description": "A light-weight module that brings window.fetch to node.js",
+      "purl": "pkg:npm/node-fetch@2.7.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/node-fetch"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-fetch/-/node-fetch-2.7.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/bitinn/node-fetch.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/bitinn/node-fetch"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/bitinn/node-fetch/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "7381517d49bf75b71667b53ed56ab40300b214bfb79edd9b130d39c1fc52cfe0d6a56b22b609928189b2d9d41d5b2282d7af7810b3ea32cfd8cd448da332edf0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "psl@1.15.0",
+      "type": "library",
+      "name": "psl",
+      "version": "1.15.0",
+      "scope": "required",
+      "author": "Lupo Montero",
+      "description": "Domain name parser based on the Public Suffix List",
+      "purl": "pkg:npm/psl@1.15.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/psl"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/psl/-/psl-1.15.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+ssh://git@github.com/lupomontero/psl.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lupomontero/psl#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lupomontero/psl/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "25977780c5410154244ace8774d668f52768d0b35c41e30d3f70a8cc125bdc9602fd05186539cac4ff9ff285915f8ac73f912ead6c6a0074d2c140a394d29ad7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "punycode@2.3.1",
+      "type": "library",
+      "name": "punycode",
+      "version": "2.3.1",
+      "scope": "required",
+      "author": "Mathias Bynens",
+      "description": "A robust Punycode converter that fully complies to RFC 3492 and RFC 5891, and works on nearly all JavaScript platforms.",
+      "purl": "pkg:npm/punycode@2.3.1",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/punycode"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mathiasbynens/punycode.js.git"
+        },
+        {
+          "type": "website",
+          "url": "https://mths.be/punycode"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mathiasbynens/punycode.js/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "bd8b7b503d54f5683ad77f2c84bb4b3af740bbef03b02fe2945b44547707fb0c9d712a4d136d007d239db9fe8c91115a84be4563b5f5a14ee7295645b5fabc16"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "querystringify@2.2.0",
+      "type": "library",
+      "name": "querystringify",
+      "version": "2.2.0",
+      "scope": "required",
+      "author": "Arnout Kazemier",
+      "description": "Querystringify - Small, simple but powerful query string parser.",
+      "purl": "pkg:npm/querystringify@2.2.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/querystringify"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/querystringify/-/querystringify-2.2.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/unshiftio/querystringify.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/unshiftio/querystringify"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/unshiftio/querystringify/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "148aa08f6114bd36bb479d2ed2b1acc937edce3626bff6b784edf8e5b64daea69b36a8ed8220cc826a389a452377e9f3539a05ddd0a52aa1483d42b26d4caaa1"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "requires-port@1.0.0",
+      "type": "library",
+      "name": "requires-port",
+      "version": "1.0.0",
+      "scope": "required",
+      "author": "Arnout Kazemier",
+      "description": "Check if a protocol requires a certain port number to be added to an URL.",
+      "purl": "pkg:npm/requires-port@1.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/requires-port"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/requires-port/-/requires-port-1.0.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/unshiftio/requires-port.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/unshiftio/requires-port"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/unshiftio/requires-port/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "2a280e087728714dd7383271b2ef22fe3f13f6dcd3e1a74789e730391450d19645729eda8705ee454d66fb2b8ef740b9654c867867e87070c8d783372f7c8301"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "set-cookie-parser@2.7.2",
+      "type": "library",
+      "name": "set-cookie-parser",
+      "version": "2.7.2",
+      "scope": "required",
+      "author": "Nathan Friedly",
+      "description": "Parses set-cookie headers into objects",
+      "purl": "pkg:npm/set-cookie-parser@2.7.2",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/set-cookie-parser"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/set-cookie-parser/-/set-cookie-parser-2.7.2.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/nfriedly/set-cookie-parser.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/nfriedly/set-cookie-parser"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/nfriedly/set-cookie-parser/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "a1e33596953f52f853c70fa0ddc21fc571f225173fba275ddf22b53f6e368331ddb34b9d401633b37cbc8f8802096f9927b69dd3272d95df1160ef9b76eae5bf"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "tough-cookie@4.1.4",
+      "type": "library",
+      "name": "tough-cookie",
+      "version": "4.1.4",
+      "scope": "required",
+      "author": "Jeremy Stashewsky",
+      "description": "RFC6265 Cookies and Cookie Jar for node.js",
+      "purl": "pkg:npm/tough-cookie@4.1.4",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/tough-cookie"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tough-cookie/-/tough-cookie-4.1.4.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/salesforce/tough-cookie.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/salesforce/tough-cookie"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/salesforce/tough-cookie/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "2e8a39514bcb0fd49c67a8e1f1b797d53eac3b5c36fcca4246910fed5dbcd0628c5544342736abd94dd424fb2b75bce22c430c86edd48e7abffeb86216e21e6a"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "tr46@0.0.3",
+      "type": "library",
+      "name": "tr46",
+      "version": "0.0.3",
+      "scope": "required",
+      "author": "Sebastian Mayr",
+      "description": "An implementation of the Unicode TR46 spec",
+      "purl": "pkg:npm/tr46@0.0.3",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/tr46"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tr46/-/tr46-0.0.3.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/Sebmaster/tr46.js.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/Sebmaster/tr46.js#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/Sebmaster/tr46.js/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "37758cb2ea95eba953df40ab5cd6c48f1e06130968c37bfaaebe2609cbfaa6b9dfc214b4d6b920c857633cd05877d6ebecba57575f849a1d357c79ead86760af"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "typescript@5.9.3",
+      "type": "library",
+      "name": "typescript",
+      "version": "5.9.3",
+      "scope": "optional",
+      "author": "Microsoft Corp.",
+      "description": "TypeScript is a language for application scale JavaScript development",
+      "purl": "pkg:npm/typescript@5.9.3",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/typescript"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/microsoft/TypeScript.git"
+        },
+        {
+          "type": "website",
+          "url": "https://www.typescriptlang.org/"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/microsoft/TypeScript/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "8e5d6f6733c38a72ebf5e52ddc9feded5e8580d130f508ef04f772b33f4a7d00c3e357d0ac2d98e2f290762694a454f86d795bd511e12e9a7cc2d9ba3394e04b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "undici-types@8.3.0",
+      "type": "library",
+      "name": "undici-types",
+      "version": "8.3.0",
+      "scope": "optional",
+      "description": "A stand-alone types package for Undici",
+      "purl": "pkg:npm/undici-types@8.3.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/undici-types"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/undici-types/-/undici-types-8.3.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/nodejs/undici.git"
+        },
+        {
+          "type": "website",
+          "url": "https://undici.nodejs.org"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/nodejs/undici/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "8f7ef949c57ad1da26f9890f1487d32dc3a23f190dfdbb87cf91a86e32e18b116e00d68db370bd9781a6ad6a9e8e05d627b05b25c158a53114912d467bc6e965"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "universalify@0.2.0",
+      "type": "library",
+      "name": "universalify",
+      "version": "0.2.0",
+      "scope": "required",
+      "author": "Ryan Zimmerman",
+      "description": "Make a callback- or promise-based function support both promises and callbacks.",
+      "purl": "pkg:npm/universalify@0.2.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/universalify"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/universalify/-/universalify-0.2.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/RyanZim/universalify.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/RyanZim/universalify#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/RyanZim/universalify/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "089d5080a98d8370b0bc0bff90e166b6710dd397f40ff727f509ed80d39095017d760bd54c78f7b7ef093dd8ea6b008793b57f280f9f6d4ab367d5d685ca8f52"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "url-parse@1.5.10",
+      "type": "library",
+      "name": "url-parse",
+      "version": "1.5.10",
+      "scope": "required",
+      "author": "Arnout Kazemier",
+      "description": "Small footprint URL parser that works seamlessly across Node.js and browser environments",
+      "purl": "pkg:npm/url-parse@1.5.10",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/url-parse"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/url-parse/-/url-parse-1.5.10.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/unshiftio/url-parse.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/unshiftio/url-parse#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/unshiftio/url-parse/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "5b2a5c7e24617de50ff6fbc5d23eabc3427786b5abc3a899bf7fb6da1ea244c27ff33d538fa5df2cfe03b148b1e4c84c3e75e98870e82b2a19fdb74293004289"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "webidl-conversions@3.0.1",
+      "type": "library",
+      "name": "webidl-conversions",
+      "version": "3.0.1",
+      "scope": "required",
+      "author": "Domenic Denicola",
+      "description": "Implements the WebIDL algorithms for converting to and from JavaScript values",
+      "purl": "pkg:npm/webidl-conversions@3.0.1",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/webidl-conversions"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-3.0.1.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jsdom/webidl-conversions.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jsdom/webidl-conversions#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jsdom/webidl-conversions/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "d89027df3f0047aae32bc4a6f28ad10b487f6dc97f0ea2fbb513dd199e08d428dd17e11a30b998c411f25ee28bf38f5eb9c3c586f068c4cb1f95f39bf24c5a79"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "whatwg-url@5.0.0",
+      "type": "library",
+      "name": "whatwg-url",
+      "version": "5.0.0",
+      "scope": "required",
+      "author": "Sebastian Mayr",
+      "description": "An implementation of the WHATWG URL Standard's URL API and parsing machinery",
+      "purl": "pkg:npm/whatwg-url@5.0.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/whatwg-url"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/whatwg-url/-/whatwg-url-5.0.0.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jsdom/whatwg-url.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jsdom/whatwg-url#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jsdom/whatwg-url/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "b1a139ee7ba9c64eafdc7637e7e8f307061ad2b292cb45d1f094b164fc202ebef2b34201ce11af880d7f4d41892e6495aacf296fd027bc809712e3872e9ad84f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "ws@7.5.13",
+      "type": "library",
+      "name": "ws",
+      "version": "7.5.13",
+      "scope": "required",
+      "author": "Einar Otto Stangvik",
+      "description": "Simple to use, blazing fast and thoroughly tested websocket client and server for Node.js",
+      "purl": "pkg:npm/ws@7.5.13",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ws"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ws/-/ws-7.5.13.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/websockets/ws.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/websockets/ws"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/websockets/ws/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "aec288eb10c11557f8affc7c5f20a118ad38411fd71eba31b3f8d47285afb4464cf133d4fd7fee218f41d42b12cd8c2cf5925bffa6db06eedd3e1156d34080a0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "glitch-topstep@0.2.2",
+      "dependsOn": [
+        "@microsoft/signalr@10.0.11",
+        "@types/node@26.2.0",
+        "typescript@5.9.3"
+      ]
+    },
+    {
+      "ref": "@microsoft/signalr@10.0.11",
+      "dependsOn": [
+        "abort-controller@3.0.0",
+        "eventsource@2.0.2",
+        "fetch-cookie@2.2.0",
+        "node-fetch@2.7.0",
+        "ws@7.5.13"
+      ]
+    },
+    {
+      "ref": "@types/node@26.2.0",
+      "dependsOn": [
+        "undici-types@8.3.0"
+      ]
+    },
+    {
+      "ref": "abort-controller@3.0.0",
+      "dependsOn": [
+        "event-target-shim@5.0.1"
+      ]
+    },
+    {
+      "ref": "event-target-shim@5.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "eventsource@2.0.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "fetch-cookie@2.2.0",
+      "dependsOn": [
+        "set-cookie-parser@2.7.2",
+        "tough-cookie@4.1.4"
+      ]
+    },
+    {
+      "ref": "node-fetch@2.7.0",
+      "dependsOn": [
+        "whatwg-url@5.0.0"
+      ]
+    },
+    {
+      "ref": "psl@1.15.0",
+      "dependsOn": [
+        "punycode@2.3.1"
+      ]
+    },
+    {
+      "ref": "punycode@2.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "querystringify@2.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "requires-port@1.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "set-cookie-parser@2.7.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "tough-cookie@4.1.4",
+      "dependsOn": [
+        "psl@1.15.0",
+        "punycode@2.3.1",
+        "universalify@0.2.0",
+        "url-parse@1.5.10"
+      ]
+    },
+    {
+      "ref": "tr46@0.0.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "typescript@5.9.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "undici-types@8.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "universalify@0.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "url-parse@1.5.10",
+      "dependsOn": [
+        "querystringify@2.2.0",
+        "requires-port@1.0.0"
+      ]
+    },
+    {
+      "ref": "webidl-conversions@3.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "whatwg-url@5.0.0",
+      "dependsOn": [
+        "tr46@0.0.3",
+        "webidl-conversions@3.0.1"
+      ]
+    },
+    {
+      "ref": "ws@7.5.13",
+      "dependsOn": []
+    }
+  ]
+}
