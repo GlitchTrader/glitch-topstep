@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHealthAlerts } from "../src/observability/health-alerts.js";
 import { sanitizeForLog } from "../src/observability/log-sanitize.js";
-import { classifyProjectXError } from "../src/projectx/retry-policy.js";
+import { classifyProjectXError, isMutationPath, shouldRetryPost } from "../src/projectx/retry-policy.js";
 import { ProjectXApiError } from "../src/projectx/client.js";
 
 describe("log sanitization", () => {
@@ -29,6 +29,13 @@ describe("retry policy", () => {
       "no_retry",
     );
   });
+
+  it("does not retry mutation paths on HTTP 429", () => {
+    const error = new ProjectXApiError("http_error", "rate limited", 429);
+    assert.equal(isMutationPath("/api/Order/place"), true);
+    assert.equal(shouldRetryPost("/api/Order/place", error, 0, 3), false);
+    assert.equal(shouldRetryPost("/api/Account/search", error, 0, 3), true);
+  });
 });
 
 describe("health alerts", () => {
@@ -42,6 +49,7 @@ describe("health alerts", () => {
       auth_refresh_in_flight: false,
       reconciliation_age_ms: 1000,
       evidence_queue_depth: 0,
+      evidence_queue_physical_depth: 0,
       evidence_queue_degraded: false,
       rest_snapshot_cache_size: 0,
       rest_snapshot_cache_max: 0,

@@ -119,6 +119,8 @@ export class DecisionPacketService {
   }
 
   public invalidateAll(): void {
-    this.store.invalidateIssuedPackets(new Date(this.now()).toISOString());
+    const nowUtc = new Date(this.now()).toISOString();
+    this.store.invalidateIssuedPackets(nowUtc);
+    this.store.pruneExpiredPackets(nowUtc);
   }
 }

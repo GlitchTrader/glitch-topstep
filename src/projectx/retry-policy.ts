@@ -26,6 +26,34 @@ export function retryDelayMs(attempt: number, baseMs = 1_000): number {
   return baseMs * (attempt + 1) + jitter;
 }
 
+export function isMutationPath(path: string): boolean {
+  return path === "/api/Order/place"
+    || path === "/api/Order/modify"
+    || path === "/api/Order/cancel"
+    || path === "/api/Position/closeContract";
+}
+
+export function shouldRetryPost(
+  path: string,
+  error: unknown,
+  attempt: number,
+  maxAttempts: number,
+): boolean {
+  if (isMutationPath(path)) {
+    return false;
+  }
+  if (attempt >= maxAttempts - 1) {
+    return false;
+  }
+  if (!(error instanceof ProjectXApiError)) {
+    return false;
+  }
+  if (error.status === 429) {
+    return true;
+  }
+  return shouldRetryRead(error, attempt, maxAttempts);
+}
+
 export function shouldRetryRead(error: unknown, attempt: number, maxAttempts: number): boolean {
   if (attempt >= maxAttempts - 1) {
     return false;

@@ -10,6 +10,8 @@
     "tests/projectx-client.test.ts",
     "tests/gateway-shutdown-deadline.test.ts",
     "tests/audit-wave-abc.test.ts",
+    "tests/invariant-metrics.test.ts",
+    "tests/sqlite-execution-store.test.ts",
     "scripts/rollback-rehearsal.mjs"
   ],
   "profile": {

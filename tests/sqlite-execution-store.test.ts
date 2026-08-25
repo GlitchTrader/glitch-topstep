@@ -96,6 +96,8 @@ describe("SQLite execution store", () => {
       store.resolveIssuedPacket(packet.market.snapshot_hash, "2026-07-21T12:01:02Z"),
       null,
     );
+    const pruned = store.pruneExpiredPackets("2099-01-01T00:00:00Z");
+    assert.equal(pruned, 1);
     store.close();
   });
 

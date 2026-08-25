@@ -279,7 +279,9 @@ An incomplete packet may still reach Hermes. The gateway independently rejects o
 
 ## Intent contract
 
-The current wire contract is `glitch.intent.v2`.
+The current wire contract is `glitch.intent.v3` (v2 accepted for backward compatibility during migration).
+
+Hermes profile workers coordinate through `model-owner.lock` (not legacy `direct-cycle.lock` / mtime locks). Launchers must consult `active_model_owner` before spawning cycle, learning, or wake-monitor workers.
 
 Hermes supplies:
 
