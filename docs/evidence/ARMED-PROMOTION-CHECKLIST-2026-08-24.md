@@ -42,13 +42,14 @@ Evidence: `docs/evidence/PRAC-SOAK-2026-08-21/gateway-health-preflight.json`
 - Inputs: `profile_commit=b0ecbfd`, `profile_version=0.2.5`, `prompt_version=glitch-topstep-v15`, `profile_manifest_sha256=43e21c08…`
 - `armed-production` approval: granted
 - Failure: step 10 `PROMPT_VERSION` sed targeted `profile/scripts/distribution_manifest.py`; prompt lives in `paired-contract.json` since profile C1 (#195)
-- Local fix: read `profile.paired-contract.json` in `release.yml` + `build-paired-release-manifest.mjs`
-- Local manifest: `release/paired-release.json` (`pair_digest=d6e33655…`)
+- Run (retry): https://github.com/GlitchTrader/glitch-topstep/actions/runs/32797244666 — **SUCCESS**
+- Artifact: `paired-release-5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8`
+- `pair_digest=78739f348407f450e677da40d59b4e6939c17fa4959a80d6e154337510cb0a2a`
 
 ## PROD-08
 
-`TS-PROD-08` ledger status **done** (branch protection + `armed-production` env). Human gate exercised via environment approval on the release run; not a substitute for attaching the published artifact to issue #116.
+`TS-PROD-08` ledger status **done** (branch protection + `armed-production` env). Human gate exercised via environment approval on both release runs.
 
 ## Armed promotion status
 
-**Blocked** until `paired-release-candidate` completes green and artifact is recorded in ledger/issue #116. Runtime is already `armed` on operator device with ack; process promotion is evidence + immutable pair manifest.
+**Evidence complete; operator sign-off pending.** Runtime is `armed` on operator device. Immutable pair manifest published in CI artifact; attach to issue #116 and record operator approval on `paired-release.json` before closing `TS-REAUDIT-12`.
