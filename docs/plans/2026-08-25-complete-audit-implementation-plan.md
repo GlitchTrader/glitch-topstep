@@ -166,9 +166,9 @@ Fechar: GTHP-REAUDIT-01/02/04, TS-REAUDIT-02/08/10/11 conforme entregas acima.
 
 ### Evidência para fechar Wave 0
 
-- [ ] Testes C1–C4 verdes
-- [ ] `npm run reaudit:fault-matrix` com SHAs atualizados
-- [ ] Ledgers gateway + profile atualizados
+- [x] Testes C1–C4 verdes
+- [x] `npm run reaudit:fault-matrix` com SHAs atualizados
+- [x] Ledgers gateway + profile atualizados
 - [ ] PRAC preflight 6/6 pós-merge
 - [ ] Review operador de C1 (mutação ambígua)
 

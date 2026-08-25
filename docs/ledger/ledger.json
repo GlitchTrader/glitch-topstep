@@ -241,7 +241,17 @@
       "plan": "docs/plans/2026-08-25-complete-audit-implementation-plan.md",
       "audit": "docs/ledger/audits/2026-08-25-complete-architecture-audit.md",
       "status": "merged",
+      "gateway_pr": 240,
+      "gateway_commit": "169eabd",
+      "profile_pr": 197,
+      "profile_commit": "6552c75",
       "waves": ["P0 C1-C4", "P1 W1-W2-W5", "P2 W4-W6"],
+      "checks": {
+        "npm_run_check": "pass",
+        "reaudit_fault_matrix": "pass",
+        "profile_unittest": "pass"
+      },
+      "fault_matrix_proof": "release/reaudit-fault-matrix-proof.json",
       "gateway_deliverables": [
         "mutation no-retry on 429",
         "evidence queue physical bound",
