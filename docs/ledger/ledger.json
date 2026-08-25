@@ -207,7 +207,7 @@
       },
       "residual_acceptance": "Execute PRAC soak scenarios on credentialed account; run reaudit:fault-matrix in release pipeline; full auth facade on all REST consumers; signed pair manifest (TS-REAUDIT-12)"
     },
-    "stream_validation": "P0 items 1-5 merged (#223 gateway, #177 profile 2026-08-21). Audit wave A/B/C merged (#234 gateway 2026-08-24). #236/#195 paired fault-matrix gate merged 2026-08-24. Armed promotion checklist executed 2026-08-24: PRAC soak + fault-matrix + rollback rehearsal green; release workflow run 32796577821 failed on PROMPT_VERSION sed (profile C1); fix pending merge.",
+    "stream_validation": "P0 items 1-5 merged (#223 gateway, #177 profile 2026-08-21). Audit wave A/B/C merged (#234 gateway 2026-08-24). #236/#195 paired fault-matrix gate merged 2026-08-24. Armed promotion checklist executed 2026-08-24: PRAC soak + fault-matrix + rollback rehearsal green; paired-release-candidate run 32797244666 success (artifact paired-release-5813d83…).",
     "audit_wave_abc_2026_08_24": {
       "gateway_pr": 234,
       "gateway_commit": "b5f7cfc",
@@ -243,14 +243,14 @@
       "profile_pr": 195,
       "profile_commit": "b0ecbfd",
       "paired_versions": "gateway 0.2.2 + profile 0.2.5 + prompt glitch-topstep-v15",
-      "status": "release_workflow_retry_pending",
+      "status": "release_workflow_green",
       "checks": {
         "merge_verify": "pass",
         "gateway_restart": "pass",
         "prac_soak_preflight": "pass",
         "reaudit_fault_matrix": "pass",
         "rollback_rehearsal_no_manifest": "pass",
-        "paired_release_workflow": "failed_prompt_version_gate_then_fixed_locally"
+        "paired_release_workflow": "pass"
       },
       "evidence": [
         "docs/evidence/PRAC-SOAK-2026-08-21/gateway-health-preflight.json",
@@ -259,10 +259,13 @@
         "release/paired-release.json"
       ],
       "release_workflow_runs": [
-        "https://github.com/GlitchTrader/glitch-topstep/actions/runs/32796577821"
+        "https://github.com/GlitchTrader/glitch-topstep/actions/runs/32796577821",
+        "https://github.com/GlitchTrader/glitch-topstep/actions/runs/32797244666"
       ],
-      "prod_08": "controls done (ledger TS-PROD-08); armed-production approval exercised on run 32796577821",
-      "residual": "Merge release.yml prompt_version fix; re-dispatch paired-release-candidate; attach artifact to issue #116"
+      "release_artifact": "paired-release-5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8",
+      "pair_digest": "78739f348407f450e677da40d59b4e6939c17fa4959a80d6e154337510cb0a2a",
+      "prod_08": "controls done (ledger TS-PROD-08); armed-production approval exercised on runs 32796577821 and 32797244666",
+      "residual": "Attach release artifact to issue #116; operator sign-off on paired-release.json before claiming TS-REAUDIT-12 closed"
     }
   },
   "authority": {
