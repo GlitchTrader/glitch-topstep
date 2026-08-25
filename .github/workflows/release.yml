@@ -47,6 +47,25 @@ jobs:
       - run: npm run check
       - run: mkdir -p release
       - run: npm run reaudit:fault-matrix -- --output release/reaudit-fault-matrix-proof.json
+        env:
+          GLITCH_HERMES_PROFILE_ROOT: profile
+      - name: Verify paired fault-matrix proof
+        env:
+          PROFILE_COMMIT: ${{ inputs.profile_commit }}
+        run: |
+          node --input-type=module -e "
+          import { readFileSync } from 'node:fs';
+          const proof = JSON.parse(readFileSync('release/reaudit-fault-matrix-proof.json', 'utf8'));
+          if (proof.profile_commit !== process.env.PROFILE_COMMIT) {
+            throw new Error('fault_matrix_profile_commit_mismatch');
+          }
+          if (!Array.isArray(proof.profile_proofs) || proof.profile_proofs.length === 0) {
+            throw new Error('fault_matrix_profile_proofs_missing');
+          }
+          if (!/^[0-9a-f]{40}$/.test(proof.gateway_commit)) {
+            throw new Error('fault_matrix_gateway_commit_invalid');
+          }
+          "
       - name: Build package, SBOM, checksums, and immutable pair manifest
         env:
           EVIDENCE_REF: ${{ inputs.evidence_ref }}

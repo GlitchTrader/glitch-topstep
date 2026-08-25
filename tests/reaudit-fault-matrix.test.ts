@@ -9,9 +9,10 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
-const GATE_PROOF_FILES = JSON.parse(
+const PROOF_CONFIG = JSON.parse(
   readFileSync(join(ROOT, "scripts/reaudit-fault-matrix-proofs.json"), "utf8"),
-) as string[];
+) as { gateway: string[]; profile?: { proofs: string[]; unittest_module: string } };
+const GATE_PROOF_FILES = PROOF_CONFIG.gateway;
 
 export const REAUDIT_FAULT_MATRIX = [
   {
@@ -74,12 +75,25 @@ export const REAUDIT_FAULT_MATRIX = [
     proof: "scripts/rollback-rehearsal.mjs",
     scenario: "Paired manifest and operations runbook present for rollback rehearsal",
   },
+  {
+    id: "profile_fault_injection",
+    proof: "tests/test_fault_injection.py",
+    scenario: "Profile export crash, lock steal, and delivery ambiguous recovery",
+    repo: "profile",
+  },
 ] as const;
 
 describe("TS-REAUDIT-10 fault matrix registry", () => {
   it("gate proof list covers every registry proof file", () => {
     const registryProofs = [...new Set(REAUDIT_FAULT_MATRIX.map((row) => row.proof))];
     for (const proof of registryProofs) {
+      if (proof === "tests/test_fault_injection.py") {
+        assert.ok(
+          PROOF_CONFIG.profile?.proofs.includes(proof),
+          `gate missing registry proof: ${proof}`,
+        );
+        continue;
+      }
       assert.ok(
         GATE_PROOF_FILES.includes(proof),
         `gate missing registry proof: ${proof}`,
@@ -87,8 +101,17 @@ describe("TS-REAUDIT-10 fault matrix registry", () => {
     }
   });
 
+  it("proof config declares profile fault-injection module", () => {
+    assert.equal(PROOF_CONFIG.profile?.unittest_module, "tests.test_fault_injection");
+    assert.deepEqual(PROOF_CONFIG.profile?.proofs, ["tests/test_fault_injection.py"]);
+  });
+
   for (const row of REAUDIT_FAULT_MATRIX) {
     it(`${row.id} declares proof file ${row.proof}`, () => {
+      if ("repo" in row && row.repo === "profile") {
+        assert.equal(row.proof, "tests/test_fault_injection.py");
+        return;
+      }
       const path = join(ROOT, row.proof);
       assert.ok(existsSync(path), `missing proof file for ${row.id}: ${row.proof}`);
     });

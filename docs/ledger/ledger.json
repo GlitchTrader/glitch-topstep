@@ -235,7 +235,7 @@
         "frame index",
         "C1 learning workflow modules"
       ],
-      "residual_acceptance": "Profile fault-injection kills (export crash, lock steal, delivery ambiguous); paired fault matrix with profile_commit; PRAC soak; TS-REAUDIT-12 rollback rehearsal in manifest"
+      "residual_acceptance": "PRAC soak on credentialed account; TS-REAUDIT-12 rollback rehearsal embedded in paired manifest validation"
     }
   },
   "authority": {
