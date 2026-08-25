@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-25T01:17:00Z",
+  "updated": "2026-08-25T01:46:34.491Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-24",
@@ -239,22 +239,24 @@
     },
     "armed_promotion_checklist_2026_08_24": {
       "gateway_pr": 236,
-      "gateway_commit": "847ed5c",
+      "gateway_commit": "5813d83",
       "profile_pr": 195,
       "profile_commit": "b0ecbfd",
       "paired_versions": "gateway 0.2.2 + profile 0.2.5 + prompt glitch-topstep-v15",
-      "status": "release_workflow_green",
+      "status": "complete",
       "checks": {
         "merge_verify": "pass",
         "gateway_restart": "pass",
         "prac_soak_preflight": "pass",
         "reaudit_fault_matrix": "pass",
         "rollback_rehearsal_no_manifest": "pass",
-        "paired_release_workflow": "pass"
+        "paired_release_workflow": "pass",
+        "operator_sign_off": "pass"
       },
       "evidence": [
         "docs/evidence/PRAC-SOAK-2026-08-21/gateway-health-preflight.json",
         "docs/evidence/ARMED-PROMOTION-CHECKLIST-2026-08-24.md",
+        "docs/evidence/paired-release-5813d83/paired-release-5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8/paired-release.json",
         "release/reaudit-fault-matrix-proof.json",
         "release/paired-release.json"
       ],
@@ -265,7 +267,11 @@
       "release_artifact": "paired-release-5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8",
       "pair_digest": "78739f348407f450e677da40d59b4e6939c17fa4959a80d6e154337510cb0a2a",
       "prod_08": "controls done (ledger TS-PROD-08); armed-production approval exercised on runs 32796577821 and 32797244666",
-      "residual": "Attach release artifact to issue #116; operator sign-off on paired-release.json before claiming TS-REAUDIT-12 closed"
+      "operator_sign_off": {
+        "operator_id": "arifreund18",
+        "signed_at_utc": "2026-08-25T01:46:34.491Z"
+      },
+      "residual": "complete"
     }
   },
   "authority": {
@@ -2045,7 +2051,7 @@
     {
       "id": "TS-REAUDIT-12",
       "title": "Codify paired armed promotion and rollback runbook",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "release_architecture",
       "issue": 195,
@@ -2078,6 +2084,13 @@
       "deployment": [
         "Ship validator non-blocking, rehearse rollback, require the manifest in both repositories, then protect armed-production with the gate."
       ],
+      "evidence": [
+        "docs/OPERATIONS.md",
+        "docs/evidence/ARMED-PROMOTION-CHECKLIST-2026-08-24.md",
+        "docs/evidence/paired-release-5813d83/paired-release-5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8/paired-release.json",
+        "release/paired-release.json",
+        "https://github.com/GlitchTrader/glitch-topstep/actions/runs/32797244666"
+      ],
       "sources": [
         ".github/workflows/release.yml",
         "docs/OPERATIONS.md",
@@ -2086,7 +2099,8 @@
         "https://github.com/GlitchTrader/glitch-topstep-hermes-profile/issues/142"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): armed promotion and rollback checklist in docs/OPERATIONS.md. Residual: signed pair manifest validator, rollback rehearsal proof, release workflow enforcement."
+      "implementation_note": "Armed promotion checklist complete 2026-08-24; paired-release-candidate run 32797244666; operator sign-off arifreund18 2026-08-25 on release/paired-release.json.",
+      "last_verified_utc": "2026-08-25T01:46:34.491Z"
     }
   ],
   "reaudit_program_2026_08_20": {

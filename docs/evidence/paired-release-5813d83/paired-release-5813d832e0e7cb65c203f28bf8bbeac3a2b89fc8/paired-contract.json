@@ -1,0 +1,86 @@
+{
+  "schema_version": "glitch.topstep.paired_contract.v1",
+  "protocol_revision": "glitch.topstep.paired.v3",
+  "health_schema": "glitch.direct.health.v2",
+  "runtime_intent_schema": "glitch.intent.v3",
+  "gateway_accepted_intent_schemas": [
+    "glitch.intent.v2",
+    "glitch.intent.v3"
+  ],
+  "decision_packet_schemas": [
+    "glitch.direct.decision_packet.v1",
+    "glitch.direct.decision_packet.v2"
+  ],
+  "gateway": {
+    "name": "glitch-topstep",
+    "version": "0.2.2"
+  },
+  "profile": {
+    "name": "glitch-topstep",
+    "version": "0.2.5",
+    "setup_schema": "glitch.topstep.hermes.setup.v1",
+    "operator_schema": "glitch.topstep.hermes.operator.v2",
+    "prompt_version": "glitch-topstep-v15",
+    "min_gateway_version": "0.2.0",
+    "tested_gateway_version": "0.2.2",
+    "hermes_requires": ">=0.18.2",
+    "hermes_install_name": "glitch-topstep"
+  },
+  "capabilities": [
+    "packet_supported_actions",
+    "position_management",
+    "tranche_ownership",
+    "native_protection",
+    "bracket_verification",
+    "durable_mutation_receipts",
+    "restart_reconciliation",
+    "intent_receipt_lookup",
+    "bounded_entry_range_v1",
+    "daily_capture_context_v1",
+    "explicit_partial_completed_bars_v1",
+    "revisioned_outcome_feed_v1",
+    "multi_instrument_observation_v1",
+    "protected_reduction_saga_v1",
+    "immediate_lifecycle_facts_v1"
+  ],
+  "required_capabilities": [
+    "packet_supported_actions",
+    "durable_mutation_receipts",
+    "restart_reconciliation",
+    "bounded_entry_range_v1",
+    "daily_capture_context_v1",
+    "explicit_partial_completed_bars_v1",
+    "revisioned_outcome_feed_v1",
+    "multi_instrument_observation_v1",
+    "protected_reduction_saga_v1"
+  ],
+  "semantic_revisions": {
+    "bounded_entry_range": "glitch.topstep.entry_range.v1",
+    "daily_capture": "glitch.topstep.daily_capture.v1",
+    "outcome_feed": "glitch.topstep.outcome_feed.v2",
+    "market_universe": "glitch.topstep.market_universe.v1",
+    "execution_facts": "glitch.topstep.execution_fact.v1"
+  },
+  "provider_acceptance_evidence": {
+    "partial_exit_protection_transition": "proven_prac_short_long_with_saga",
+    "exact_contract_resolution": "catalog_fixture_plus_runtime_resolution"
+  },
+  "paired_manifest_schema": "glitch.topstep.paired_release.v1",
+  "distributed_contract": {
+    "schema_version": "glitch.topstep.distributed_state_machine.v1",
+    "document": "release/distributed-state-machine.v1.json",
+    "amendment_source_schema": "glitch.topstep.amendment_source.v1",
+    "original_risk_envelope_schema": "glitch.topstep.original_risk_envelope.v1",
+    "model_owner_schema": "glitch.topstep.model_owner.v1",
+    "selected_candidate_handoff_schema": "glitch.topstep.selected_candidate_handoff.v1",
+    "outcome_path_chronology_schema": "glitch.topstep.path_chronology.v1",
+    "cadence": {
+      "flat_decision_interval_minutes": 5,
+      "positioned_management_interval_minutes": 1
+    }
+  },
+  "operations": {
+    "gitattributes_sha256": "D92933938CF9DFA663B502EB71126808685DD4998C7D7CFF22F2612ADEEC6E14",
+    "gitattributes_bytes_hex": "2a20746578740a"
+  }
+}
