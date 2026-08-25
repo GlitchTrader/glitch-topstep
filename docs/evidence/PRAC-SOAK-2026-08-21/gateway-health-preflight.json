@@ -73,40 +73,40 @@
                  },
     "lifecycle":  {
                       "state":  "ready",
-                      "changed_utc":  "2026-08-21T17:32:47.153Z",
+                      "changed_utc":  "2026-08-25T01:13:19.743Z",
                       "detail":  null
                   },
     "gateway_mode":  "armed",
     "gateway_mode_downgrade_reason":  null,
-    "recorded_utc":  "2026-08-21T17:33:18.975Z",
+    "recorded_utc":  "2026-08-25T01:13:56.902Z",
     "data_quality":  {
                          "state_complete":  true,
                          "issues":  [
 
                                     ],
-                         "quote_age_ms":  2315,
-                         "state_age_ms":  3596,
+                         "quote_age_ms":  0,
+                         "state_age_ms":  1980,
                          "operational":  {
                                              "generation":  1,
                                              "userStream":  {
                                                                 "state":  "connected",
                                                                 "generation":  1,
-                                                                "lastChangedAt":  "2026-08-21T17:32:46.566Z",
+                                                                "lastChangedAt":  "2026-08-25T01:13:19.356Z",
                                                                 "lastEventAt":  null,
                                                                 "lastError":  null
                                                             },
                                              "marketStream":  {
                                                                   "state":  "connected",
                                                                   "generation":  1,
-                                                                  "lastChangedAt":  "2026-08-21T17:32:46.566Z",
-                                                                  "lastEventAt":  "2026-08-21T17:33:18.974Z",
+                                                                  "lastChangedAt":  "2026-08-25T01:13:19.356Z",
+                                                                  "lastEventAt":  "2026-08-25T01:13:56.884Z",
                                                                   "lastError":  null
                                                               },
                                              "reconciliation":  {
                                                                     "state":  "succeeded",
                                                                     "generation":  1,
-                                                                    "lastStartedAt":  "2026-08-21T17:33:15.285Z",
-                                                                    "lastSucceededAt":  "2026-08-21T17:33:15.379Z",
+                                                                    "lastStartedAt":  "2026-08-25T01:13:54.818Z",
+                                                                    "lastSucceededAt":  "2026-08-25T01:13:54.922Z",
                                                                     "lastError":  null
                                                                 }
                                          }
@@ -117,33 +117,33 @@
                                "blockingNewExposure":  false,
                                "unresolvedMutations":  0,
                                "ambiguousMutations":  0,
-                               "lastRecoveryUtc":  "2026-08-21T17:32:46.319Z",
+                               "lastRecoveryUtc":  "2026-08-25T01:13:17.343Z",
                                "lastRecoveryError":  null
                            },
     "provider_evidence":  {
-                              "eventCount":  504323,
-                              "marketEventCount":  503761,
+                              "eventCount":  503500,
+                              "marketEventCount":  503044,
                               "earliestSequence":  1,
-                              "latestSequence":  3586705,
-                              "latestReceivedUtc":  "2026-08-21T17:33:16.609Z",
+                              "latestSequence":  1267014,
+                              "latestReceivedUtc":  "2026-08-25T01:13:56.884Z",
                               "marketEventRetention":  500000,
                               "marketPruneInterval":  10000,
                               "maximumMarketEventsBetweenPrunes":  509999
                           },
     "provider_evidence_queue":  {
-                                    "depth":  253,
+                                    "depth":  0,
                                     "identity_depth":  0,
-                                    "oldest_age_ms":  2655,
+                                    "oldest_age_ms":  0,
                                     "degraded":  false,
                                     "high_water_mark":  5000,
                                     "coalesce_watermark":  1000,
                                     "high_water_hits":  0,
-                                    "enqueued":  4019,
-                                    "persisted":  3765,
+                                    "enqueued":  3048,
+                                    "persisted":  3048,
                                     "coalesced":  {
                                                       "identity":  0,
                                                       "quote":  0,
-                                                      "depth":  1,
+                                                      "depth":  0,
                                                       "print":  0
                                                   },
                                     "dropped":  {
@@ -152,35 +152,35 @@
                                                     "depth":  0,
                                                     "print":  0
                                                 },
-                                    "last_batch_size":  3,
+                                    "last_batch_size":  6,
                                     "last_write_latency_ms":  1,
-                                    "max_write_latency_ms":  48,
+                                    "max_write_latency_ms":  29,
                                     "write_failures":  0,
                                     "consecutive_write_failures":  0,
                                     "apply_failures":  0,
-                                    "resume_cursor":  3586705,
+                                    "resume_cursor":  1267014,
                                     "closed":  false,
                                     "incomplete_shutdown":  false
                                 },
     "provider_history":  {
-                             "syncKey":  "projectx-history:26804090",
-                             "cursorUtc":  "2026-08-21T17:32:43.627Z",
-                             "lastAttemptUtc":  "2026-08-21T17:32:46.200Z",
-                             "lastSucceededUtc":  "2026-08-21T17:32:46.200Z",
-                             "lastWindowStartUtc":  "2026-08-21T17:31:04.901Z",
-                             "lastWindowEndUtc":  "2026-08-21T17:32:43.627Z",
+                             "syncKey":  "projectx-history:26919346",
+                             "cursorUtc":  "2026-08-25T01:13:15.079Z",
+                             "lastAttemptUtc":  "2026-08-25T01:13:17.286Z",
+                             "lastSucceededUtc":  "2026-08-25T01:13:17.286Z",
+                             "lastWindowStartUtc":  "2026-08-25T01:12:10.626Z",
+                             "lastWindowEndUtc":  "2026-08-25T01:13:15.079Z",
                              "lastError":  null,
                              "lastOrdersSeen":  0,
                              "lastTradesSeen":  0,
                              "lastEventsAppended":  0
                          },
     "market_observation":  {
-                               "last_attempt_utc":  "2026-08-21T17:32:46.132Z",
-                               "last_succeeded_utc":  "2026-08-21T17:32:46.132Z",
+                               "last_attempt_utc":  "2026-08-25T01:13:51.818Z",
+                               "last_succeeded_utc":  "2026-08-25T01:13:51.818Z",
                                "last_error":  null,
                                "observation":  {
                                                    "schema_version":  "glitch.projectx.market_observation.v1",
-                                                   "generated_utc":  "2026-08-21T17:32:46.132Z",
+                                                   "generated_utc":  "2026-08-25T01:13:51.818Z",
                                                    "source":  "projectx_bars",
                                                    "instrument":  "MNQ",
                                                    "contract_id":  "CON.F.US.MNQ.U26",
@@ -190,56 +190,60 @@
                                                                           "bars_received":  501,
                                                                           "bars_accepted":  501,
                                                                           "rejected_bars":  0,
-                                                                          "latest_bar_utc":  "2026-08-21T17:32:00.000Z",
+                                                                          "latest_bar_utc":  "2026-08-25T01:13:00.000Z",
                                                                           "latest_bar_partial":  true,
                                                                           "current_partial_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:32:00.000Z",
-                                                                                                      "open":  29397.5,
-                                                                                                      "high":  29398.25,
-                                                                                                      "low":  29391.25,
-                                                                                                      "close":  29395.75,
-                                                                                                      "volume":  1025
+                                                                                                      "timestamp":  "2026-08-25T01:13:00.000Z",
+                                                                                                      "open":  29130.75,
+                                                                                                      "high":  29136.25,
+                                                                                                      "low":  29128.75,
+                                                                                                      "close":  29136.25,
+                                                                                                      "volume":  423
                                                                                                   },
                                                                           "prior_completed_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:31:00.000Z",
-                                                                                                      "open":  29396.25,
-                                                                                                      "high":  29398.5,
-                                                                                                      "low":  29395,
-                                                                                                      "close":  29397.25,
-                                                                                                      "volume":  674
+                                                                                                      "timestamp":  "2026-08-25T01:12:00.000Z",
+                                                                                                      "open":  29122.75,
+                                                                                                      "high":  29131,
+                                                                                                      "low":  29121.5,
+                                                                                                      "close":  29131,
+                                                                                                      "volume":  564
                                                                                                   },
-                                                                          "partial_progress":  0.7688666666666667,
+                                                                          "partial_progress":  0.8636333333333334,
                                                                           "bar_identity_issues":  [
 
                                                                                                   ],
                                                                           "gaps":  [
-
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-24T20:59:00.000Z",
+                                                                                           "before_utc":  "2026-08-24T22:00:00.000Z",
+                                                                                           "missing_bars":  60
+                                                                                       }
                                                                                    ],
                                                                           "features":  {
-                                                                                           "latest_close":  29395.75,
-                                                                                           "change":  -1.5,
-                                                                                           "return_bps":  -0.5102518092678736,
-                                                                                           "true_range":  7,
-                                                                                           "average_true_range_14":  10.5,
-                                                                                           "realized_volatility_20_bps":  1.6968070936426554,
-                                                                                           "rolling_vwap_20":  29393.455495371785,
-                                                                                           "distance_from_rolling_vwap_20_bps":  0.7806175182690134,
-                                                                                           "ema_20":  29396.253886966413,
-                                                                                           "ema_50":  29400.636096714636,
-                                                                                           "ema_200":  29397.68335908213,
-                                                                                           "distance_from_ema_20_bps":  -0.1714119657391213,
-                                                                                           "distance_from_ema_50_bps":  -1.661901701229395,
-                                                                                           "distance_from_ema_200_bps":  -0.6576569515748806,
-                                                                                           "ema_20_slope_bps":  -0.018043332258271438,
-                                                                                           "ema_50_slope_bps":  -0.06783226237496102,
-                                                                                           "ema_200_slope_bps":  -0.00660961323553244,
-                                                                                           "range_position_20":  0.5845070422535211,
-                                                                                           "close_location":  0.6428571428571429,
-                                                                                           "body_fraction":  0.25,
-                                                                                           "upper_wick_fraction":  0.10714285714285714,
-                                                                                           "lower_wick_fraction":  0.6428571428571429,
-                                                                                           "volume_z_score_20":  -0.7566797082699367,
-                                                                                           "progress_adjusted_volume_z_score_20":  -0.4000427103018177
+                                                                                           "latest_close":  29136.25,
+                                                                                           "change":  5.25,
+                                                                                           "return_bps":  1.8022038378359821,
+                                                                                           "true_range":  7.5,
+                                                                                           "average_true_range_14":  12.642857142857142,
+                                                                                           "realized_volatility_20_bps":  2.011652812489792,
+                                                                                           "rolling_vwap_20":  29128.843398288296,
+                                                                                           "distance_from_rolling_vwap_20_bps":  2.542703673616879,
+                                                                                           "ema_20":  29127.431232571395,
+                                                                                           "ema_50":  29114.20730431781,
+                                                                                           "ema_200":  29107.554131685472,
+                                                                                           "distance_from_ema_20_bps":  3.0276502442632216,
+                                                                                           "distance_from_ema_50_bps":  7.571113117313408,
+                                                                                           "distance_from_ema_200_bps":  9.858563926293721,
+                                                                                           "ema_20_slope_bps":  0.31871018300659865,
+                                                                                           "ema_50_slope_bps":  0.309034575138024,
+                                                                                           "ema_200_slope_bps":  0.09908202620065469,
+                                                                                           "range_position_20":  0.8,
+                                                                                           "close_location":  1,
+                                                                                           "body_fraction":  0.7333333333333333,
+                                                                                           "upper_wick_fraction":  0,
+                                                                                           "lower_wick_fraction":  0.26666666666666666,
+                                                                                           "volume_z_score_20":  -1.41293310043954,
+                                                                                           "progress_adjusted_volume_z_score_20":  -1.203702214976484
                                                                                        }
                                                                       },
                                                                       {
@@ -247,60 +251,65 @@
                                                                           "bars_received":  501,
                                                                           "bars_accepted":  501,
                                                                           "rejected_bars":  0,
-                                                                          "latest_bar_utc":  "2026-08-21T17:30:00.000Z",
+                                                                          "latest_bar_utc":  "2026-08-25T01:10:00.000Z",
                                                                           "latest_bar_partial":  true,
                                                                           "current_partial_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:30:00.000Z",
-                                                                                                      "open":  29396,
-                                                                                                      "high":  29401.5,
-                                                                                                      "low":  29391.25,
-                                                                                                      "close":  29395.75,
-                                                                                                      "volume":  3740
+                                                                                                      "timestamp":  "2026-08-25T01:10:00.000Z",
+                                                                                                      "open":  29138.75,
+                                                                                                      "high":  29139.75,
+                                                                                                      "low":  29120.75,
+                                                                                                      "close":  29136.25,
+                                                                                                      "volume":  2646
                                                                                                   },
                                                                           "prior_completed_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:25:00.000Z",
-                                                                                                      "open":  29389.25,
-                                                                                                      "high":  29407.5,
-                                                                                                      "low":  29378.25,
-                                                                                                      "close":  29395.25,
-                                                                                                      "volume":  9920
+                                                                                                      "timestamp":  "2026-08-25T01:05:00.000Z",
+                                                                                                      "open":  29134.5,
+                                                                                                      "high":  29141.5,
+                                                                                                      "low":  29113.25,
+                                                                                                      "close":  29137.75,
+                                                                                                      "volume":  5098
                                                                                                   },
-                                                                          "partial_progress":  0.5537733333333333,
+                                                                          "partial_progress":  0.7727266666666667,
                                                                           "bar_identity_issues":  [
 
                                                                                                   ],
                                                                           "gaps":  [
                                                                                        {
-                                                                                           "after_utc":  "2026-08-20T20:55:00.000Z",
-                                                                                           "before_utc":  "2026-08-20T22:00:00.000Z",
+                                                                                           "after_utc":  "2026-08-21T20:55:00.000Z",
+                                                                                           "before_utc":  "2026-08-23T22:00:00.000Z",
+                                                                                           "missing_bars":  588
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-24T20:55:00.000Z",
+                                                                                           "before_utc":  "2026-08-24T22:00:00.000Z",
                                                                                            "missing_bars":  12
                                                                                        }
                                                                                    ],
                                                                           "features":  {
-                                                                                           "latest_close":  29395.75,
-                                                                                           "change":  0.5,
-                                                                                           "return_bps":  0.1700955086280947,
-                                                                                           "true_range":  10.25,
-                                                                                           "average_true_range_14":  19.571428571428573,
-                                                                                           "realized_volatility_20_bps":  4.603052594325455,
-                                                                                           "rolling_vwap_20":  29409.598581949696,
-                                                                                           "distance_from_rolling_vwap_20_bps":  -4.708864662367756,
-                                                                                           "ema_20":  29399.59697455774,
-                                                                                           "ema_50":  29398.034035349672,
-                                                                                           "ema_200":  29406.373541586883,
-                                                                                           "distance_from_ema_20_bps":  -1.3085126850778699,
-                                                                                           "distance_from_ema_50_bps":  -0.7769347252696408,
-                                                                                           "distance_from_ema_200_bps":  -3.6126663397848997,
-                                                                                           "ema_20_slope_bps":  -0.13773628022278436,
-                                                                                           "ema_50_slope_bps":  -0.03171152087732891,
-                                                                                           "ema_200_slope_bps":  -0.03630807259195604,
-                                                                                           "range_position_20":  0.21065989847715735,
-                                                                                           "close_location":  0.43902439024390244,
-                                                                                           "body_fraction":  0.024390243902439025,
-                                                                                           "upper_wick_fraction":  0.5365853658536586,
-                                                                                           "lower_wick_fraction":  0.43902439024390244,
-                                                                                           "volume_z_score_20":  -1.453756049382539,
-                                                                                           "progress_adjusted_volume_z_score_20":  -0.9689307016524226
+                                                                                           "latest_close":  29136.25,
+                                                                                           "change":  -1.5,
+                                                                                           "return_bps":  -0.5147960978455783,
+                                                                                           "true_range":  19,
+                                                                                           "average_true_range_14":  29.928571428571427,
+                                                                                           "realized_volatility_20_bps":  5.914828877747784,
+                                                                                           "rolling_vwap_20":  29085.568388078544,
+                                                                                           "distance_from_rolling_vwap_20_bps":  17.425003096116043,
+                                                                                           "ema_20":  29107.70236355196,
+                                                                                           "ema_50":  29110.4991397826,
+                                                                                           "ema_200":  29160.52874629103,
+                                                                                           "distance_from_ema_20_bps":  9.807588414736912,
+                                                                                           "distance_from_ema_50_bps":  8.845901299647297,
+                                                                                           "distance_from_ema_200_bps":  -8.325893711415995,
+                                                                                           "ema_20_slope_bps":  1.0324843192489288,
+                                                                                           "ema_50_slope_bps":  0.36107023260459314,
+                                                                                           "ema_200_slope_bps":  -0.08367662354924485,
+                                                                                           "range_position_20":  0.9299610894941635,
+                                                                                           "close_location":  0.8157894736842105,
+                                                                                           "body_fraction":  0.13157894736842105,
+                                                                                           "upper_wick_fraction":  0.05263157894736842,
+                                                                                           "lower_wick_fraction":  0.8157894736842105,
+                                                                                           "volume_z_score_20":  -1.279421803964701,
+                                                                                           "progress_adjusted_volume_z_score_20":  -0.9933102170466058
                                                                                        }
                                                                       },
                                                                       {
@@ -308,34 +317,29 @@
                                                                           "bars_received":  501,
                                                                           "bars_accepted":  501,
                                                                           "rejected_bars":  0,
-                                                                          "latest_bar_utc":  "2026-08-21T17:30:00.000Z",
+                                                                          "latest_bar_utc":  "2026-08-25T01:00:00.000Z",
                                                                           "latest_bar_partial":  true,
                                                                           "current_partial_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:30:00.000Z",
-                                                                                                      "open":  29396,
-                                                                                                      "high":  29401.5,
-                                                                                                      "low":  29391.25,
-                                                                                                      "close":  29395.75,
-                                                                                                      "volume":  3740
+                                                                                                      "timestamp":  "2026-08-25T01:00:00.000Z",
+                                                                                                      "open":  29128,
+                                                                                                      "high":  29141.5,
+                                                                                                      "low":  29113.25,
+                                                                                                      "close":  29136.25,
+                                                                                                      "volume":  12586
                                                                                                   },
                                                                           "prior_completed_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:15:00.000Z",
-                                                                                                      "open":  29408,
-                                                                                                      "high":  29410.5,
-                                                                                                      "low":  29375,
-                                                                                                      "close":  29395.25,
-                                                                                                      "volume":  27356
+                                                                                                      "timestamp":  "2026-08-25T00:45:00.000Z",
+                                                                                                      "open":  29124.25,
+                                                                                                      "high":  29145.25,
+                                                                                                      "low":  29106,
+                                                                                                      "close":  29126.75,
+                                                                                                      "volume":  14447
                                                                                                   },
-                                                                          "partial_progress":  0.18459111111111112,
+                                                                          "partial_progress":  0.9242422222222222,
                                                                           "bar_identity_issues":  [
 
                                                                                                   ],
                                                                           "gaps":  [
-                                                                                       {
-                                                                                           "after_utc":  "2026-08-14T20:45:00.000Z",
-                                                                                           "before_utc":  "2026-08-16T22:00:00.000Z",
-                                                                                           "missing_bars":  196
-                                                                                       },
                                                                                        {
                                                                                            "after_utc":  "2026-08-17T20:45:00.000Z",
                                                                                            "before_utc":  "2026-08-17T22:00:00.000Z",
@@ -355,33 +359,43 @@
                                                                                            "after_utc":  "2026-08-20T20:45:00.000Z",
                                                                                            "before_utc":  "2026-08-20T22:00:00.000Z",
                                                                                            "missing_bars":  4
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-21T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-23T22:00:00.000Z",
+                                                                                           "missing_bars":  196
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-24T20:45:00.000Z",
+                                                                                           "before_utc":  "2026-08-24T22:00:00.000Z",
+                                                                                           "missing_bars":  4
                                                                                        }
                                                                                    ],
                                                                           "features":  {
-                                                                                           "latest_close":  29395.75,
-                                                                                           "change":  0.5,
-                                                                                           "return_bps":  0.1700955086280947,
-                                                                                           "true_range":  10.25,
-                                                                                           "average_true_range_14":  50.857142857142854,
-                                                                                           "realized_volatility_20_bps":  14.905833205849678,
-                                                                                           "rolling_vwap_20":  29355.26066120862,
-                                                                                           "distance_from_rolling_vwap_20_bps":  13.792873195258085,
-                                                                                           "ema_20":  29402.34714947031,
-                                                                                           "ema_50":  29405.820624351185,
-                                                                                           "ema_200":  29470.71709093305,
-                                                                                           "distance_from_ema_20_bps":  -2.2437492615042993,
-                                                                                           "distance_from_ema_50_bps":  -3.4247044079584024,
-                                                                                           "distance_from_ema_200_bps":  -25.437823824148904,
-                                                                                           "ema_20_slope_bps":  -0.2361785546266945,
-                                                                                           "ema_50_slope_bps":  -0.1397818994604245,
-                                                                                           "ema_200_slope_bps":  -0.2556499849871026,
-                                                                                           "range_position_20":  0.5598086124401914,
-                                                                                           "close_location":  0.43902439024390244,
-                                                                                           "body_fraction":  0.024390243902439025,
-                                                                                           "upper_wick_fraction":  0.5365853658536586,
-                                                                                           "lower_wick_fraction":  0.43902439024390244,
-                                                                                           "volume_z_score_20":  -1.3765697916590434,
-                                                                                           "progress_adjusted_volume_z_score_20":  -1.0248884483332856
+                                                                                           "latest_close":  29136.25,
+                                                                                           "change":  9.5,
+                                                                                           "return_bps":  3.2616065987451397,
+                                                                                           "true_range":  28.25,
+                                                                                           "average_true_range_14":  34.285714285714285,
+                                                                                           "realized_volatility_20_bps":  8.071633622013186,
+                                                                                           "rolling_vwap_20":  29110.762247126466,
+                                                                                           "distance_from_rolling_vwap_20_bps":  8.755439880675093,
+                                                                                           "ema_20":  29115.662530963487,
+                                                                                           "ema_50":  29142.476436009867,
+                                                                                           "ema_200":  29282.11482470752,
+                                                                                           "distance_from_ema_20_bps":  7.070925834031281,
+                                                                                           "distance_from_ema_50_bps":  -2.13655007100678,
+                                                                                           "distance_from_ema_200_bps":  -49.81362363364702,
+                                                                                           "ema_20_slope_bps":  0.7443633860910859,
+                                                                                           "ema_50_slope_bps":  -0.08720536486365449,
+                                                                                           "ema_200_slope_bps":  -0.5006143707741916,
+                                                                                           "range_position_20":  0.7648,
+                                                                                           "close_location":  0.8141592920353983,
+                                                                                           "body_fraction":  0.2920353982300885,
+                                                                                           "upper_wick_fraction":  0.18584070796460178,
+                                                                                           "lower_wick_fraction":  0.5221238938053098,
+                                                                                           "volume_z_score_20":  -0.20684928743252387,
+                                                                                           "progress_adjusted_volume_z_score_20":  -0.13643426474124742
                                                                                        }
                                                                       },
                                                                       {
@@ -389,34 +403,29 @@
                                                                           "bars_received":  501,
                                                                           "bars_accepted":  501,
                                                                           "rejected_bars":  0,
-                                                                          "latest_bar_utc":  "2026-08-21T17:00:00.000Z",
+                                                                          "latest_bar_utc":  "2026-08-25T01:00:00.000Z",
                                                                           "latest_bar_partial":  true,
                                                                           "current_partial_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T17:00:00.000Z",
-                                                                                                      "open":  29412,
-                                                                                                      "high":  29423.75,
-                                                                                                      "low":  29375,
-                                                                                                      "close":  29395.75,
-                                                                                                      "volume":  55874
+                                                                                                      "timestamp":  "2026-08-25T01:00:00.000Z",
+                                                                                                      "open":  29128,
+                                                                                                      "high":  29141.5,
+                                                                                                      "low":  29113.25,
+                                                                                                      "close":  29136.25,
+                                                                                                      "volume":  12586
                                                                                                   },
                                                                           "prior_completed_bar":  {
-                                                                                                      "timestamp":  "2026-08-21T16:00:00.000Z",
-                                                                                                      "open":  29443.25,
-                                                                                                      "high":  29454.5,
-                                                                                                      "low":  29380.5,
-                                                                                                      "close":  29412.25,
-                                                                                                      "volume":  161750
+                                                                                                      "timestamp":  "2026-08-25T00:00:00.000Z",
+                                                                                                      "open":  29095.75,
+                                                                                                      "high":  29145.25,
+                                                                                                      "low":  29016.75,
+                                                                                                      "close":  29126.75,
+                                                                                                      "volume":  82645
                                                                                                   },
-                                                                          "partial_progress":  0.5461477777777778,
+                                                                          "partial_progress":  0.23106055555555555,
                                                                           "bar_identity_issues":  [
 
                                                                                                   ],
                                                                           "gaps":  [
-                                                                                       {
-                                                                                           "after_utc":  "2026-07-23T20:00:00.000Z",
-                                                                                           "before_utc":  "2026-07-23T22:00:00.000Z",
-                                                                                           "missing_bars":  1
-                                                                                       },
                                                                                        {
                                                                                            "after_utc":  "2026-07-24T20:00:00.000Z",
                                                                                            "before_utc":  "2026-07-26T22:00:00.000Z",
@@ -516,116 +525,126 @@
                                                                                            "after_utc":  "2026-08-20T20:00:00.000Z",
                                                                                            "before_utc":  "2026-08-20T22:00:00.000Z",
                                                                                            "missing_bars":  1
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-21T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-23T22:00:00.000Z",
+                                                                                           "missing_bars":  49
+                                                                                       },
+                                                                                       {
+                                                                                           "after_utc":  "2026-08-24T20:00:00.000Z",
+                                                                                           "before_utc":  "2026-08-24T22:00:00.000Z",
+                                                                                           "missing_bars":  1
                                                                                        }
                                                                                    ],
                                                                           "features":  {
-                                                                                           "latest_close":  29395.75,
-                                                                                           "change":  -16.5,
-                                                                                           "return_bps":  -5.609907436527297,
-                                                                                           "true_range":  48.75,
-                                                                                           "average_true_range_14":  87.82142857142857,
-                                                                                           "realized_volatility_20_bps":  19.75924730670999,
-                                                                                           "rolling_vwap_20":  29372.588746555855,
-                                                                                           "distance_from_rolling_vwap_20_bps":  7.885329292556993,
-                                                                                           "ema_20":  29409.809836992383,
-                                                                                           "ema_50":  29468.021008317857,
-                                                                                           "ema_200":  29629.84441643084,
-                                                                                           "distance_from_ema_20_bps":  -4.780662326724045,
-                                                                                           "distance_from_ema_50_bps":  -24.5252330644998,
-                                                                                           "distance_from_ema_200_bps":  -79.00629282448224,
-                                                                                           "ema_20_slope_bps":  -0.503202290809939,
-                                                                                           "ema_50_slope_bps":  -1.0009297249391147,
-                                                                                           "ema_200_slope_bps":  -0.7939700498640426,
-                                                                                           "range_position_20":  0.5492957746478874,
-                                                                                           "close_location":  0.4256410256410256,
-                                                                                           "body_fraction":  0.3333333333333333,
-                                                                                           "upper_wick_fraction":  0.24102564102564103,
-                                                                                           "lower_wick_fraction":  0.4256410256410256,
-                                                                                           "volume_z_score_20":  -0.2950234891725733,
-                                                                                           "progress_adjusted_volume_z_score_20":  0.11096488091258813
+                                                                                           "latest_close":  29136.25,
+                                                                                           "change":  9.5,
+                                                                                           "return_bps":  3.2616065987451397,
+                                                                                           "true_range":  28.25,
+                                                                                           "average_true_range_14":  107.17857142857143,
+                                                                                           "realized_volatility_20_bps":  20.51647562905753,
+                                                                                           "rolling_vwap_20":  29124.864197134655,
+                                                                                           "distance_from_rolling_vwap_20_bps":  3.9093067656140477,
+                                                                                           "ema_20":  29169.480334392556,
+                                                                                           "ema_50":  29274.511056311665,
+                                                                                           "ema_200":  29511.455462372287,
+                                                                                           "distance_from_ema_20_bps":  -11.39215852034752,
+                                                                                           "distance_from_ema_50_bps":  -47.22915988100014,
+                                                                                           "distance_from_ema_200_bps":  -127.13892164711487,
+                                                                                           "ema_20_slope_bps":  -1.199030796364509,
+                                                                                           "ema_50_slope_bps":  -1.927349272338916,
+                                                                                           "ema_200_slope_bps":  -1.2776148561775085,
+                                                                                           "range_position_20":  0.5385714285714286,
+                                                                                           "close_location":  0.8141592920353983,
+                                                                                           "body_fraction":  0.2920353982300885,
+                                                                                           "upper_wick_fraction":  0.18584070796460178,
+                                                                                           "lower_wick_fraction":  0.5221238938053098,
+                                                                                           "volume_z_score_20":  -0.8992253318425424,
+                                                                                           "progress_adjusted_volume_z_score_20":  -0.532837975690942
                                                                                        }
                                                                       }
                                                                   ]
                                                }
                            },
     "order_flow":  {
-                       "last_attempt_utc":  "2026-08-21T17:33:16.657Z",
-                       "last_succeeded_utc":  "2026-08-21T17:33:16.657Z",
+                       "last_attempt_utc":  "2026-08-25T01:13:49.428Z",
+                       "last_succeeded_utc":  "2026-08-25T01:13:49.428Z",
                        "last_error":  null,
                        "observation":  {
                                            "schema_version":  "glitch.projectx.order_flow.v1",
-                                           "generated_utc":  "2026-08-21T17:33:16.657Z",
+                                           "generated_utc":  "2026-08-25T01:13:49.428Z",
                                            "source":  "projectx_market_evidence",
                                            "contract_id":  "CON.F.US.MNQ.U26",
-                                           "lookback_start_utc":  "2026-08-21T17:28:16.657Z",
-                                           "through_sequence":  3586703,
-                                           "events_read":  13263,
+                                           "lookback_start_utc":  "2026-08-25T01:08:49.428Z",
+                                           "through_sequence":  1266464,
+                                           "events_read":  12043,
                                            "truncated":  false,
                                            "source_complete":  true,
                                            "invalid_events":  0,
                                            "windows":  [
                                                            {
                                                                "window_seconds":  15,
-                                                               "start_utc":  "2026-08-21T17:33:01.657Z",
-                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
-                                                               "trade_count":  85,
-                                                               "total_volume":  89,
-                                                               "buy_volume":  44,
-                                                               "sell_volume":  45,
-                                                               "rolling_delta":  -1,
-                                                               "delta_ratio":  -0.011235955056179775,
-                                                               "average_trade_size":  1.0470588235294118,
-                                                               "max_trade_size":  4,
-                                                               "vwap":  29393.93820224719,
-                                                               "first_price":  29392.75,
-                                                               "last_price":  29391.5,
-                                                               "high_price":  29396.25,
-                                                               "low_price":  29391.5,
-                                                               "price_change":  -1.25,
-                                                               "price_change_bps":  -0.42527494024887086,
-                                                               "trades_per_second":  5.666666666666667
+                                                               "start_utc":  "2026-08-25T01:13:34.428Z",
+                                                               "end_utc":  "2026-08-25T01:13:49.428Z",
+                                                               "trade_count":  31,
+                                                               "total_volume":  34,
+                                                               "buy_volume":  5,
+                                                               "sell_volume":  29,
+                                                               "rolling_delta":  -24,
+                                                               "delta_ratio":  -0.7058823529411765,
+                                                               "average_trade_size":  1.096774193548387,
+                                                               "max_trade_size":  3,
+                                                               "vwap":  29130.96323529412,
+                                                               "first_price":  29132.5,
+                                                               "last_price":  29134.75,
+                                                               "high_price":  29134.75,
+                                                               "low_price":  29128.75,
+                                                               "price_change":  2.25,
+                                                               "price_change_bps":  0.7723333047283961,
+                                                               "trades_per_second":  2.066666666666667
                                                            },
                                                            {
                                                                "window_seconds":  60,
-                                                               "start_utc":  "2026-08-21T17:32:16.657Z",
-                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
-                                                               "trade_count":  167,
-                                                               "total_volume":  181,
-                                                               "buy_volume":  92,
-                                                               "sell_volume":  89,
-                                                               "rolling_delta":  3,
-                                                               "delta_ratio":  0.016574585635359115,
-                                                               "average_trade_size":  1.0838323353293413,
-                                                               "max_trade_size":  9,
-                                                               "vwap":  29393.580110497238,
-                                                               "first_price":  29395.5,
-                                                               "last_price":  29391.5,
-                                                               "high_price":  29396.25,
-                                                               "low_price":  29390.75,
-                                                               "price_change":  -4,
-                                                               "price_change_bps":  -1.36075249613036,
-                                                               "trades_per_second":  2.783333333333333
+                                                               "start_utc":  "2026-08-25T01:12:49.428Z",
+                                                               "end_utc":  "2026-08-25T01:13:49.428Z",
+                                                               "trade_count":  155,
+                                                               "total_volume":  188,
+                                                               "buy_volume":  104,
+                                                               "sell_volume":  84,
+                                                               "rolling_delta":  20,
+                                                               "delta_ratio":  0.10638297872340426,
+                                                               "average_trade_size":  1.2129032258064516,
+                                                               "max_trade_size":  5,
+                                                               "vwap":  29130.702127659573,
+                                                               "first_price":  29127,
+                                                               "last_price":  29134.75,
+                                                               "high_price":  29135,
+                                                               "low_price":  29123.25,
+                                                               "price_change":  7.75,
+                                                               "price_change_bps":  2.6607614927730285,
+                                                               "trades_per_second":  2.5833333333333335
                                                            },
                                                            {
                                                                "window_seconds":  300,
-                                                               "start_utc":  "2026-08-21T17:28:16.657Z",
-                                                               "end_utc":  "2026-08-21T17:33:16.657Z",
-                                                               "trade_count":  1702,
-                                                               "total_volume":  1784,
-                                                               "buy_volume":  904,
-                                                               "sell_volume":  880,
-                                                               "rolling_delta":  24,
-                                                               "delta_ratio":  0.013452914798206279,
-                                                               "average_trade_size":  1.0481786133960047,
-                                                               "max_trade_size":  10,
-                                                               "vwap":  29398.22701793722,
-                                                               "first_price":  29393.75,
-                                                               "last_price":  29391.5,
-                                                               "high_price":  29406.25,
-                                                               "low_price":  29390.75,
-                                                               "price_change":  -2.25,
-                                                               "price_change_bps":  -0.7654688496704231,
-                                                               "trades_per_second":  5.673333333333333
+                                                               "start_utc":  "2026-08-25T01:08:49.428Z",
+                                                               "end_utc":  "2026-08-25T01:13:49.428Z",
+                                                               "trade_count":  1256,
+                                                               "total_volume":  1373,
+                                                               "buy_volume":  708,
+                                                               "sell_volume":  665,
+                                                               "rolling_delta":  43,
+                                                               "delta_ratio":  0.031318281136198105,
+                                                               "average_trade_size":  1.0931528662420382,
+                                                               "max_trade_size":  15,
+                                                               "vwap":  29130.21176256373,
+                                                               "first_price":  29133.25,
+                                                               "last_price":  29134.75,
+                                                               "high_price":  29141.5,
+                                                               "low_price":  29121.25,
+                                                               "price_change":  1.5,
+                                                               "price_change_bps":  0.514875614632765,
+                                                               "trades_per_second":  4.1866666666666665
                                                            }
                                                        ],
                                            "depth":  {
@@ -634,81 +653,69 @@
                                                          "depth_levels_requested":  10,
                                                          "reconstruction_basis":  "since_latest_reset",
                                                          "book_complete":  false,
-                                                         "latest_reset_sequence":  3582944,
-                                                         "best_bid":  29391.5,
-                                                         "best_ask":  29392,
-                                                         "spread_ticks":  2,
-                                                         "bid_volume":  26,
-                                                         "ask_volume":  70,
-                                                         "imbalance_ratio":  -0.4583333333333333,
+                                                         "latest_reset_sequence":  1263970,
+                                                         "best_bid":  29134.5,
+                                                         "best_ask":  29135.25,
+                                                         "spread_ticks":  3,
+                                                         "bid_volume":  42,
+                                                         "ask_volume":  5,
+                                                         "imbalance_ratio":  0.7872340425531915,
                                                          "bid_levels":  [
                                                                             {
-                                                                                "price":  29391.5,
-                                                                                "current_volume":  8
+                                                                                "price":  29134.5,
+                                                                                "current_volume":  3
                                                                             },
                                                                             {
-                                                                                "price":  29391.25,
-                                                                                "current_volume":  7
+                                                                                "price":  29134.25,
+                                                                                "current_volume":  5
                                                                             },
                                                                             {
-                                                                                "price":  29391,
+                                                                                "price":  29134,
+                                                                                "current_volume":  1
+                                                                            },
+                                                                            {
+                                                                                "price":  29133.75,
+                                                                                "current_volume":  3
+                                                                            },
+                                                                            {
+                                                                                "price":  29133.5,
+                                                                                "current_volume":  3
+                                                                            },
+                                                                            {
+                                                                                "price":  29133.25,
                                                                                 "current_volume":  9
                                                                             },
                                                                             {
-                                                                                "price":  29390.75,
-                                                                                "current_volume":  2
+                                                                                "price":  29132.75,
+                                                                                "current_volume":  6
+                                                                            },
+                                                                            {
+                                                                                "price":  29132.25,
+                                                                                "current_volume":  4
+                                                                            },
+                                                                            {
+                                                                                "price":  29131.5,
+                                                                                "current_volume":  4
+                                                                            },
+                                                                            {
+                                                                                "price":  29131.25,
+                                                                                "current_volume":  4
                                                                             }
                                                                         ],
                                                          "ask_levels":  [
                                                                             {
-                                                                                "price":  29392,
-                                                                                "current_volume":  6
-                                                                            },
-                                                                            {
-                                                                                "price":  29392.5,
-                                                                                "current_volume":  4
-                                                                            },
-                                                                            {
-                                                                                "price":  29392.75,
-                                                                                "current_volume":  6
-                                                                            },
-                                                                            {
-                                                                                "price":  29393,
-                                                                                "current_volume":  12
-                                                                            },
-                                                                            {
-                                                                                "price":  29393.25,
-                                                                                "current_volume":  4
-                                                                            },
-                                                                            {
-                                                                                "price":  29393.5,
-                                                                                "current_volume":  6
-                                                                            },
-                                                                            {
-                                                                                "price":  29393.75,
-                                                                                "current_volume":  12
-                                                                            },
-                                                                            {
-                                                                                "price":  29394,
-                                                                                "current_volume":  4
-                                                                            },
-                                                                            {
-                                                                                "price":  29394.25,
-                                                                                "current_volume":  10
-                                                                            },
-                                                                            {
-                                                                                "price":  29395,
-                                                                                "current_volume":  6
+                                                                                "price":  29135.25,
+                                                                                "current_volume":  5
                                                                             }
                                                                         ],
-                                                         "depth_events_applied":  7796,
-                                                         "depth_events_ignored":  3765,
+                                                         "depth_events_applied":  8340,
+                                                         "depth_events_ignored":  2439,
                                                          "depth_events_invalid":  0
                                                      },
                                            "issues":  [
 
                                                       ],
-                                           "last_trade_utc":  "2026-08-21T17:33:16.564Z"
+                                           "last_trade_utc":  "2026-08-25T01:13:49.224Z"
                                        }
                    },
     "outcome_feed":  {
@@ -727,9 +734,9 @@
                                   }
                      },
     "execution_facts":  {
-                            "live":  1,
+                            "live":  67,
                             "superseded":  5,
-                            "high_water_sequence":  6
+                            "high_water_sequence":  72
                         },
     "event_ledger":  {
                          "pending":  0,
@@ -800,8 +807,8 @@
                               "auth_refresh_failures":  0,
                               "auth_degraded":  false,
                               "auth_refresh_in_flight":  false,
-                              "reconciliation_age_ms":  3596,
-                              "evidence_queue_depth":  253,
+                              "reconciliation_age_ms":  1980,
+                              "evidence_queue_depth":  0,
                               "evidence_queue_degraded":  false,
                               "rest_snapshot_cache_size":  4,
                               "rest_snapshot_cache_max":  4096,
@@ -810,5 +817,8 @@
                               "non_terminal_controls":  0,
                               "execution_recovery_blocking":  false,
                               "orphan_protective_orders":  0
-                          }
+                          },
+    "health_alerts":  [
+
+                      ]
 }

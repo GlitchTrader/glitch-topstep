@@ -1,0 +1,58 @@
+{
+  "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
+  "recorded_utc": "2026-08-25T01:10:42.134Z",
+  "gateway_commit": "847ed5c51632425de07a1399dd0bf2c5581d9a1b",
+  "proofs": [
+    {
+      "file": "tests/reaudit-fault-matrix.test.ts",
+      "sha256": "30903446ac12a383b701337e14d67c57994990d0e1737f37b74c521d7dd84da4"
+    },
+    {
+      "file": "tests/projectx-auth-manager.test.ts",
+      "sha256": "4fbb8f47860e531f2295f3b2702d98e3481bb1d9695583c8fcd512ead54768c9"
+    },
+    {
+      "file": "tests/reaudit-phase1.test.ts",
+      "sha256": "e053a0056d207ac58a22542ee4cc57177e0480b8fa763bd61b03b3497d30baeb"
+    },
+    {
+      "file": "tests/lifecycle-supervisor.test.ts",
+      "sha256": "5ed44cbbc3f6e33a47e0e4f4a4e0477221bf1bd8f32c8d45a981185c004d1195"
+    },
+    {
+      "file": "tests/flatten-workflow.test.ts",
+      "sha256": "9ff342a0d15ec97dc199220579ce628db816266b24fb03b48e12192d598c134a"
+    },
+    {
+      "file": "tests/kill-matrix.test.ts",
+      "sha256": "05daf7a97f92480aa5992a00e01446fb9e7f8d3bf791899d13ac817a64c4b80f"
+    },
+    {
+      "file": "tests/paired-release-manifest.test.ts",
+      "sha256": "b4bcece161ba7ef96a89829aad5d3dc7f6720b1fcf5fd8bb79f3aa790bacdb8b"
+    },
+    {
+      "file": "tests/projectx-client.test.ts",
+      "sha256": "3dd46452a0777b3fb12abe0785a1163a2cc4e8b2585a8c3a1fb64a97d52e4cfc"
+    },
+    {
+      "file": "tests/gateway-shutdown-deadline.test.ts",
+      "sha256": "b7b8e20043a7509717170137b76d0e2603438085b2cfb976290eb291996687d3"
+    },
+    {
+      "file": "tests/audit-wave-abc.test.ts",
+      "sha256": "95a3f6cf118c0e326e40f74bcf8c48e3b3d82fe93116c7b3aecd6ecb0a04229c"
+    },
+    {
+      "file": "scripts/rollback-rehearsal.mjs",
+      "sha256": "9b057b065e56dfe00b2db7fe359e7971ec951a0a89c85091281c094775d12376"
+    }
+  ],
+  "profile_commit": "b0ecbfdcf2dc6341ae87cd577ea4b3a05ef5331f",
+  "profile_proofs": [
+    {
+      "file": "tests/test_fault_injection.py",
+      "sha256": "a0a791bf168175c9acec815b9aad3a63e82700c1d99a6ec86c071b48cc245f8e"
+    }
+  ]
+}

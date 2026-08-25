@@ -28,7 +28,7 @@ const profileVersion = profileRoot
   : argument("profile-version");
 const profileManifest = profileRoot ? readFileSync(`${profileRoot}/SHA256SUMS`) : null;
 const promptVersion = profileRoot
-  ? /PROMPT_VERSION\s*=\s*["']([^"']+)/.exec(readFileSync(`${profileRoot}/scripts/distribution_manifest.py`, "utf8"))?.[1]
+  ? JSON.parse(readFileSync(`${profileRoot}/paired-contract.json`, "utf8")).profile.prompt_version
   : argument("prompt-version");
 if (!profileVersion || !promptVersion) throw new Error("profile_metadata_missing");
 const gatewayPairedContractPath = new URL("../release/paired-contract.json", import.meta.url);

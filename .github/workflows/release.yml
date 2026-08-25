@@ -82,7 +82,7 @@ jobs:
           git -C profile show-ref --verify --quiet refs/remotes/origin/main
           git -C profile merge-base --is-ancestor "$PROFILE_COMMIT" origin/main
           test "$PROFILE_VERSION" = "$(sed -n 's/^version: *["\x27]*\([^"\x27 ]*\).*/\1/p' profile/distribution.yaml)"
-          test "$PROMPT_VERSION" = "$(sed -n 's/^PROMPT_VERSION = ["\x27]*\([^"\x27]*\).*/\1/p' profile/scripts/distribution_manifest.py)"
+          test "$PROMPT_VERSION" = "$(node -p "JSON.parse(require('fs').readFileSync('profile/paired-contract.json','utf8')).profile.prompt_version")"
           test "$PROFILE_MANIFEST_SHA256" = "$(sha256sum profile/SHA256SUMS | cut -d ' ' -f1)"
           npm pack --pack-destination release
           npm sbom --sbom-format cyclonedx > release/gateway.cdx.json
