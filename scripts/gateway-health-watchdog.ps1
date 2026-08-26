@@ -49,16 +49,21 @@ function Get-Health {
     }
 }
 
-function Test-StreamDead {
+# Keep in sync with src/observability/gateway-watchdog-policy.ts (tests/gateway-watchdog-policy.test.ts).
+function Test-WatchdogRecoveryNeeded {
     param($Health)
     if ($null -eq $Health) { return $true }
+    if ([string]$Health.status -ne "degraded") { return $false }
     $issues = @($Health.data_quality.issues)
-    $streamDead = ($issues -contains "market_stream_disconnected") `
+    $streamStuck = ($issues -contains "market_stream_disconnected") `
         -or ($issues -contains "user_stream_disconnected") `
         -or ($issues -contains "market_stream_connecting") `
-        -or ($issues -contains "user_stream_connecting")
+        -or ($issues -contains "user_stream_connecting") `
+        -or ($issues -contains "market_stream_reconnecting") `
+        -or ($issues -contains "user_stream_reconnecting")
     $quoteStale = $issues -contains "quote_stale"
-    return ($Health.status -eq "degraded") -and $streamDead -and $quoteStale
+    $reconciliationStale = $issues -contains "reconciliation_not_current"
+    return $quoteStale -and ($streamStuck -or $reconciliationStale)
 }
 
 function Restart-GatewayProcess {
@@ -95,7 +100,7 @@ try {
     $token = Read-LocalToken
     $health = Get-Health -Token $token
     $now = [DateTimeOffset]::UtcNow
-    $dead = Test-StreamDead -Health $health
+    $dead = Test-WatchdogRecoveryNeeded -Health $health
 
     $state = @{
         schema_version = "glitch.topstep.gateway_watchdog.v1"

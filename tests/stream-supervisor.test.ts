@@ -81,7 +81,7 @@ describe("SignalR stream supervisor", () => {
     );
   });
 
-  it("forces stuck connecting/disconnected restart after the stuck window", () => {
+  it("forces stuck connecting/disconnected/reconnecting restart after the stuck window", () => {
     const nowMs = Date.parse("2026-08-24T15:10:00.000Z");
     assert.equal(
       shouldForceStuckStreamRestart({
@@ -97,6 +97,16 @@ describe("SignalR stream supervisor", () => {
       shouldForceStuckStreamRestart({
         stopped: false,
         streamState: "disconnected",
+        lastChangedAt: "2026-08-24T15:08:30.000Z",
+        nowMs,
+        stuckMs: DEFAULT_STUCK_STREAM_MS,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldForceStuckStreamRestart({
+        stopped: false,
+        streamState: "reconnecting",
         lastChangedAt: "2026-08-24T15:08:30.000Z",
         nowMs,
         stuckMs: DEFAULT_STUCK_STREAM_MS,

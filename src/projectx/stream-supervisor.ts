@@ -4,7 +4,7 @@ export const DEFAULT_STREAM_LIVENESS_MS = 15_000;
 /** Connected-but-silent quote/user event age before forcing a hub restart. */
 export const DEFAULT_HUB_START_TIMEOUT_MS = 45_000;
 /**
- * connecting/disconnected without progress past this age → force restartHub.
+ * connecting/disconnected/reconnecting without progress past this age → force restartHub.
  * Must exceed the longest reconnect sleep (60s) plus one start attempt.
  */
 export const DEFAULT_STUCK_STREAM_MS = 90_000;
@@ -56,7 +56,11 @@ export function shouldForceStuckStreamRestart(input: {
   if (input.stopped) {
     return false;
   }
-  if (input.streamState !== "connecting" && input.streamState !== "disconnected") {
+  if (
+    input.streamState !== "connecting"
+    && input.streamState !== "disconnected"
+    && input.streamState !== "reconnecting"
+  ) {
     return false;
   }
   if (!input.lastChangedAt) {
