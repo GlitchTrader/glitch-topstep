@@ -14,7 +14,7 @@ function baseIntent() {
     confidence: 0.5,
     snapshot_hash: "snapshot",
     model_version: "test",
-    prompt_version: "glitch-topstep-v15",
+    prompt_version: "glitch-topstep-v16",
     reason: "No edge.",
     decision_audit: {
       bull_case: "Limited bullish evidence.",

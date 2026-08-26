@@ -9,6 +9,10 @@ import type {
 import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
 import { validateScaleIn, type ScaleInAction } from "../ownership/scale-in.js";
 import { calculateRiskBudget } from "./mll.js";
+import {
+  resolveDecisionReferencePrice,
+  resolveExecutableReferencePrice,
+} from "../domain/entry-reference.js";
 
 export class RiskRejectedError extends Error {
   public readonly code: string;
@@ -162,20 +166,25 @@ export function validateEntryRisk(
   }
 
   const side = intent.action === "ENTER_LONG" ? "long" : "short";
-  const referencePrice = side === "long" ? snapshot.quote.bestAsk : snapshot.quote.bestBid;
+  const referencePrice = resolveExecutableReferencePrice(side, snapshot.quote);
+  const bandReferencePrice = resolveDecisionReferencePrice(snapshot.quote);
   if (
     intent.schemaVersion === "glitch.intent.v3"
     && (
       intent.entryPriceMin === undefined
       || intent.entryPriceMax === undefined
-      || referencePrice < intent.entryPriceMin
-      || referencePrice > intent.entryPriceMax
+      || bandReferencePrice === null
+      || bandReferencePrice < intent.entryPriceMin
+      || bandReferencePrice > intent.entryPriceMax
     )
   ) {
     throw new RiskRejectedError(
       "entry_range_superseded",
-      `reference=${referencePrice};range=${intent.entryPriceMin}-${intent.entryPriceMax}`,
+      `reference=${bandReferencePrice};range=${intent.entryPriceMin}-${intent.entryPriceMax}`,
     );
+  }
+  if (referencePrice === null) {
+    throw new RiskRejectedError("quote_missing");
   }
   const brackets = calculateBracketTicks(
     side,
