@@ -40,6 +40,15 @@ export function evaluateSnapshotDataQuality(
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
     }
+    if (
+      !Number.isFinite(snapshot.quote.bestBid)
+      || !Number.isFinite(snapshot.quote.bestAsk)
+      || snapshot.quote.bestBid <= 0
+      || snapshot.quote.bestAsk <= 0
+      || snapshot.quote.bestBid >= snapshot.quote.bestAsk
+    ) {
+      issues.add("quote_geometry_invalid");
+    }
   }
 
   if (stateAgeMs === null) {
