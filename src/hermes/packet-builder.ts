@@ -31,6 +31,10 @@ import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "../domain/operator.js";
+import {
+  buildEntryBandGuidance,
+  type EntryBandGuidance,
+} from "../domain/entry-reference.js";
 import { calculateRiskBudget } from "../risk/mll.js";
 import {
   evaluateSnapshotDataQuality,
@@ -197,6 +201,7 @@ export interface DirectDecisionPacket {
     } | null;
     tranches: TrancheView[];
   };
+  entry_band_guidance: EntryBandGuidance;
   required_output_template: Record<string, unknown>;
 }
 
@@ -714,6 +719,10 @@ export function buildDecisionPacket(
     quality,
     risk,
   );
+  const spreadTicks = quote
+    ? (quote.bestAsk - quote.bestBid) / snapshot.contract.tickSize
+    : null;
+  const entryBandGuidance = buildEntryBandGuidance(spreadTicks);
 
   return {
     schema_version: "glitch.direct.decision_packet.v2",
@@ -764,9 +773,7 @@ export function buildDecisionPacket(
       last: quote?.lastPrice ?? null,
       bid: quote?.bestBid ?? null,
       ask: quote?.bestAsk ?? null,
-      spread_ticks: quote
-        ? (quote.bestAsk - quote.bestBid) / snapshot.contract.tickSize
-        : null,
+      spread_ticks: spreadTicks,
       session_open: sessionLevels.session_open,
       session_high: sessionLevels.session_high,
       session_low: sessionLevels.session_low,
@@ -834,6 +841,7 @@ export function buildDecisionPacket(
       authority: "Hermes decides; Glitch verifies factual execution safety, translates orders, reconciles, journals, and protects",
     },
     protection,
+    entry_band_guidance: entryBandGuidance,
     required_output_template: {
       schema_version: "glitch.intent.v3",
       intent_id: "GENERATE_UUID",
@@ -849,8 +857,8 @@ export function buildDecisionPacket(
       scope_hash: decisionScope?.scopeHash ?? snapshotHash,
       scope_generation: decisionScope?.generation ?? snapshot.operational.generation,
       expires_utc: expiresUtc,
-      entry_price_min: quote?.bestBid ?? null,
-      entry_price_max: quote?.bestAsk ?? null,
+      entry_price_min: null,
+      entry_price_max: null,
       model_version: "CONFIGURED_MODEL",
       prompt_version: GLITCH_TOPSTEP_PROMPT_VERSION,
       reason: "Replace with a compact evidence-based reason.",

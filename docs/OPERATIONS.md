@@ -44,6 +44,8 @@ Before any armed test, prove:
 - reconnect resubscription works
 - no event gap is silently accepted
 - `/packet` remains stable until authoritative state changes
+- `entry_band_guidance` on decision packets is advisory (minimum band width in ticks); `required_output_template` no longer pre-fills bid/ask entry bounds
+- v3 entry band revalidation at admission uses decision reference (last/mid), not ask/bid alone; brackets still price from the executable side
 - malformed and wrong-account intents fail
 - valid entries are journaled as shadowed
 - stop-aware risk matches an independent spreadsheet

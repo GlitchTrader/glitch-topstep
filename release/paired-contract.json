@@ -13,16 +13,16 @@
   ],
   "gateway": {
     "name": "glitch-topstep",
-    "version": "0.2.2"
+    "version": "0.2.3"
   },
   "profile": {
     "name": "glitch-topstep",
-    "version": "0.2.5",
+    "version": "0.2.6",
     "setup_schema": "glitch.topstep.hermes.setup.v1",
     "operator_schema": "glitch.topstep.hermes.operator.v2",
-    "prompt_version": "glitch-topstep-v15",
+    "prompt_version": "glitch-topstep-v16",
     "min_gateway_version": "0.2.0",
-    "tested_gateway_version": "0.2.2",
+    "tested_gateway_version": "0.2.3",
     "hermes_requires": ">=0.18.2",
     "hermes_install_name": "glitch-topstep"
   },
@@ -36,6 +36,7 @@
     "restart_reconciliation",
     "intent_receipt_lookup",
     "bounded_entry_range_v1",
+    "entry_band_guidance_v1",
     "daily_capture_context_v1",
     "explicit_partial_completed_bars_v1",
     "revisioned_outcome_feed_v1",
