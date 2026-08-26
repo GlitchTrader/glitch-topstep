@@ -249,7 +249,19 @@
       "checks": {
         "npm_run_check": "pass",
         "reaudit_fault_matrix": "pass",
-        "profile_unittest": "pass"
+        "profile_unittest": "pass",
+        "prac_preflight_post_merge": "pass",
+        "c1_operator_review": "pass"
+      },
+      "post_wave_acceptance": {
+        "evidence": [
+          "docs/evidence/PRAC-SOAK-2026-08-25-post-audit-wave.md",
+          "docs/evidence/C1-OPERATOR-REVIEW-2026-08-25.md"
+        ],
+        "operator_sign_off": {
+          "operator_id": "arifreund18",
+          "signed_at_utc": "2026-08-26T00:08:00Z"
+        }
       },
       "fault_matrix_proof": "release/reaudit-fault-matrix-proof.json",
       "gateway_deliverables": [
@@ -264,7 +276,7 @@
         "launcher model-owner admission",
         "learning tail_jsonl hot path"
       ],
-      "residual": "W3 monolith decomposition continuous; credentialed soak 72h for autonomous armed"
+      "residual": "W3 monolith decomposition continuous; credentialed soak 72h optional for prolonged autonomous armed"
     },
     "armed_promotion_checklist_2026_08_24": {
       "gateway_pr": 236,

@@ -169,8 +169,8 @@ Fechar: GTHP-REAUDIT-01/02/04, TS-REAUDIT-02/08/10/11 conforme entregas acima.
 - [x] Testes C1–C4 verdes
 - [x] `npm run reaudit:fault-matrix` com SHAs atualizados
 - [x] Ledgers gateway + profile atualizados
-- [ ] PRAC preflight 6/6 pós-merge
-- [ ] Review operador de C1 (mutação ambígua)
+- [x] PRAC preflight 6/6 pós-merge (`docs/evidence/PRAC-SOAK-2026-08-25-post-audit-wave.md`)
+- [x] Review operador de C1 (mutação ambígua) (`docs/evidence/C1-OPERATOR-REVIEW-2026-08-25.md`)
 
 ---
 
