@@ -13,16 +13,16 @@
   ],
   "gateway": {
     "name": "glitch-topstep",
-    "version": "0.2.3"
+    "version": "0.2.4"
   },
   "profile": {
     "name": "glitch-topstep",
-    "version": "0.2.6",
+    "version": "0.2.7",
     "setup_schema": "glitch.topstep.hermes.setup.v1",
     "operator_schema": "glitch.topstep.hermes.operator.v2",
-    "prompt_version": "glitch-topstep-v16",
+    "prompt_version": "glitch-topstep-v17",
     "min_gateway_version": "0.2.0",
-    "tested_gateway_version": "0.2.3",
+    "tested_gateway_version": "0.2.4",
     "hermes_requires": ">=0.18.2",
     "hermes_install_name": "glitch-topstep"
   },

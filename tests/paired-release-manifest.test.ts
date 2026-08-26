@@ -33,7 +33,7 @@ test("paired release manifest requires evidence and marks human armed gate", asy
           .update(readFileSync(join(repoRoot, "release", "paired-contract.json")))
           .digest("hex"),
         "--prompt-version",
-        "glitch-topstep-v16",
+        "glitch-topstep-v17",
         "--evidence-ref",
         "docs/evidence/example-prac.md",
         "--output",
@@ -80,7 +80,7 @@ test("paired release manifest fails closed without evidence-ref", async () => {
             .update(readFileSync(join(repoRoot, "release", "paired-contract.json")))
             .digest("hex"),
           "--prompt-version",
-          "glitch-topstep-v16",
+          "glitch-topstep-v17",
           "--output",
           output,
         ],
