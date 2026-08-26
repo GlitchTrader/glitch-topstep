@@ -128,5 +128,21 @@ describe("snapshot data quality", () => {
     assert.equal(result.stateComplete, true);
     assert.equal(result.issues.length, 0);
   });
+
+  it("reports crossed BBO as quote_geometry_invalid", () => {
+    const crossed = snapshot();
+    crossed.quote = {
+      ...crossed.quote!,
+      bestBid: 29500,
+      bestAsk: 29419.5,
+    };
+    const result = evaluateSnapshotDataQuality(
+      crossed,
+      settings,
+      new Date("2026-07-21T12:00:05Z"),
+    );
+    assert.ok(result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.stateComplete, false);
+  });
 });
 

@@ -3,6 +3,8 @@ import { describe, it } from "node:test";
 import type { QuoteInfo } from "../src/domain/models.js";
 import {
   buildEntryBandGuidance,
+  computeSpreadTicks,
+  isExecutableQuoteGeometry,
   resolveDecisionReferencePrice,
   resolveExecutableReferencePrice,
 } from "../src/domain/entry-reference.js";
@@ -54,5 +56,26 @@ describe("entry-reference", () => {
     assert.equal(guidance.suggested_min_width_ticks, 3);
     assert.equal(guidance.spread_ticks, 1);
     assert.ok(guidance.notes.length >= 1);
+  });
+
+  it("returns unusable guidance for invalid spread", () => {
+    const guidance = buildEntryBandGuidance(-322);
+    assert.equal(guidance.suggested_min_width_ticks, null);
+    assert.equal(guidance.spread_ticks, null);
+    assert.match(guidance.notes[0] ?? "", /Unusable/);
+  });
+
+  it("does not mid from crossed BBO for decision reference without last", () => {
+    const price = resolveDecisionReferencePrice(quote({
+      lastPrice: 0,
+      bestBid: 29500,
+      bestAsk: 29419.5,
+    }));
+    assert.equal(price, 29419.5);
+  });
+
+  it("computeSpreadTicks returns null for crossed BBO", () => {
+    assert.equal(computeSpreadTicks(29500, 29419.5, 0.25), null);
+    assert.equal(isExecutableQuoteGeometry(29500, 29419.5), false);
   });
 });

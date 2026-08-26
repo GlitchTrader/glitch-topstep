@@ -33,6 +33,7 @@ import {
 } from "../domain/operator.js";
 import {
   buildEntryBandGuidance,
+  computeSpreadTicks,
   type EntryBandGuidance,
 } from "../domain/entry-reference.js";
 import { calculateRiskBudget } from "../risk/mll.js";
@@ -719,8 +720,8 @@ export function buildDecisionPacket(
     quality,
     risk,
   );
-  const spreadTicks = quote
-    ? (quote.bestAsk - quote.bestBid) / snapshot.contract.tickSize
+  const spreadTicks = quote && snapshot.contract.tickSize > 0
+    ? computeSpreadTicks(quote.bestBid, quote.bestAsk, snapshot.contract.tickSize)
     : null;
   const entryBandGuidance = buildEntryBandGuidance(spreadTicks);
 
