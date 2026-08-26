@@ -127,7 +127,7 @@ describe("TS-AUDIT-05 rearm latch regression", () => {
         confidence: 0.6,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v16",
+        promptVersion: "glitch-topstep-v17",
         reason: "Entry for partial rearm failure.",
         decisionAudit: {
           bullCase: "Bull.",
