@@ -241,6 +241,12 @@ Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle s
 2. Record gateway commit + profile commit in both release manifests.
 3. Keep `GlitchTopstep_Gateway` (node `start.ps1`) as the sole gateway process — Hermes `gateway run` tasks stay disabled.
 
+**Windows task hygiene**
+
+- **HTTP/trading:** only `GlitchTopstep_Gateway` (+ optional `GlitchTopstep_GatewayWatchdog`).
+- **Hermes cron scheduler** (not port 8790): one `glitch-topstep` Hermes gateway process for `hermes cron` ticks. Autostart via `Startup\Hermes_Gateway_glitch-topstep.vbs` (idempotent; reads `gateway.pid`).
+- Disable duplicate Task Scheduler entries: `powershell -ExecutionPolicy Bypass -File scripts/disable-hermes-gateway-scheduled-tasks.ps1` (elevated once). No-op stubs live under `%LOCALAPPDATA%\hermes\...\gateway-service\` for `Hermes_Gateway` and `Hermes_Gateway_glitch`.
+
 **Stream disconnect recovery**
 
 In-process: SignalR auto-reconnect + `restartHub` with a hub-start timeout; market quote silence and stuck `connecting`/`disconnected` hubs force restart after ~15s / ~90s.
