@@ -66,42 +66,76 @@ function sortedById<T extends { id: number | string }>(values: T[]): T[] {
 }
 
 /** One authoritative REST reconciliation cycle extracted from GlitchTopstepService.reconcile(). */
-export async function runReconciliationCycle(runtime: ReconciliationRuntime): Promise<void> {
+export async function runReconciliationCycle(
+  runtime: ReconciliationRuntime,
+  options?: { includeMetadata?: boolean },
+): Promise<void> {
+  const includeMetadata = options?.includeMetadata ?? true;
   runtime.state.markReconciliationStarted();
   const beforeOpen = runtime.state.buildSnapshot(
     runtime.scope.accountId,
     runtime.scope.contractId,
   ).instrumentOpenContracts;
   const openTranches = runtime.resolveClosedTranchesForFlat(beforeOpen);
-  const [accountsCol, positionsCol, ordersCol] = await Promise.all([
-    runtime.api.searchAccountsCollection(true),
-    runtime.api.searchOpenPositionsCollection(runtime.scope.accountId),
-    runtime.api.searchOpenOrdersCollection(runtime.scope.accountId),
-  ]);
-  const accounts = accountsCol.items;
-  const positions = positionsCol.items;
-  const orders = ordersCol.items;
+
+  let accounts: AccountInfo[];
+  let positions: PositionInfo[];
+  let orders: OrderInfo[];
+  let accountsEnvelope: unknown = null;
+  let positionsEnvelope: unknown = null;
+  let ordersEnvelope: unknown = null;
+
+  if (includeMetadata) {
+    const [accountsCol, positionsCol, ordersCol] = await Promise.all([
+      runtime.api.searchAccountsCollection(true),
+      runtime.api.searchOpenPositionsCollection(runtime.scope.accountId),
+      runtime.api.searchOpenOrdersCollection(runtime.scope.accountId),
+    ]);
+    accounts = accountsCol.items;
+    positions = positionsCol.items;
+    orders = ordersCol.items;
+    accountsEnvelope = accountsCol.envelope;
+    positionsEnvelope = positionsCol.envelope;
+    ordersEnvelope = ordersCol.envelope;
+  } else {
+    const [positionsCol, ordersCol] = await Promise.all([
+      runtime.api.searchOpenPositionsCollection(runtime.scope.accountId),
+      runtime.api.searchOpenOrdersCollection(runtime.scope.accountId),
+    ]);
+    positions = positionsCol.items;
+    orders = ordersCol.items;
+    positionsEnvelope = positionsCol.envelope;
+    ordersEnvelope = ordersCol.envelope;
+    const cachedAccount = runtime.state.accountInfo(runtime.scope.accountId);
+    if (!cachedAccount || cachedAccount.name !== runtime.scope.accountName) {
+      throw new Error("configured_account_disappeared_or_changed");
+    }
+    accounts = [cachedAccount];
+  }
+
   const account = accounts.find((candidate) => candidate.id === runtime.scope.accountId);
   if (!account || account.name !== runtime.scope.accountName) {
     throw new Error("configured_account_disappeared_or_changed");
   }
 
   const receivedAt = new Date().toISOString();
-  runtime.recordRestSnapshot(
-    "accounts_snapshot",
-    receivedAt,
-    sortedById(accounts),
-    runtime.scope.accountId,
-    null,
-    accountsCol.envelope,
-  );
+  if (includeMetadata) {
+    runtime.recordRestSnapshot(
+      "accounts_snapshot",
+      receivedAt,
+      sortedById(accounts),
+      runtime.scope.accountId,
+      null,
+      accountsEnvelope,
+    );
+  }
   runtime.recordRestSnapshot(
     "positions_snapshot",
     receivedAt,
     sortedById(positions),
     runtime.scope.accountId,
     runtime.scope.contractId,
-    positionsCol.envelope,
+    positionsEnvelope,
   );
   runtime.recordRestSnapshot(
     "open_orders_snapshot",
@@ -109,10 +143,12 @@ export async function runReconciliationCycle(runtime: ReconciliationRuntime): Pr
     sortedById(orders),
     runtime.scope.accountId,
     runtime.scope.contractId,
-    ordersCol.envelope,
+    ordersEnvelope,
   );
 
-  runtime.state.replaceAccounts(accounts, receivedAt);
+  if (includeMetadata) {
+    runtime.state.replaceAccounts(accounts, receivedAt);
+  }
   runtime.state.replacePositions(positions, receivedAt);
   runtime.state.replaceOrders(orders, receivedAt);
   runtime.state.markReconciliationSucceeded(receivedAt);

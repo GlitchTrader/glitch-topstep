@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildHealthAlerts } from "../src/observability/health-alerts.js";
 import { sanitizeForLog } from "../src/observability/log-sanitize.js";
-import { classifyProjectXError, isMutationPath, shouldRetryPost } from "../src/projectx/retry-policy.js";
+import { classifyProjectXError, isMutationPath, isTransportRetryableError, operationRetryDelayMs, parseRetryAfterMs, shouldRetryPost, shouldRetryRead } from "../src/projectx/retry-policy.js";
 import { ProjectXApiError } from "../src/projectx/client.js";
 
 describe("log sanitization", () => {
@@ -35,6 +35,24 @@ describe("retry policy", () => {
     assert.equal(isMutationPath("/api/Order/place"), true);
     assert.equal(shouldRetryPost("/api/Order/place", error, 0, 3), false);
     assert.equal(shouldRetryPost("/api/Account/search", error, 0, 3), true);
+  });
+
+  it("retries transport timeouts on idempotent reads", () => {
+    const timeout = new Error("The operation was aborted");
+    timeout.name = "TimeoutError";
+    assert.equal(isTransportRetryableError(timeout), true);
+    assert.equal(shouldRetryRead(timeout, 0, 3), true);
+    assert.equal(shouldRetryRead(timeout, 2, 3), false);
+  });
+
+  it("parses Retry-After seconds and dates", () => {
+    const headers = new Headers({ "Retry-After": "2" });
+    assert.equal(parseRetryAfterMs(headers), 2_000);
+    const future = new Date(Date.now() + 5_000).toUTCString();
+    const dateHeaders = new Headers({ "Retry-After": future });
+    const delay = parseRetryAfterMs(dateHeaders);
+    assert.ok(delay !== null && delay >= 4_000 && delay <= 6_000);
+    assert.equal(operationRetryDelayMs(0, 3_000), 3_000);
   });
 });
 

@@ -231,4 +231,27 @@ describe("venue state truth", () => {
     assert.equal(snapshot.instrumentOpenContracts, 1);
     assert.equal(snapshot.totalOpenContracts, 1);
   });
+
+  it("lastHubMarketEventAt is max quote trade depth without clearing quote_stale semantics", () => {
+    const state = readyState();
+    const quoteAt = "2026-07-21T12:00:00Z";
+    const tradeAt = "2026-07-21T12:00:05Z";
+    const depthAt = "2026-07-21T12:00:10Z";
+    state.applyQuote({
+      contractId: "MNQ",
+      symbol: "F.US.MNQ",
+      lastPrice: 20_010.25,
+      bestBid: 20_010,
+      bestAsk: 20_010.25,
+      open: 20_000,
+      high: 20_020,
+      low: 19_990,
+      volume: 1_000,
+      timestamp: quoteAt,
+    }, quoteAt);
+    state.markMarketTradeReceived("MNQ", tradeAt);
+    state.markMarketDepthReceived("MNQ", depthAt);
+    assert.equal(state.lastQuoteReceivedAt("MNQ"), quoteAt);
+    assert.equal(state.lastHubMarketEventAt("MNQ"), depthAt);
+  });
 });

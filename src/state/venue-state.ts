@@ -114,6 +114,9 @@ export class VenueStateStore {
   private readonly positions = new Map<number, Timed<PositionInfo>>();
   private readonly orders = new Map<number, Timed<OrderInfo>>();
   private readonly quotes = new Map<string, Timed<QuoteInfo>>();
+  /** Per-contract hub events for execution_quality vs hub_liveness (trade/depth timestamps). */
+  private readonly marketTradeReceivedAt = new Map<string, string>();
+  private readonly marketDepthReceivedAt = new Map<string, string>();
   private accountSnapshotLoaded = false;
   private positionSnapshotLoaded = false;
   private orderSnapshotLoaded = false;
@@ -194,6 +197,33 @@ export class VenueStateStore {
 
   public lastQuoteReceivedAt(contractId: string): string | null {
     return this.quotes.get(contractId)?.receivedAt ?? null;
+  }
+
+  public markMarketTradeReceived(contractId: string, receivedAt = nowUtc()): void {
+    this.marketTradeReceivedAt.set(contractId, receivedAt);
+  }
+
+  public markMarketDepthReceived(contractId: string, receivedAt = nowUtc()): void {
+    this.marketDepthReceivedAt.set(contractId, receivedAt);
+  }
+
+  public accountInfo(accountId: number): AccountInfo | null {
+    return this.accounts.get(accountId)?.value ?? null;
+  }
+
+  /** max(quote, trade, depth) for one contract — hub_liveness on primary; does not clear quote_stale. */
+  public lastHubMarketEventAt(contractId: string): string | null {
+    const candidates = [
+      this.quotes.get(contractId)?.receivedAt,
+      this.marketTradeReceivedAt.get(contractId),
+      this.marketDepthReceivedAt.get(contractId),
+    ].filter((value): value is string => value !== undefined);
+    if (candidates.length === 0) {
+      return null;
+    }
+    return candidates.reduce((latest, candidate) => (
+      candidate > latest ? candidate : latest
+    ));
   }
 
   public markStreamConnecting(kind: VenueStreamKind, at = nowUtc()): void {

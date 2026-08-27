@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-25T23:50:00Z",
+  "updated": "2026-08-27T19:55:00Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-24",
@@ -313,6 +313,17 @@
         "signed_at_utc": "2026-08-25T01:46:34.491Z"
       },
       "residual": "complete"
+    },
+    "stream_recovery_plan_2026_08_27": {
+      "plan": "docs/plans/2026-08-27-stream-recovery-implementation-plan.md",
+      "ledger_item": "TS-STREAM-RECOVERY-01",
+      "status": "in_progress",
+      "summary": "PR-A–E implemented 2026-08-27 (hub liveness, recovery controller, transport retry, serial reconnect, watchdog progress). 72h PRAC soak pending.",
+      "gateway_baseline": "13ffbf7",
+      "evidence": [
+        "data/projectx-evidence.sqlite",
+        "data/gateway-watchdog.log"
+      ]
     }
   },
   "authority": {
@@ -2142,6 +2153,48 @@
       "pull_request": 210,
       "implementation_note": "Armed promotion checklist complete 2026-08-24; paired-release-candidate run 32797244666; operator sign-off arifreund18 2026-08-25 on release/paired-release.json.",
       "last_verified_utc": "2026-08-25T01:46:34.491Z"
+    },
+    {
+      "id": "TS-STREAM-RECOVERY-01",
+      "title": "ProjectX stream recovery — hub liveness vs execution quality",
+      "status": "in_progress",
+      "priority": "P0",
+      "owner_role": "projectx_integration",
+      "depends_on": [
+        "TS-REAUDIT-12"
+      ],
+      "finding": "Gateway flapping degraded: ~1489 market_liveness_restart with depth/trade traffic; 15s quote-only liveness; overlapping SignalR restartHub + watchdog process kill; burst REST on reconnect. Not duplicate ProjectX clients on operator machine.",
+      "resolution": [
+        "Separate hub_liveness (any market event + SignalR state) from execution_quality (quote freshness, geometry, contract match).",
+        "Debounce liveness restarts; recovery_generation; HubRecoveryController per hub (market first).",
+        "Serial reconnect pipeline: resubscribe → reconcile → observation → history.",
+        "Transport-error retry with global deadline for idempotent reads; reconcile cheap cycle (positions/orders).",
+        "Health recovery progress fields; watchdog kills only on stale progress past deadline.",
+        "Scheduler and persistence optimization in follow-up PRs after 72h PRAC soak."
+      ],
+      "acceptance": [
+        "market_liveness_restart drops >80% in stable RTH over 24h after PR-A/B.",
+        "market_restart_failed ≈0 when any_market_event_recent.",
+        "Watchdog restarts <1/hour RTH outside maintenance; causes tagged in log.",
+        "/health p95 <500ms when status=ok.",
+        "ENTER gates unchanged: quote_stale and state_complete still block new exposure.",
+        "npm run check and reaudit fault matrix green.",
+        "72h PRAC soak evidence with session-conditioned metrics."
+      ],
+      "sources": [
+        "docs/plans/2026-08-27-stream-recovery-implementation-plan.md",
+        "src/projectx/stream-supervisor.ts",
+        "src/projectx/realtime.ts",
+        "src/observability/gateway-watchdog-policy.ts",
+        "scripts/gateway-health-watchdog.ps1",
+        "src/service.ts",
+        "src/projectx/client.ts",
+        "src/projectx/retry-policy.ts",
+        "data/projectx-evidence.sqlite",
+        "data/gateway-watchdog.log",
+        "https://gateway.docs.projectx.com/docs/realtime/"
+      ],
+      "implementation_note": "Plan authored 2026-08-27 from operational flap 2026-08-26 EDT + code audit. PR order: A hub/debounce → B recovery controller → C retry → D serial reconnect → E watchdog progress → soak 72h → F–H scheduler/persistence. Do not use GLITCH_STREAM_LIVENESS_MS=60000 in armed without controlled experiment. PR-A–E implemented 2026-08-27 locally; pending 72h PRAC soak for acceptance."
     }
   ],
   "reaudit_program_2026_08_20": {

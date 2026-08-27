@@ -29,14 +29,23 @@ import {
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
 import {
+  DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES,
   DEFAULT_HUB_START_TIMEOUT_MS,
   DEFAULT_STREAM_LIVENESS_MS,
   DEFAULT_STUCK_STREAM_MS,
+  isHubMarketEventStale,
+  livenessCheckIntervalMs,
   nextSignalRReconnectDelayMs,
   shouldForceMarketLivenessRestart,
   shouldForceStuckStreamRestart,
   shouldScheduleHubRestart,
 } from "./stream-supervisor.js";
+import { HubRecoveryController } from "./hub-recovery-controller.js";
+
+export interface ReconnectContext {
+  kind: VenueStreamKind;
+  generation: number;
+}
 
 export interface ProjectXRealtimeOptions {
   userHubUrl: string;
@@ -48,13 +57,14 @@ export interface ProjectXRealtimeOptions {
   depthContractIds?: readonly string[];
   evidence: ProviderEvidenceSink;
   logLevel?: number;
-  onReconnected?: () => void | Promise<void>;
+  onReconnected?: (context: ReconnectContext) => void | Promise<void>;
   onStateInvalidated?: () => void | Promise<void>;
   onBeforePositionApply?: (position: PositionInfo, receivedUtc: string) => void | Promise<void>;
   livenessMs?: number;
   stuckStreamMs?: number;
   hubStartTimeoutMs?: number;
   isMarketExpectedLive?: () => boolean;
+  marketRecovery?: HubRecoveryController;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   /** Test seam: lets a fake hub replace the SignalR transport without changing lifecycle wiring. */
@@ -90,6 +100,11 @@ export class ProjectXRealtimeClient {
     market: false,
   };
   private readonly restartAttempts: Record<VenueStreamKind, number> = {
+    user: 0,
+    market: 0,
+  };
+  private marketLivenessStaleChecks = 0;
+  private readonly recoveryGeneration: Record<VenueStreamKind, number> = {
     user: 0,
     market: 0,
   };
@@ -265,7 +280,9 @@ export class ProjectXRealtimeClient {
           providerEntityId: `${value.contractId}:${value.timestamp}`,
           providerTimestampUtc: value.timestamp,
         }),
-        () => undefined,
+        (value, receivedUtc) => {
+          this.state.markMarketTradeReceived(value.contractId, receivedUtc);
+        },
       );
     });
     this.marketConnection.on("GatewayDepth", (contractId: unknown, input: unknown) => {
@@ -295,7 +312,9 @@ export class ProjectXRealtimeClient {
             providerEntityId: `${value.contractId}:${value.timestamp}:${value.type}:${value.price}`,
             providerTimestampUtc: value.timestamp,
           }),
-          () => undefined,
+          (value, receivedUtc) => {
+            this.state.markMarketDepthReceived(value.contractId, receivedUtc);
+          },
         );
       }
     });
@@ -310,6 +329,14 @@ export class ProjectXRealtimeClient {
       try {
         this.recordLifecycle(kind, "reconnecting", error);
         this.state.markStreamReconnecting(kind, error ?? "signalr_reconnecting");
+        if (kind === "market" && this.options.marketRecovery) {
+          const atUtc = new Date().toISOString();
+          this.recoveryGeneration.market = this.options.marketRecovery.beginAttempt(
+            "market",
+            "reconnecting",
+            atUtc,
+          );
+        }
       } catch (recordError) {
         this.payloadFault(kind, recordError);
       }
@@ -317,12 +344,23 @@ export class ProjectXRealtimeClient {
     });
     connection.onreconnected(() => {
       void (async () => {
+        const generation = this.recoveryGeneration[kind];
         try {
+          if (kind === "market" && this.options.marketRecovery) {
+            this.options.marketRecovery.markProgress(
+              "resubscribing",
+              generation,
+              new Date().toISOString(),
+            );
+          }
           await subscribe();
           this.recordLifecycle(kind, "reconnected_and_subscribed");
           this.state.markStreamConnected(kind);
-          await this.options.onReconnected?.();
+          await this.options.onReconnected?.({ kind, generation });
         } catch (error) {
+          if (kind === "market" && this.options.marketRecovery) {
+            this.options.marketRecovery.fail(generation, new Date().toISOString());
+          }
           this.recordLifecycleSafely(kind, "reconnect_failed", error);
           this.state.markStreamDisconnected(kind, error);
           await this.options.onStateInvalidated?.();
@@ -352,7 +390,7 @@ export class ProjectXRealtimeClient {
     const livenessMs = this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS;
     this.livenessTimer = setInterval(() => {
       this.checkStreamLiveness();
-    }, Math.min(5_000, livenessMs));
+    }, livenessCheckIntervalMs(livenessMs));
     this.livenessTimer.unref();
   }
 
@@ -363,16 +401,31 @@ export class ProjectXRealtimeClient {
     const user = operational.userStream;
     const livenessMs = this.options.livenessMs ?? DEFAULT_STREAM_LIVENESS_MS;
     const stuckMs = this.options.stuckStreamMs ?? DEFAULT_STUCK_STREAM_MS;
+    const lastHubEventAt = market.lastEventAt;
+
+    if (isHubMarketEventStale({
+      lastHubEventAt,
+      connectedSinceUtc: market.lastChangedAt,
+      nowMs,
+      livenessMs,
+    })) {
+      this.marketLivenessStaleChecks += 1;
+    } else {
+      this.marketLivenessStaleChecks = 0;
+    }
 
     if (shouldForceMarketLivenessRestart({
       stopped: this.stopped,
       expectedLive: this.options.isMarketExpectedLive?.() ?? true,
       streamState: market.state,
-      lastEventAt: this.state.lastQuoteReceivedAt(this.options.contractId) ?? market.lastEventAt,
+      lastHubEventAt,
       connectedSinceUtc: market.lastChangedAt,
       nowMs,
       livenessMs,
+      consecutiveStaleChecks: this.marketLivenessStaleChecks,
+      debounceFailures: DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES,
     })) {
+      this.marketLivenessStaleChecks = 0;
       this.recordLifecycleSafely("market", "liveness_restart");
       void this.restartHub("market");
     } else if (shouldForceStuckStreamRestart({
@@ -429,6 +482,12 @@ export class ProjectXRealtimeClient {
       return;
     }
     this.restartInFlight[kind] = true;
+    const generation = kind === "market" && this.options.marketRecovery
+      ? this.options.marketRecovery.beginAttempt("market", "suspect", new Date().toISOString())
+      : this.recoveryGeneration[kind];
+    if (kind === "market" && this.options.marketRecovery) {
+      this.recoveryGeneration.market = generation;
+    }
     try {
       this.state.markStreamConnecting(kind);
       await connection.stop().catch(() => undefined);
@@ -436,6 +495,13 @@ export class ProjectXRealtimeClient {
       await withTimeout(
         (async () => {
           await connection.start();
+          if (kind === "market" && this.options.marketRecovery) {
+            this.options.marketRecovery.markProgress(
+              "resubscribing",
+              generation,
+              new Date().toISOString(),
+            );
+          }
           await subscribe();
         })(),
         hubStartTimeoutMs,
@@ -444,8 +510,11 @@ export class ProjectXRealtimeClient {
       this.recordLifecycle(kind, "reconnected_and_subscribed");
       this.state.markStreamConnected(kind);
       this.restartAttempts[kind] = 0;
-      await this.options.onReconnected?.();
+      await this.options.onReconnected?.({ kind, generation });
     } catch (error) {
+      if (kind === "market" && this.options.marketRecovery) {
+        this.options.marketRecovery.fail(generation, new Date().toISOString());
+      }
       this.recordLifecycleSafely(kind, "restart_failed", error);
       this.state.markStreamDisconnected(kind, error);
       retry = !this.stopped;
@@ -484,6 +553,9 @@ export class ProjectXRealtimeClient {
         apply: (value) => apply(value, receivedUtc),
       });
       this.state.markStreamEvent(kind);
+      if (kind === "market") {
+        this.marketLivenessStaleChecks = 0;
+      }
     } catch (error) {
       this.payloadFault(kind, error, kind === "user" ? { eventType, rawPayload } : undefined);
     }

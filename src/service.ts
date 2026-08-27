@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
-import type { OrderInfo, PositionInfo, AccountVenueSnapshot } from "./domain/models.js";
+import type { OrderInfo, PositionInfo, AccountVenueSnapshot, VenueStreamKind } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
 import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
@@ -18,6 +18,7 @@ import {
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
+import { HubRecoveryController } from "./projectx/hub-recovery-controller.js";
 import { resolveTopstepSession } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
@@ -87,6 +88,7 @@ const MARKET_OBSERVATION_LOOKBACK_MULTIPLIER = 3;
 const ORDER_FLOW_REFRESH_MS = 10_000;
 const ORDER_FLOW_MAX_EVENTS = 50_000;
 const ORDER_FLOW_DEPTH_LEVELS = 10;
+const RECONCILE_METADATA_INTERVAL_MS = 15 * 60 * 1000;
 
 export class GlitchTopstepService {
   private readonly authManager: ProjectXAuthManager;
@@ -127,6 +129,8 @@ export class GlitchTopstepService {
   private controlPaused = false;
   private runtimeTradingMode: TradingMode;
   private readonly lifecycle = new LifecycleSupervisor();
+  private readonly marketHubRecovery = new HubRecoveryController();
+  private lastMetadataReconcileAt: string | null = null;
   private readonly runtimeLock: RuntimeScopeLock;
   private stopping: Promise<void> | null = null;
   private starting: Promise<void> | null = null;
@@ -418,22 +422,14 @@ export class GlitchTopstepService {
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
         evidence: this.evidenceQueue,
-        onReconnected: async () => {
-          this.packets?.invalidateAll();
-          await Promise.all([
-            this.reconcile().catch((error: unknown) => {
-              console.error("ProjectX reconciliation failed after reconnect", error);
-            }),
-            this.historySync.sync(),
-            this.refreshMarketObservations(),
-            ...[...this.orderFlows.values()].map((service) => service.refresh()),
-          ]);
-          this.packets?.invalidateAll();
+        marketRecovery: this.marketHubRecovery,
+        onReconnected: async ({ kind, generation }) => {
+          await this.handleHubReconnected(kind, generation);
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
           try {
-            await this.reconcile();
+            await this.reconcile({ includeMetadata: false });
           } catch (error: unknown) {
             console.error("ProjectX reconciliation failed after state invalidation", error);
           }
@@ -452,7 +448,8 @@ export class GlitchTopstepService {
       this.realtime = null;
     }, { critical: true });
     try {
-      await this.reconcile();
+      await this.reconcile({ includeMetadata: true });
+      this.lastMetadataReconcileAt = new Date().toISOString();
     } catch (error: unknown) {
       console.error("ProjectX reconciliation failed during service start", error);
     }
@@ -624,6 +621,7 @@ export class GlitchTopstepService {
           safety_supervisor: safetySupervisor,
           invariant_metrics: invariantMetrics,
           health_alerts: buildHealthAlerts(invariantMetrics),
+          recovery: this.marketHubRecovery.snapshot(),
         };
       },
       snapshot,
@@ -1121,11 +1119,57 @@ export class GlitchTopstepService {
     }
   }
 
-  private async reconcile(): Promise<void> {
+  private async handleHubReconnected(kind: VenueStreamKind, generation: number): Promise<void> {
+    this.packets?.invalidateAll();
+    const recovery = this.marketHubRecovery;
+    if (kind === "market" && recovery.isStaleCallback(generation)) {
+      return;
+    }
+    const atUtc = new Date().toISOString();
+    if (kind === "market") {
+      recovery.markProgress("reconciling", generation, atUtc);
+    }
+    try {
+      if (kind === "market") {
+        await this.reconcile({ includeMetadata: false });
+        if (recovery.isStaleCallback(generation)) {
+          return;
+        }
+        await this.refreshMarketObservations();
+        for (const service of this.orderFlows.values()) {
+          await service.refresh();
+        }
+        if (recovery.isStaleCallback(generation)) {
+          return;
+        }
+        await this.historySync.sync();
+        recovery.complete(generation, new Date().toISOString());
+      } else {
+        await this.reconcile({ includeMetadata: false });
+      }
+    } catch (error: unknown) {
+      if (kind === "market") {
+        recovery.fail(generation, new Date().toISOString());
+      }
+      console.error("ProjectX recovery pipeline failed after reconnect", error);
+      throw error;
+    }
+    this.packets?.invalidateAll();
+  }
+
+  private shouldReconcileMetadata(): boolean {
+    if (!this.lastMetadataReconcileAt) {
+      return true;
+    }
+    return Date.now() - Date.parse(this.lastMetadataReconcileAt) >= RECONCILE_METADATA_INTERVAL_MS;
+  }
+
+  private async reconcile(options?: { includeMetadata?: boolean }): Promise<void> {
     if (this.reconciliationInFlight) {
       return;
     }
     this.reconciliationInFlight = true;
+    const includeMetadata = options?.includeMetadata ?? this.shouldReconcileMetadata();
     try {
       await runReconciliationCycle({
         scope: {
@@ -1161,7 +1205,10 @@ export class GlitchTopstepService {
         invalidateIssuedPackets: () => {
           this.packets?.invalidateAll();
         },
-      });
+      }, { includeMetadata });
+      if (includeMetadata) {
+        this.lastMetadataReconcileAt = new Date().toISOString();
+      }
       await this.completePendingFlattenControls();
     } catch (error) {
       this.state.markReconciliationFailed(error);
