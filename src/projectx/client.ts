@@ -16,7 +16,14 @@ import {
   parseTrade,
 } from "./schemas.js";
 import { readLimitedResponseText, ResponseTooLargeError } from "./response-limit.js";
-import { shouldRetryPost } from "./retry-policy.js";
+import { ReadCircuitBreaker } from "./read-circuit-breaker.js";
+import { RestConcurrencyGate } from "./rest-concurrency.js";
+import {
+  isMutationPath,
+  operationRetryDelayMs,
+  parseRetryAfterMs,
+  shouldRetryPost,
+} from "./retry-policy.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 
 export interface ProjectXClientOptions {
@@ -26,6 +33,10 @@ export interface ProjectXClientOptions {
   requestTimeoutMs?: number;
   /** ponytail: test-only override; production uses ProjectXApiClient default backoff */
   rateLimitRetryMs?: readonly number[];
+  maxConcurrentRest?: number;
+  readCircuitFailureThreshold?: number;
+  readCircuitCooldownMs?: number;
+  operationDeadlineMs?: number;
 }
 
 export interface PlaceOrderRequest {
@@ -67,6 +78,7 @@ export class ProjectXApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly status?: number,
+    public readonly retryAfterMs?: number | null,
   ) {
     super(message);
     this.name = "ProjectXApiError";
@@ -89,11 +101,24 @@ export class ProjectXApiClient {
   private token: string | null = null;
   private readonly requestTimeoutMs: number;
   private readonly rateLimitRetryMs: readonly number[];
+  private readonly operationDeadlineMs: number;
+  private readonly restGate: RestConcurrencyGate;
+  private readonly readCircuit: ReadCircuitBreaker;
   private static readonly defaultRateLimitRetryMs = [0, 5_000, 15_000, 30_000] as const;
+  private static readonly defaultMaxConcurrentRest = 4;
+  private static readonly defaultOperationDeadlineMs = 60_000;
 
   public constructor(private readonly options: ProjectXClientOptions) {
     this.requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
     this.rateLimitRetryMs = options.rateLimitRetryMs ?? ProjectXApiClient.defaultRateLimitRetryMs;
+    this.operationDeadlineMs = options.operationDeadlineMs ?? ProjectXApiClient.defaultOperationDeadlineMs;
+    this.restGate = new RestConcurrencyGate(
+      options.maxConcurrentRest ?? ProjectXApiClient.defaultMaxConcurrentRest,
+    );
+    this.readCircuit = new ReadCircuitBreaker(
+      options.readCircuitFailureThreshold,
+      options.readCircuitCooldownMs,
+    );
   }
 
   public get sessionToken(): string {
@@ -255,23 +280,33 @@ export class ProjectXApiClient {
   private async post(path: string, body: unknown, authenticated = true): Promise<unknown> {
     let lastError: unknown;
     const maxAttempts = Math.max(1, this.rateLimitRetryMs.length);
+    const startedMs = Date.now();
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (attempt > 0) {
-        const delayMs = this.rateLimitRetryMs[attempt]
-          ?? this.rateLimitRetryMs.at(-1)
-          ?? 30_000;
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      if (Date.now() - startedMs >= this.operationDeadlineMs) {
+        throw new ProjectXApiError(
+          "operation_deadline_exceeded",
+          `ProjectX ${path} exceeded operation deadline`,
+        );
       }
       try {
-        return await this.postOnce(path, body, authenticated);
+        return await this.restGate.run(() => this.postOnce(path, body, authenticated));
       } catch (error: unknown) {
         lastError = error;
+        if (!isMutationPath(path)) {
+          this.readCircuit.recordFailure(path);
+        }
         if (
-          error instanceof ProjectXApiError
-          && attempt < maxAttempts - 1
+          attempt < maxAttempts - 1
           && shouldRetryPost(path, error, attempt, maxAttempts)
         ) {
-          console.error(`ProjectX ${path} transient failure; retrying (${attempt + 1}): ${formatLogError(error)}`);
+          const retryAfterMs = error instanceof ProjectXApiError && error.status === 429
+            ? error.retryAfterMs ?? null
+            : null;
+          const delayMs = operationRetryDelayMs(attempt, retryAfterMs);
+          console.error(
+            `ProjectX ${path} transient failure; retrying in ${delayMs}ms (${attempt + 1}): ${formatLogError(error)}`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
         throw error;
@@ -281,6 +316,9 @@ export class ProjectXApiClient {
   }
 
   private async postOnce(path: string, body: unknown, authenticated = true): Promise<unknown> {
+    if (!isMutationPath(path)) {
+      this.readCircuit.assertAllows(path);
+    }
     const headers: Record<string, string> = {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -312,11 +350,18 @@ export class ProjectXApiClient {
       );
     }
     if (!response.ok) {
+      const retryAfterMs = response.status === 429
+        ? parseRetryAfterMs(response.headers)
+        : null;
       throw new ProjectXApiError(
         "http_error",
         `ProjectX ${path} failed with HTTP ${response.status}`,
         response.status,
+        retryAfterMs,
       );
+    }
+    if (!isMutationPath(path)) {
+      this.readCircuit.recordSuccess(path);
     }
     return payload;
   }

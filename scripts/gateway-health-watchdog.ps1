@@ -50,9 +50,18 @@ function Get-Health {
 }
 
 # Keep in sync with src/observability/gateway-watchdog-policy.ts (tests/gateway-watchdog-policy.test.ts).
-function Test-WatchdogRecoveryNeeded {
+function Test-RecoveryProgressFresh {
+    param($Recovery, $Now)
+    if ($null -eq $Recovery -or -not $Recovery.active) { return $false }
+    $progressAt = [string]$Recovery.last_progress_at
+    if (-not $progressAt) { return $false }
+    $progress = [DateTimeOffset]::Parse($progressAt)
+    $ageMs = ($Now - $progress).TotalMilliseconds
+    return ($ageMs -ge 0) -and ($ageMs -lt 300000)
+}
+
+function Test-BaseWatchdogRecoveryNeeded {
     param($Health)
-    if ($null -eq $Health) { return $true }
     if ([string]$Health.status -ne "degraded") { return $false }
     $issues = @($Health.data_quality.issues)
     $streamStuck = ($issues -contains "market_stream_disconnected") `
@@ -64,6 +73,51 @@ function Test-WatchdogRecoveryNeeded {
     $quoteStale = $issues -contains "quote_stale"
     $reconciliationStale = $issues -contains "reconciliation_not_current"
     return $quoteStale -and ($streamStuck -or $reconciliationStale)
+}
+
+function Get-WatchdogRestartCause {
+    param($Health)
+    if ($null -eq $Health) { return "health_unreachable" }
+    if (-not (Test-BaseWatchdogRecoveryNeeded -Health $Health)) { return "not_needed" }
+    $recovery = $Health.recovery
+    if ($null -ne $recovery -and $recovery.active) {
+        if (Test-RecoveryProgressFresh -Recovery $recovery -Now $now) {
+            return "recovery_progress_fresh"
+        }
+        $deadlineAt = [string]$recovery.deadline_at
+        if ($deadlineAt -and $now -lt [DateTimeOffset]::Parse($deadlineAt)) {
+            return "recovery_within_deadline"
+        }
+        return "recovery_stalled_past_deadline"
+    }
+    $issues = @($Health.data_quality.issues)
+    if (($issues -contains "quote_stale") -and (
+        ($issues -contains "market_stream_reconnecting") -or
+        ($issues -contains "user_stream_reconnecting") -or
+        ($issues -contains "market_stream_disconnected") -or
+        ($issues -contains "user_stream_disconnected") -or
+        ($issues -contains "market_stream_connecting") -or
+        ($issues -contains "user_stream_connecting"))) {
+        return "quote_stale_with_stream_stuck"
+    }
+    if (($issues -contains "quote_stale") -and ($issues -contains "reconciliation_not_current")) {
+        return "quote_stale_with_reconciliation_lag"
+    }
+    return "degraded_recovery_needed"
+}
+
+function Test-WatchdogRecoveryNeeded {
+    param($Health)
+    if ($null -eq $Health) { return $true }
+    if (-not (Test-BaseWatchdogRecoveryNeeded -Health $Health)) { return $false }
+    $recovery = $Health.recovery
+    if ($null -eq $recovery -or -not $recovery.active) { return $true }
+    if (Test-RecoveryProgressFresh -Recovery $recovery -Now ([DateTimeOffset]::UtcNow)) { return $false }
+    $deadlineAt = [string]$recovery.deadline_at
+    if ($deadlineAt -and ([DateTimeOffset]::UtcNow -lt [DateTimeOffset]::Parse($deadlineAt))) {
+        return $false
+    }
+    return $true
 }
 
 function Restart-GatewayProcess {
@@ -100,6 +154,7 @@ try {
     $token = Read-LocalToken
     $health = Get-Health -Token $token
     $now = [DateTimeOffset]::UtcNow
+    $cause = Get-WatchdogRestartCause -Health $health
     $dead = Test-WatchdogRecoveryNeeded -Health $health
 
     $state = @{
@@ -120,14 +175,14 @@ try {
         $state.first_dead_utc = $null
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
         $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
-        Write-WatchdogLog "ok status=$status"
+        Write-WatchdogLog "ok status=$status cause=$cause"
         exit 0
     }
 
     if (-not $state.first_dead_utc) {
         $state.first_dead_utc = $now.ToString("o")
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-        Write-WatchdogLog "degraded grace started at $($state.first_dead_utc)"
+        Write-WatchdogLog "degraded grace started at $($state.first_dead_utc) cause=$cause"
         exit 0
     }
 
@@ -135,11 +190,11 @@ try {
     $ageMinutes = ($now - $firstDead).TotalMinutes
     if ($ageMinutes -lt $DegradedGraceMinutes) {
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-        Write-WatchdogLog ("degraded {0:N1}m < grace {1}m" -f $ageMinutes, $DegradedGraceMinutes)
+        Write-WatchdogLog ("degraded {0:N1}m < grace {1}m cause={2}" -f $ageMinutes, $DegradedGraceMinutes, $cause)
         exit 0
     }
 
-    Write-WatchdogLog ("restarting after {0:N1}m degraded" -f $ageMinutes)
+    Write-WatchdogLog ("restarting after {0:N1}m degraded cause={1}" -f $ageMinutes, $cause)
     Restart-GatewayProcess
     $state.first_dead_utc = $null
     $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
