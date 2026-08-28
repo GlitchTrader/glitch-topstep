@@ -1297,8 +1297,8 @@
         "glitch-topstep-hermes-profile:GTHP-ENTRY-01",
         "https://github.com/GlitchTrader/glitch-topstep/issues/121"
       ],
-      "last_verified_utc": "2026-08-20T17:43:00Z",
-      "implementation_note": "Bounded entry range + entry_range_superseded + Hermes Entry01 fixtures (issue 105)."
+      "last_verified_utc": "2026-08-28T13:00:00Z",
+      "implementation_note": "Bounded entry range on wire (audit/EV). Delivery gates executable geometry via entry_geometry_invalid_at_latest_price; cognitive band breach allowed when stop/target remain valid (2026-08-28 advisory band)."
     },
     {
       "id": "TS-CTRL-01",

@@ -10,7 +10,6 @@ import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
 import { validateScaleIn, type ScaleInAction } from "../ownership/scale-in.js";
 import { calculateRiskBudget } from "./mll.js";
 import {
-  resolveDecisionReferencePrice,
   resolveExecutableReferencePrice,
 } from "../domain/entry-reference.js";
 
@@ -165,26 +164,28 @@ export function validateEntryRisk(
     throw new RiskRejectedError("target_not_tick_aligned");
   }
 
+  if (intent.schemaVersion === "glitch.intent.v3") {
+    if (intent.entryPriceMin === undefined || intent.entryPriceMax === undefined) {
+      throw new RiskRejectedError("entry_price_range_missing");
+    }
+    if (intent.entryPriceMin > intent.entryPriceMax) {
+      throw new RiskRejectedError("entry_price_range_invalid");
+    }
+  }
+
   const side = intent.action === "ENTER_LONG" ? "long" : "short";
   const referencePrice = resolveExecutableReferencePrice(side, snapshot.quote);
-  const bandReferencePrice = resolveDecisionReferencePrice(snapshot.quote);
-  if (
-    intent.schemaVersion === "glitch.intent.v3"
-    && (
-      intent.entryPriceMin === undefined
-      || intent.entryPriceMax === undefined
-      || bandReferencePrice === null
-      || bandReferencePrice < intent.entryPriceMin
-      || bandReferencePrice > intent.entryPriceMax
-    )
-  ) {
-    throw new RiskRejectedError(
-      "entry_range_superseded",
-      `reference=${bandReferencePrice};range=${intent.entryPriceMin}-${intent.entryPriceMax}`,
-    );
-  }
   if (referencePrice === null) {
     throw new RiskRejectedError("quote_missing");
+  }
+  const geometryOk = side === "long"
+    ? stopLoss < referencePrice && referencePrice < takeProfit
+    : takeProfit < referencePrice && referencePrice < stopLoss;
+  if (!geometryOk) {
+    throw new RiskRejectedError(
+      "entry_geometry_invalid_at_latest_price",
+      `reference=${referencePrice};stop=${stopLoss};target=${takeProfit}`,
+    );
   }
   const brackets = calculateBracketTicks(
     side,
