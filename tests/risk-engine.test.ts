@@ -70,6 +70,99 @@ const context = {
   now: new Date("2026-07-21T12:00:05Z"),
 };
 
+function intentV3(overrides: Partial<TradeIntent> = {}): TradeIntent {
+  return {
+    ...intent(),
+    schemaVersion: "glitch.intent.v3",
+    packetId: "pkt-0001",
+    contractId: "CON.F.US.MNQ.U26",
+    scopeHash: "scope-hash",
+    scopeGeneration: 1,
+    expiresUtc: "2026-07-21T12:05:00Z",
+    entryPriceMin: 19_990,
+    entryPriceMax: 20_010,
+    ...overrides,
+  };
+}
+
+const v3Context = {
+  ...context,
+  expectedPacketId: "pkt-0001",
+  expectedContractId: "CON.F.US.MNQ.U26",
+  expectedScopeHash: "scope-hash",
+  expectedScopeGeneration: 1,
+  armedMode: true,
+};
+
+describe("cognitive entry band advisory", () => {
+  it("allows v3 entry outside cognitive band when executable geometry is valid", () => {
+    const value = intentV3();
+    const live = snapshot();
+    live.quote = {
+      ...live.quote!,
+      lastPrice: 20_020,
+      bestBid: 20_019.75,
+      bestAsk: 20_020.25,
+    };
+    assert.doesNotThrow(() => validateEntryRisk(value, live, policy, settings, v3Context));
+  });
+
+  it("rejects v3 long when executable ask is above target", () => {
+    const value = intentV3();
+    const live = snapshot();
+    live.quote = {
+      ...live.quote!,
+      lastPrice: 20_050,
+      bestBid: 20_049.75,
+      bestAsk: 20_050.25,
+    };
+    assert.throws(
+      () => validateEntryRisk(value, live, policy, settings, v3Context),
+      (error: unknown) => error instanceof RiskRejectedError
+        && error.code === "entry_geometry_invalid_at_latest_price",
+    );
+  });
+
+  it("rejects v3 short when executable bid is below target", () => {
+    const value = intentV3({
+      action: "ENTER_SHORT",
+      decisionAudit: { ...intent().decisionAudit, finalChoice: "ENTER_SHORT" },
+      stopLoss: 20_030.25,
+      takeProfit1: 19_980.25,
+      entryPriceMin: 19_990,
+      entryPriceMax: 20_010,
+    });
+    const live = snapshot();
+    live.quote = {
+      ...live.quote!,
+      lastPrice: 19_960,
+      bestBid: 19_959.75,
+      bestAsk: 19_960.25,
+    };
+    assert.throws(
+      () => validateEntryRisk(value, live, policy, settings, v3Context),
+      (error: unknown) => error instanceof RiskRejectedError
+        && error.code === "entry_geometry_invalid_at_latest_price",
+    );
+  });
+
+  it("rejects v3 entry when cognitive band fields are missing", () => {
+    const value = intentV3({ entryPriceMin: undefined, entryPriceMax: undefined });
+    assert.throws(
+      () => validateEntryRisk(value, snapshot(), policy, settings, v3Context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "entry_price_range_missing",
+    );
+  });
+
+  it("rejects v3 entry when cognitive band is inverted", () => {
+    const value = intentV3({ entryPriceMin: 20_010, entryPriceMax: 19_990 });
+    assert.throws(
+      () => validateEntryRisk(value, snapshot(), policy, settings, v3Context),
+      (error: unknown) => error instanceof RiskRejectedError && error.code === "entry_price_range_invalid",
+    );
+  });
+});
+
 describe("factual execution safety", () => {
   it("computes protected risk without applying an arbitrary percentage budget", () => {
     const result = validateEntryRisk(intent(), snapshot(), policy, settings, context);
