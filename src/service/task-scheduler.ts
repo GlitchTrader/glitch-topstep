@@ -97,6 +97,16 @@ export class TaskScheduler {
    * already queued (not yet dispatched) is coalesced -- the new caller is handed the SAME
    * promise as the original request, and only one execution actually happens. A caller that
    * doesn't need the result (the periodic timers) can simply not await the returned promise.
+   *
+   * Deliberate design decision (raised in post-implementation review): coalescing only merges
+   * against a task still QUEUED, never one already RUNNING. A request for id "reconcile" that
+   * arrives while a "reconcile" is already in flight gets its own fresh queued task, which runs
+   * sequentially once the in-flight one finishes -- it does NOT share the in-flight run's result.
+   * This is intentional, not an oversight: the in-flight run started against state that may
+   * already be stale by the time the new request arrives (e.g. a fresh reconnect happening mid-
+   * reconcile), so handing the new caller a recycled stale result would be actively wrong for
+   * this class of REST-bound work. The cost is at most one extra sequential run per id, never a
+   * concurrent duplicate -- see "does not coalesce against an already-running task" below.
    */
   public enqueue<T = void>(
     priority: TaskPriority,

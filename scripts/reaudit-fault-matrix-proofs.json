@@ -16,6 +16,8 @@
     "tests/protection-supervisor.test.ts",
     "tests/read-circuit-breaker.test.ts",
     "tests/intent-delivery-status.test.ts",
+    "tests/sqlite-busy-fault.test.ts",
+    "tests/task-scheduler.test.ts",
     "scripts/rollback-rehearsal.mjs"
   ],
   "profile": {

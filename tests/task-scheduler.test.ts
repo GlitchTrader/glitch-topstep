@@ -190,6 +190,27 @@ describe("TaskScheduler (TS-STREAM-RECOVERY-01 PR-F)", () => {
     await assert.rejects(second, /shared failure/);
   });
 
+  it("does NOT coalesce against an already-running task -- a same-id request mid-run queues fresh and runs again after (deliberate, see class docs)", async () => {
+    const scheduler = new TaskScheduler({ maxConcurrent: 1 });
+    let runs = 0;
+    const firstGate = deferred();
+    const first = scheduler.enqueue("critical_reconcile", "reconcile", async () => {
+      runs += 1;
+      await firstGate.promise;
+      return "first-result";
+    });
+    // "reconcile" is now RUNNING, not queued -- this must NOT be coalesced with it.
+    const second = scheduler.enqueue("critical_reconcile", "reconcile", async () => {
+      runs += 1;
+      return "second-result";
+    });
+    firstGate.resolve();
+    const [firstValue, secondValue] = await Promise.all([first, second]);
+    assert.equal(runs, 2, "a request arriving while the same id is already running must run again, not reuse the stale in-flight result");
+    assert.equal(firstValue, "first-result");
+    assert.equal(secondValue, "second-result");
+  });
+
   it("counts reflect current state precisely", async () => {
     const scheduler = new TaskScheduler({ maxConcurrent: 1 });
     const gate = deferred();
