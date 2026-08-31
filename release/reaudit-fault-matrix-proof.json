@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-31T15:33:16.534Z",
-  "gateway_commit": "faae3729022468b8f451c095f90e6ed3bfc72698",
+  "recorded_utc": "2026-08-31T15:37:49.694Z",
+  "gateway_commit": "cf914a2b7f51e113b87c7c818fb16ff453029513",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
