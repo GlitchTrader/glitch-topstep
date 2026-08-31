@@ -63,7 +63,7 @@ import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "./domain/operator.js";
-import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
+import { LifecycleSupervisor, requiresShutdownRetention } from "./service/lifecycle-supervisor.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
@@ -705,10 +705,12 @@ export class GlitchTopstepService {
 
   private async stopSerial(): Promise<void> {
     this.lifecycle.transition("draining", "stop_requested");
+    let criticalFailedDisposers: readonly string[] = [];
     try {
       // Intents already queued must settle before the stores they write to close.
       await this.coordinator?.drainExecutionQueue();
       const drainResult = await this.lifecycle.drain("disposing_runtime_resources");
+      criticalFailedDisposers = drainResult.criticalFailed;
       if (drainResult.criticalFailed.length > 0) {
         throw new Error(`lifecycle_dispose_failed:${drainResult.criticalFailed.join(",")}`);
       }
@@ -731,11 +733,16 @@ export class GlitchTopstepService {
         "failed_shutdown",
         error instanceof Error ? error.message : String(error),
       );
-      if (!this.shouldRetainShutdownRecoveryState()) {
+      if (!requiresShutdownRetention(criticalFailedDisposers, this.shouldRetainShutdownRecoveryState())) {
         await this.closeStores().catch((cleanupError: unknown) => {
           console.error("shutdown cleanup failed", cleanupError);
         });
       } else {
+        if (criticalFailedDisposers.length > 0) {
+          console.error(
+            `shutdown_retained_critical_disposer_failed:${criticalFailedDisposers.join(",")}`,
+          );
+        }
         this.orderFlow?.close();
         this.orderFlow = null;
         this.gateway = null;

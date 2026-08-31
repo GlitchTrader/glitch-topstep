@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LifecycleSupervisor } from "../src/service/lifecycle-supervisor.js";
+import { LifecycleSupervisor, requiresShutdownRetention } from "../src/service/lifecycle-supervisor.js";
 
 test("startup rollback disposes registered resources in reverse order and parks in failed_startup", async () => {
   const supervisor = new LifecycleSupervisor();
@@ -77,4 +77,23 @@ test("critical disposer failure is surfaced separately (TS-REAUDIT-08)", async (
   assert.deepEqual(result.failed, ["realtime"]);
   assert.deepEqual(result.criticalFailed, ["realtime"]);
   assert.ok(supervisor.registeredNames().includes("realtime"));
+});
+
+test("requiresShutdownRetention retains on critical disposer failure even with an empty backlog (TS-REAUDIT-08)", () => {
+  // This is the exact gap that let closeStores() release the runtime lock and close stores
+  // while a critical disposer (e.g. realtime) still had a live writer: the retention decision
+  // only looked at durable backlog, never at whether a critical disposer actually failed.
+  assert.equal(requiresShutdownRetention(["realtime"], false), true);
+});
+
+test("requiresShutdownRetention retains on durable backlog even with no critical failure", () => {
+  assert.equal(requiresShutdownRetention([], true), true);
+});
+
+test("requiresShutdownRetention retains when both conditions hold", () => {
+  assert.equal(requiresShutdownRetention(["local_gateway"], true), true);
+});
+
+test("requiresShutdownRetention allows cleanup only when neither condition holds", () => {
+  assert.equal(requiresShutdownRetention([], false), false);
 });

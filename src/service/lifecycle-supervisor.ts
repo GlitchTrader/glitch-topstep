@@ -101,3 +101,17 @@ export class LifecycleSupervisor {
     return this.disposeAll();
   }
 }
+
+/**
+ * A critical disposer (e.g. realtime, local_gateway) that failed to unwind may still hold a live
+ * writer against the stores shutdown is about to close. That must retain recovery state — the
+ * runtime lock and store handles — regardless of whether the durable backlog is empty, otherwise
+ * closeStores() can release the lock and close SQLite under a writer that never actually stopped
+ * (TS-REAUDIT-08).
+ */
+export function requiresShutdownRetention(
+  criticalFailedDisposers: readonly string[],
+  backlogPending: boolean,
+): boolean {
+  return criticalFailedDisposers.length > 0 || backlogPending;
+}
