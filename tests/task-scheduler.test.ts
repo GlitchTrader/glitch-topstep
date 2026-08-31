@@ -106,13 +106,14 @@ describe("TaskScheduler (TS-STREAM-RECOVERY-01 PR-F)", () => {
   it("an isolated task failure does not block the queue, and is counted", async () => {
     const scheduler = new TaskScheduler({ maxConcurrent: 1, onError: () => {} });
     const order: string[] = [];
-    scheduler.enqueue("order_flow", "fails", async () => {
+    const failing = scheduler.enqueue("order_flow", "fails", async () => {
       order.push("fails");
       throw new Error("boom");
     });
     scheduler.enqueue("order_flow", "next", async () => {
       order.push("next");
     });
+    await assert.rejects(failing, /boom/);
     await scheduler.waitForIdle();
     assert.deepEqual(order, ["fails", "next"]);
     assert.equal(scheduler.counts().failed, 1);
@@ -133,6 +134,60 @@ describe("TaskScheduler (TS-STREAM-RECOVERY-01 PR-F)", () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
     gate.resolve();
     await idle;
+  });
+
+  it("coalesced callers all receive the same result", async () => {
+    const scheduler = new TaskScheduler({ maxConcurrent: 1 });
+    const occupyGate = deferred();
+    scheduler.enqueue("history_sync", "occupy", async () => {
+      await occupyGate.promise;
+    });
+    const first = scheduler.enqueue("history_sync", "shared", async () => "result-value");
+    const second = scheduler.enqueue("critical_reconcile", "shared", async () => "unreachable");
+    occupyGate.resolve();
+    const [firstValue, secondValue] = await Promise.all([first, second]);
+    assert.equal(firstValue, "result-value");
+    assert.equal(secondValue, "result-value", "both coalesced callers must see the one real run's result");
+  });
+
+  it("coalescing upgrades a queued task to the best priority any waiting caller requested", async () => {
+    const scheduler = new TaskScheduler({ maxConcurrent: 1 });
+    const order: string[] = [];
+    const occupyGate = deferred();
+    scheduler.enqueue("history_sync", "occupy", async () => {
+      await occupyGate.promise;
+    });
+    // Queued at the lowest priority first...
+    scheduler.enqueue("history_sync", "shared", async () => {
+      order.push("shared");
+    });
+    // ...then a second caller wants the same task at the highest priority. The recovery
+    // pipeline and a periodic timer both requesting "reconcile" is exactly this shape
+    // (TS-STREAM-RECOVERY-01 PR-F).
+    scheduler.enqueue("critical_reconcile", "shared", async () => {
+      order.push("shared");
+    });
+    scheduler.enqueue("market_observation", "other", async () => {
+      order.push("other");
+    });
+    occupyGate.resolve();
+    await scheduler.waitForIdle();
+    assert.deepEqual(order, ["shared", "other"], "the upgraded task must run before market_observation");
+  });
+
+  it("a coalesced task's failure rejects every waiting caller", async () => {
+    const scheduler = new TaskScheduler({ maxConcurrent: 1, onError: () => {} });
+    const occupyGate = deferred();
+    scheduler.enqueue("history_sync", "occupy", async () => {
+      await occupyGate.promise;
+    });
+    const first = scheduler.enqueue("history_sync", "shared", async () => {
+      throw new Error("shared failure");
+    });
+    const second = scheduler.enqueue("critical_reconcile", "shared", async () => "unreachable");
+    occupyGate.resolve();
+    await assert.rejects(first, /shared failure/);
+    await assert.rejects(second, /shared failure/);
   });
 
   it("counts reflect current state precisely", async () => {

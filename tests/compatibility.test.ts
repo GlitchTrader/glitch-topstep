@@ -12,7 +12,7 @@ describe("gateway compatibility contract", () => {
   it("matches the packaged gateway identity", () => {
     assert.equal(GATEWAY_COMPATIBILITY.gateway_name, packageJson.name);
     assert.equal(GATEWAY_COMPATIBILITY.gateway_version, packageJson.version);
-    assert.equal(GATEWAY_COMPATIBILITY.health_schema, "glitch.direct.health.v2");
+    assert.equal(GATEWAY_COMPATIBILITY.health_schema, "glitch.direct.health.v3");
   });
 
   it("names the profile-facing wire contracts and capabilities", () => {

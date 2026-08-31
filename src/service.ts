@@ -504,12 +504,16 @@ export class GlitchTopstepService {
     // stale packet already fails to resolve. Invalidating here only killed packets a client
     // was still holding.
     this.marketObservationTimer = setInterval(() => {
+      // The scheduler already logs failures via its onError handler; this timer doesn't need
+      // the result, but must still handle the returned promise's rejection itself or it becomes
+      // an unhandled rejection (a caller that DOES need the result, e.g. handleHubReconnected,
+      // awaits and catches this same task id normally).
       this.taskScheduler.enqueue(
         "market_observation",
         "market_observation",
         () => this.refreshMarketObservations(),
         MARKET_OBSERVATION_REFRESH_MS,
-      );
+      ).catch(() => undefined);
     }, MARKET_OBSERVATION_REFRESH_MS);
     this.marketObservationTimer.unref();
     this.lifecycle.register("market_observation_timer", () => {
@@ -519,7 +523,7 @@ export class GlitchTopstepService {
     this.orderFlowTimer = setInterval(() => {
       this.taskScheduler.enqueue("order_flow", "order_flow", async () => {
         await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
-      }, ORDER_FLOW_REFRESH_MS);
+      }, ORDER_FLOW_REFRESH_MS).catch(() => undefined);
     }, ORDER_FLOW_REFRESH_MS);
     this.orderFlowTimer.unref();
     this.lifecycle.register("order_flow_timer", () => {
@@ -607,7 +611,12 @@ export class GlitchTopstepService {
           now: recordedAt,
         });
         return {
-          schema_version: "glitch.direct.health.v2",
+          // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
+          // first_last_fired_utc/thresholds/runbook_url (alert_id replaces id); added
+          // task_scheduler, persistence_bytes, heap_used_bytes, health_build_ms. All additive
+          // except the health_alerts id->alert_id rename -- confirmed no consumer in the paired
+          // profile reads health_alerts today (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
+          schema_version: "glitch.direct.health.v3",
           compatibility: GATEWAY_COMPATIBILITY,
           status:
             quality.stateComplete
@@ -1177,21 +1186,49 @@ export class GlitchTopstepService {
     }
     try {
       if (kind === "market") {
-        await this.reconcile({ includeMetadata: false });
+        // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
+        // into this recovery run instead of firing a redundant duplicate REST call
+        // (TS-STREAM-RECOVERY-01 PR-F).
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "reconcile",
+          () => this.reconcile({ includeMetadata: false }),
+          this.config.reconcileIntervalMs,
+        );
         if (recovery.isStaleCallback(generation)) {
           return;
         }
-        await this.refreshMarketObservations();
-        for (const service of this.orderFlows.values()) {
-          await service.refresh();
-        }
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "market_observation",
+          () => this.refreshMarketObservations(),
+          MARKET_OBSERVATION_REFRESH_MS,
+        );
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "order_flow",
+          async () => {
+            await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
+          },
+          ORDER_FLOW_REFRESH_MS,
+        );
         if (recovery.isStaleCallback(generation)) {
           return;
         }
-        await this.historySync.sync();
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "history_sync",
+          () => this.historySync.sync(),
+          this.historySyncIntervalMs,
+        );
         recovery.complete(generation, new Date().toISOString());
       } else {
-        await this.reconcile({ includeMetadata: false });
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "reconcile",
+          () => this.reconcile({ includeMetadata: false }),
+          this.config.reconcileIntervalMs,
+        );
       }
     } catch (error: unknown) {
       if (kind === "market") {
