@@ -42,3 +42,28 @@ export function deriveIntentDeliveryState(input: {
   }
   return "registered";
 }
+
+export interface IntentReceiptResponse {
+  httpStatus: 200 | 404;
+  body: unknown;
+}
+
+/**
+ * A missing receipt does not mean the intent never happened -- only `not_seen` does. Any other
+ * delivery state (registered / mutation_inflight / ambiguous / terminal-without-a-persisted-
+ * receipt-object) must still surface as 200 with the delivery-status envelope, so a caller (the
+ * Hermes profile) cannot mistake "seen, not yet resolved" for "safe to discard" (TS-REAUDIT-04).
+ * A true 404 is reserved for intents this gateway has genuinely never registered.
+ */
+export function resolveIntentReceiptResponse(
+  receipt: unknown,
+  deliveryStatus: IntentDeliveryStatusV1,
+): IntentReceiptResponse {
+  if (receipt !== null && receipt !== undefined) {
+    return { httpStatus: 200, body: receipt };
+  }
+  if (deliveryStatus.status === "not_seen") {
+    return { httpStatus: 404, body: { error: "intent_receipt_not_found" } };
+  }
+  return { httpStatus: 200, body: deliveryStatus };
+}

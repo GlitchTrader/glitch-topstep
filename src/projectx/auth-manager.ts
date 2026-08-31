@@ -13,6 +13,23 @@ export interface ProjectXAuthStatus {
 export const PROJECTX_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 /** Refresh before expiry so concurrent callers never race a dead token (TS-REAUDIT-01). */
 export const PROJECTX_REFRESH_MARGIN_MS = 5 * 60 * 1000;
+/** Bounded backoff after a failed refresh/login so a persistent outage cannot turn every caller's
+ * ensureAuthenticated() into a tight retry loop against ProjectX's auth endpoint (TS-REAUDIT-01). */
+export const PROJECTX_AUTH_BACKOFF_BASE_MS = 1_000;
+export const PROJECTX_AUTH_BACKOFF_MAX_MS = 30_000;
+
+export function projectXAuthBackoffDelayMs(
+  failureCount: number,
+  random: () => number = Math.random,
+): number {
+  const exponent = Math.min(Math.max(failureCount, 1), 5);
+  const bounded = Math.min(
+    PROJECTX_AUTH_BACKOFF_BASE_MS * 2 ** (exponent - 1),
+    PROJECTX_AUTH_BACKOFF_MAX_MS,
+  );
+  const jitter = bounded * 0.25 * random();
+  return Math.round(bounded + jitter);
+}
 
 const AUTHENTICATED_READ_METHODS = new Set([
   "searchAccounts",
@@ -61,9 +78,17 @@ export class ProjectXAuthManager {
   private expiresAtUtc: string | null = null;
   private refreshInFlight: Promise<string> | null = null;
   private degraded = false;
+  /** Lifetime count surfaced via status()/invariant metrics -- never reset, diagnostic only. */
   private refreshFailureCount = 0;
+  /** Consecutive-failure streak driving backoff staging only; resets on any success. */
+  private consecutiveRefreshFailures = 0;
+  private nextRefreshAttemptAtMs = 0;
 
-  public constructor(options: ProjectXClientOptions) {
+  public constructor(
+    options: ProjectXClientOptions,
+    private readonly now: () => number = Date.now,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  ) {
     this.client = new ProjectXApiClient(options);
   }
 
@@ -148,6 +173,10 @@ export class ProjectXAuthManager {
   }
 
   private async refreshSession(): Promise<string> {
+    const waitMs = this.nextRefreshAttemptAtMs - this.now();
+    if (waitMs > 0) {
+      await this.sleep(waitMs);
+    }
     try {
       const hasToken = Boolean((this.client as unknown as { token: string | null }).token);
       const token = hasToken
@@ -161,10 +190,15 @@ export class ProjectXAuthManager {
         Date.parse(this.lastRefreshUtc) + PROJECTX_SESSION_TTL_MS,
       ).toISOString();
       this.degraded = false;
+      this.consecutiveRefreshFailures = 0;
+      this.nextRefreshAttemptAtMs = 0;
       return token;
     } catch (error: unknown) {
       this.degraded = true;
       this.refreshFailureCount += 1;
+      this.consecutiveRefreshFailures += 1;
+      this.nextRefreshAttemptAtMs = this.now()
+        + projectXAuthBackoffDelayMs(this.consecutiveRefreshFailures);
       throw error;
     }
   }

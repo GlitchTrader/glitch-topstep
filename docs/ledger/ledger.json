@@ -1689,7 +1689,7 @@
     {
       "id": "TS-REAUDIT-01",
       "title": "Wire one authoritative ProjectX auth session into the runtime",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "projectx_integration",
       "issue": 184,
@@ -1723,7 +1723,8 @@
       ],
       "pull_request": 210,
       "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100× concurrent refresh test.",
-      "audit_2026_08_31_note": "Re-verified 2026-08-31: single authoritative facade is confirmed done. grep across src/ shows the only `new ProjectXApiClient(` call site is auth-manager.ts:67; src/service.ts:146 consumes exclusively via `authManager.authenticatedClient()`; the 12h timer at src/service.ts:662-666 now calls `authManager.ensureAuthenticated()` (no separate raw client/validation timer remains). Proactive refresh margin (PROJECTX_REFRESH_MARGIN_MS=5min, auth-manager.ts:15,146) and single-flight refresh (auth-manager.ts:80-96, proven by tests/projectx-auth-manager.test.ts:76-88 100x concurrent test) are done. Safe-read retry-once-on-401/403 (withAuthenticatedRead) and no-blind-replay-on-mutation (withAuthenticatedMutation) are done. Auth-degraded new-exposure block is wired and authoritative (src/execution/gateway-mode.ts:143-144 newExposureGate fails closed on auth.degraded, not just safety-supervisor observe-only). Remaining scoped gap: auth-manager.ts refreshSession() has no bounded jittered backoff between refresh attempts (a single failed login/validateSession sets degraded=true and returns immediately; the next ensureAuthenticated() call retries with no delay/jitter) — the resolution list explicitly asked for 'bounded jittered backoff' and it is not present. Keeping open, scoped narrowly to adding backoff/jitter to auth-manager.ts refreshSession's retry path; everything else in the original finding and resolution list is resolved."
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: single authoritative facade is confirmed done. grep across src/ shows the only `new ProjectXApiClient(` call site is auth-manager.ts:67; src/service.ts:146 consumes exclusively via `authManager.authenticatedClient()`; the 12h timer at src/service.ts:662-666 now calls `authManager.ensureAuthenticated()` (no separate raw client/validation timer remains). Proactive refresh margin (PROJECTX_REFRESH_MARGIN_MS=5min, auth-manager.ts:15,146) and single-flight refresh (auth-manager.ts:80-96, proven by tests/projectx-auth-manager.test.ts:76-88 100x concurrent test) are done. Safe-read retry-once-on-401/403 (withAuthenticatedRead) and no-blind-replay-on-mutation (withAuthenticatedMutation) are done. Auth-degraded new-exposure block is wired and authoritative (src/execution/gateway-mode.ts:143-144 newExposureGate fails closed on auth.degraded, not just safety-supervisor observe-only). Remaining scoped gap: auth-manager.ts refreshSession() has no bounded jittered backoff between refresh attempts (a single failed login/validateSession sets degraded=true and returns immediately; the next ensureAuthenticated() call retries with no delay/jitter) — the resolution list explicitly asked for 'bounded jittered backoff' and it is not present. Keeping open, scoped narrowly to adding backoff/jitter to auth-manager.ts refreshSession's retry path; everything else in the original finding and resolution list is resolved.",
+      "closure_note": "Fixed 2026-08-31 (plano-completo Fase 2.7.3). The one remaining gap from the earlier re-verification (facade consolidation was already done) is closed: refreshSession() in src/projectx/auth-manager.ts now waits a bounded, jittered backoff (projectXAuthBackoffDelayMs: 1s base, doubling per consecutive failure, capped at 30s, +0-25% jitter) before retrying after a failed login/validate, so a persistent auth outage cannot turn every caller's ensureAuthenticated() into a tight retry loop against ProjectX's auth endpoint. Single-flight coalescing (refreshInFlight) is unchanged; no mutation retry is added; the lifetime refreshFailureCount surfaced in invariant_metrics.auth_refresh_failures is preserved across recovery (a separate consecutive-failure counter drives backoff staging, deliberately not conflated with the diagnostic lifetime count). Tests: tests/projectx-auth-manager.test.ts, backoff bounds/monotonicity and lifetime-count preservation through a real HTTP server. npm run check green, 516/516."
     },
     {
       "id": "TS-REAUDIT-02",
@@ -2243,7 +2244,7 @@
     {
       "id": "TS-AUDIT31-EX-02",
       "title": "REST reconciliation blind spot: searchOpen never returns status:8 bracket children",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "execution_safety",
       "finding": "openOrdersEvidence (src/ownership/projectx-order-ownership.ts:330-349) builds its authoritative order set purely from REST open_orders_snapshot (Order/searchOpen) history, which ProjectX never populates with status:8 (suspended bracket child) rows (confirmed: docs/PROJECTX-API-REFERENCE.md section 5.3, zero occurrences across the recorded dataset). Between order placement and entry fill, a freshly-allocated bracket is real (has orderId, parentOrderId, tick distance) but invisible to REST reconciliation — only the SignalR stream sees it in that window. A process restart or stream loss during that window makes protection state genuinely unknowable via REST alone. Currently bounded to ~8ms because entries are MARKET-only (coordinator.ts:351 hardcodes type:2); would become a real multi-second/minute exposure window immediately on any move to LIMIT/STOP entries.",
@@ -2262,12 +2263,13 @@
         "src/execution/coordinator.ts",
         "docs/PROJECTX-API-REFERENCE.md (section 5.3, D3)"
       ],
-      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Confirmed accurate and confirmed entries are provably MARKET-only today by direct code read; latent, not active."
+      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Confirmed accurate and confirmed entries are provably MARKET-only today by direct code read; latent, not active.",
+      "closure_note": "Fixed 2026-08-31 (plano-completo Fase 2.7.1). Not closed as 'resolved' -- the REST blind spot itself is a permanent characteristic of the provider (searchOpen never returns status:8), not something the gateway can fix. What was added: a regression test (tests/execution-coordinator.test.ts, 'submits entries as MARKET only') pinning the load-bearing invariant that keeps the blind-spot window at ~8ms -- any future change to a non-MARKET entry type will fail this test first, forcing an explicit decision here rather than a silent regression. docs/ARCHITECTURE.md and docs/THREAT-MODEL.md already document the constraint (Fase 0/1 of this audit). npm run check green."
     },
     {
       "id": "TS-AUDIT31-PX-01",
       "title": "ReadCircuitBreaker uses one shared failure counter across all read endpoints",
-      "status": "open",
+      "status": "done",
       "priority": "P1",
       "owner_role": "reliability",
       "finding": "src/projectx/read-circuit-breaker.ts takes a 'path' parameter into recordFailure/recordSuccess but keeps a single process-wide failure counter regardless of which endpoint failed (client.ts:296 calls this.readCircuit.recordFailure(path) unconditionally). A burst of failures concentrated on one endpoint (e.g. retrieveBars during a reconnect storm) can open the circuit for unrelated reconciliation-critical reads (searchOpenPositions/searchOpenOrders/searchAccounts) too, amplifying a localized transport blip into a broader state_complete=false block on new exposure. Corroborates the 2026-08-24/31 flapping investigation.",
@@ -2285,7 +2287,8 @@
         "src/projectx/client.ts",
         "docs/plans/2026-08-27-stream-recovery-implementation-plan.md"
       ],
-      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Design question flagged for discussion, not applied — touches live reconnect/reconciliation control flow."
+      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Design question flagged for discussion, not applied — touches live reconnect/reconciliation control flow.",
+      "closure_note": "Fixed 2026-08-31 (plano-completo Fase 2.7.2). src/projectx/read-circuit-breaker.ts now keys failure/cooldown state per endpoint family (readEndpointFamily: bars, positions, orders, trades, accounts, contracts, auth, other) instead of one process-wide counter. A failure burst on retrieveBars (tight 50req/30s budget, most likely to fail under reconnect-storm load per the 2026-08-27/31 flapping investigation) can no longer trip the breaker for reconciliation-critical positions/orders/accounts reads. Added status() for per-family cooldown observability (not yet wired into /health -- small, low-risk follow-up). Tests: tests/read-circuit-breaker.test.ts, 7 cases covering isolation, per-family threshold/cooldown, mutation exclusion, and status observability. npm run check green."
     }
   ],
   "reaudit_program_2026_08_20": {

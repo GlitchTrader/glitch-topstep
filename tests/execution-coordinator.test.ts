@@ -534,6 +534,72 @@ describe("execution coordinator serialization", () => {
     }
   });
 
+  it("submits entries as MARKET only -- guard for TS-AUDIT31-EX-02's REST reconciliation blind spot", async () => {
+    // Order/searchOpen never returns the undocumented status:8 (suspended bracket child) rows
+    // ProjectX allocates between placement and fill. That window is bounded to ~8ms today only
+    // because entries are always MARKET (docs/PROJECTX-API-REFERENCE.md section 5.3, D3). A
+    // LIMIT/STOP entry could sit unfilled for minutes with its protection invisible to REST
+    // reconciliation -- this pins the current invariant so a future change can't silently widen
+    // that window without this test failing first.
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-market-only-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const current = snapshot();
+      const now = new Date();
+      current.capturedAt = now.toISOString();
+      current.quote = { ...current.quote!, timestamp: now.toISOString() };
+      const packet = buildDecisionPacket(
+        current,
+        appConfig.policy,
+        appConfig.risk,
+        {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: false,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: null,
+        },
+        appConfig.scope.instrument,
+        appConfig.tradingMode,
+        appConfig.packetLeaseMs,
+        now,
+        undefined,
+        orderFlowWithTrades(3),
+      );
+      store.recordIssuedPacket(packet);
+      let captured: PlaceOrderRequest | undefined;
+      const api = {
+        placeOrder: async (request: PlaceOrderRequest) => {
+          captured = request;
+          return 9101;
+        },
+        closePosition: async () => undefined,
+      } as unknown as ProjectXApiClient;
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        api,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        (snapshotHash) => store.resolveIssuedPacket(snapshotHash, new Date().toISOString()),
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+      );
+      await coordinator.handleWireIntent(intent(
+        "00000000-0000-4000-8000-000000000602",
+        packet.market.snapshot_hash,
+        now.toISOString(),
+        packet,
+      ));
+      assert.equal(captured?.type, 2, "entry order type must stay MARKET (2) until TS-AUDIT31-EX-02 is resolved");
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("admits same-contract scale-in when ownership already proved protection", async () => {
     const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-scale-in-"));
     const store = new SqliteExecutionStore(":memory:");
