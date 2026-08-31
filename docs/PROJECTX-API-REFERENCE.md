@@ -430,11 +430,15 @@ Não encontrei nenhuma feature chamada "velocity control" na API ProjectX/Topste
 
 Ordenadas por risco.
 
-### D1. `parseOrder` descarta `parentOrderId` e `linkedOrderId` — RISCO ALTO
+### D1. `parseOrder` descarta `parentOrderId` e `linkedOrderId` — RESOLVIDO (auditoria 2026-08-31)
 
-`src/projectx/schemas.ts:143-169` normaliza a ordem para um subconjunto fixo de campos. `parentOrderId`, `linkedOrderId`, `trailPrice` e `trailDistance` **chegam no stream** e são **jogados fora** antes de virar evidência normalizada.
+**Status em 31/jul (quando esta seção foi escrita): verdadeiro.** `parentOrderId`/`linkedOrderId` chegavam no stream e eram descartados.
 
-Consequência: o sistema prova propriedade de bracket **só** por convenção de `customTag` (`src/ownership/protection.ts:46-62`), quando o provider entrega a relação **explícita** (`parentOrderId`) no mesmo payload. `docs/TOPSTEP-NATIVE.md:49` afirma que a propriedade usa "explicit `trade.orderId` and `customTag` evidence" — mas a evidência mais explícita disponível está sendo descartada. O `raw_payload_json` preserva os campos, então o dado histórico não foi perdido; só não está sendo usado.
+**Status confirmado em 31/08 (auditoria completa, verificado diretamente no código):** já não é mais verdade. `src/projectx/schemas.ts:172-177` captura os dois campos, e `src/ownership/protection.ts` (`resolveProtectiveLeg`) já os usa como fallback de correspondência quando `customTag` não bate — exatamente o cenário de proteção criada sem tag (ex.: Position Brackets da conta). `trailPrice`/`trailDistance` continuam não capturados (risco baixo, não afeta ownership).
+
+O que ainda falta: esse caminho de fallback por `parentOrderId` nunca foi exercitado contra um cenário real de Position Brackets em PRAC — ver item 5 de "NÃO CONFIRMADO" abaixo, que continua em aberto.
+
+**Lição desta seção:** este documento é evidência ao vivo datada, não uma verdade permanente — releia-o contra o código atual antes de confiar numa afirmação de "descartado"/"ausente" com mais de algumas semanas.
 
 ### D2. `status: 8` não é conhecido pelo código — RISCO ALTO
 

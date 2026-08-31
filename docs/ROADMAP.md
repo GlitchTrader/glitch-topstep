@@ -2,6 +2,8 @@
 
 Progress is evidence-gated, not calendar-gated. Tests prove software contracts; real ProjectX sessions prove integration; attributable after-fee samples evaluate the operator. None alone proves profitability or live readiness.
 
+This is durable directional intent — a checked box means "code exists for this," not "proven and accepted." [`PARITY.md`](PARITY.md) is the authoritative promotion/acceptance-evidence ledger for the same capability set; where the two disagree, PARITY.md wins. [`docs/ledger/ledger.json`](ledger/ledger.json) is current task state, finer-grained than either.
+
 ## R0 — Topstep-first authority and truthful scaffold
 
 - [x] strict TypeScript project
@@ -122,8 +124,8 @@ Progress is evidence-gated, not calendar-gated. Tests prove software contracts; 
 - [ ] correct tick-distance brackets to exact intended absolute prices
 - [ ] fail visibly and reduce risk when protection cannot be proven
 - [ ] reconstruct protection after restart
-- [ ] `MOVE_STOP`
-- [ ] `MOVE_TP`
+- [x] `MOVE_STOP` — live-validated against `customTag`-based ownership, 2026-07-30 (`docs/PARITY.md`); still not backed by the provider's explicit `parentOrderId` relation (open, see `docs/PROJECTX-API-REFERENCE.md` D1)
+- [x] `MOVE_TP` — same basis and same caveat as `MOVE_STOP`
 - [ ] exact-leg mutation with sibling non-interference
 - [ ] independently protected additions and multiple tranches
 - [ ] full exit ownership and residual-order cleanup
