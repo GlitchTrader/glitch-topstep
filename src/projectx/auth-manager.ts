@@ -102,6 +102,12 @@ export class ProjectXAuthManager {
     };
   }
 
+  /** Bypasses authenticatedClient()'s auth-gating Proxy -- this is local, synchronous, in-memory
+   * state, not a REST call, so it must not trigger ensureAuthenticated() (TS-AUDIT31-PX-01). */
+  public readCircuitStatus(): ReturnType<ProjectXApiClient["readCircuitStatus"]> {
+    return this.client.readCircuitStatus();
+  }
+
   public async ensureAuthenticated(): Promise<string> {
     if (this.refreshInFlight) {
       return this.refreshInFlight;

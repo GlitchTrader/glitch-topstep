@@ -613,9 +613,10 @@ export class GlitchTopstepService {
         return {
           // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
           // first_last_fired_utc/thresholds/runbook_url (alert_id replaces id); added
-          // task_scheduler, persistence_bytes, heap_used_bytes, health_build_ms. All additive
-          // except the health_alerts id->alert_id rename -- confirmed no consumer in the paired
-          // profile reads health_alerts today (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
+          // task_scheduler, persistence_bytes, heap_used_bytes, health_build_ms,
+          // read_circuit_breaker. All additive except the health_alerts id->alert_id rename --
+          // confirmed no consumer in the paired profile reads health_alerts today
+          // (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
           schema_version: "glitch.direct.health.v3",
           compatibility: GATEWAY_COMPATIBILITY,
           status:
@@ -665,6 +666,7 @@ export class GlitchTopstepService {
           invariant_metrics: invariantMetrics,
           health_alerts: this.healthAlerts.evaluate(invariantMetrics),
           task_scheduler: this.taskScheduler.counts(),
+          read_circuit_breaker: this.authManager.readCircuitStatus(),
           recovery: this.marketHubRecovery.snapshot(),
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,

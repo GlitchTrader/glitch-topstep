@@ -173,6 +173,11 @@ export class ProjectXApiClient {
     return { login, validate };
   }
 
+  /** Per-endpoint-family circuit breaker state, for /health (TS-AUDIT31-PX-01). Local, synchronous. */
+  public readCircuitStatus(): ReturnType<ReadCircuitBreaker["status"]> {
+    return this.readCircuit.status();
+  }
+
   public async searchAccounts(onlyActiveAccounts = true): Promise<AccountInfo[]> {
     return (await this.searchAccountsCollection(onlyActiveAccounts)).items;
   }
