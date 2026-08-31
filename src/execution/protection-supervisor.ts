@@ -30,7 +30,10 @@ export function evaluateProtectionHealth(input: ProtectionSupervisorInput): Prot
       input.snapshot.instrumentOpenContracts > 0,
       tranche.entry_order_id,
     );
-    const stopCovered = protection.stop.providerOrderId !== null
+    // providerOrderId alone is set on a suspended (undocumented status 8) bracket child before
+    // it has a price — that leg cannot stop a loss yet, so it must not count as covered
+    // (TS-AUDIT31-EX-01).
+    const stopCovered = (protection.stop.providerOrderId !== null && protection.stop.price !== null)
       || (input.activeReduction?.state === "degraded_stop_only"
         && input.activeReduction.survivor_stop_order_id !== null);
     if (!stopCovered) {

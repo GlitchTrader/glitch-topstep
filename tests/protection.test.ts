@@ -101,6 +101,42 @@ describe("protection ownership", () => {
     assert.match(protection.reason, /target_child_not_observed/);
   });
 
+  it("does not treat a suspended (status:8, unpriced) bracket child as proven protection (TS-AUDIT31-EX-01)", () => {
+    // ProjectX allocates bracket children immediately with the parent entry, but suspended
+    // (undocumented status 8) with no price until the entry fills. providerOrderId + type alone
+    // must not read as covered.
+    const tags = protectionCustomTags(INTENT_ID);
+    const suspendedStop: OrderInfo = { ...order(9601, tags.stop, 4, null), status: 8 };
+    const target = order(9602, tags.target, 1, 20_020);
+    const protection = bindProtection(
+      INTENT_ID,
+      [suspendedStop, target],
+      ACCOUNT_ID,
+      CONTRACT_ID,
+      true,
+    );
+    assert.equal(protection.status, "pending");
+    assert.match(protection.reason, /stop_leg_unpriced/);
+    // Distinguishable from a leg that was never observed at all.
+    assert.doesNotMatch(protection.reason, /stop_child_not_observed/);
+    assert.equal(protection.stop.providerOrderId, 9601);
+    assert.equal(protection.stop.price, null);
+  });
+
+  it("confirms protection once a suspended leg receives its price on fill (TS-AUDIT31-EX-01)", () => {
+    const tags = protectionCustomTags(INTENT_ID);
+    const filledStop = order(9601, tags.stop, 4, 19_990);
+    const target = order(9602, tags.target, 1, 20_020);
+    const protection = bindProtection(
+      INTENT_ID,
+      [filledStop, target],
+      ACCOUNT_ID,
+      CONTRACT_ID,
+      true,
+    );
+    assert.equal(protection.status, "proven");
+  });
+
   it("recovers the moved stop price, not the price the tranche opened with", () => {
     // MOVE_STOP edits the working order in place, so re-placing a cancelled leg from the
     // entry intent would hand back the wider original stop.

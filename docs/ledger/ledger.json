@@ -245,7 +245,11 @@
       "gateway_commit": "169eabd",
       "profile_pr": 197,
       "profile_commit": "6552c75",
-      "waves": ["P0 C1-C4", "P1 W1-W2-W5", "P2 W4-W6"],
+      "waves": [
+        "P0 C1-C4",
+        "P1 W1-W2-W5",
+        "P2 W4-W6"
+      ],
       "checks": {
         "npm_run_check": "pass",
         "reaudit_fault_matrix": "pass",
@@ -1718,12 +1722,13 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/184"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100× concurrent refresh test."
+      "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100× concurrent refresh test.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: single authoritative facade is confirmed done. grep across src/ shows the only `new ProjectXApiClient(` call site is auth-manager.ts:67; src/service.ts:146 consumes exclusively via `authManager.authenticatedClient()`; the 12h timer at src/service.ts:662-666 now calls `authManager.ensureAuthenticated()` (no separate raw client/validation timer remains). Proactive refresh margin (PROJECTX_REFRESH_MARGIN_MS=5min, auth-manager.ts:15,146) and single-flight refresh (auth-manager.ts:80-96, proven by tests/projectx-auth-manager.test.ts:76-88 100x concurrent test) are done. Safe-read retry-once-on-401/403 (withAuthenticatedRead) and no-blind-replay-on-mutation (withAuthenticatedMutation) are done. Auth-degraded new-exposure block is wired and authoritative (src/execution/gateway-mode.ts:143-144 newExposureGate fails closed on auth.degraded, not just safety-supervisor observe-only). Remaining scoped gap: auth-manager.ts refreshSession() has no bounded jittered backoff between refresh attempts (a single failed login/validateSession sets degraded=true and returns immediately; the next ensureAuthenticated() call retries with no delay/jitter) — the resolution list explicitly asked for 'bounded jittered backoff' and it is not present. Keeping open, scoped narrowly to adding backoff/jitter to auth-manager.ts refreshSession's retry path; everything else in the original finding and resolution list is resolved."
     },
     {
       "id": "TS-REAUDIT-02",
       "title": "Persist identity evidence backlog before in-memory queuing",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "evidence_persistence",
       "issue": 185,
@@ -1759,12 +1764,13 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/185"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): stopSerial propagates evidenceQueue.close() failure. Residual: durable evidence_outbox table, persist-before-enqueue, identity bound, kill/ENOSPC/restart matrix."
+      "implementation_note": "Wave 1 (#210): stopSerial propagates evidenceQueue.close() failure. Residual: durable evidence_outbox table, persist-before-enqueue, identity bound, kill/ENOSPC/restart matrix.",
+      "closure_note": "audit_2026_08_31: All four resolution bullets are implemented and cite exact evidence. (1) Durable outbox with pending/applied states: src/storage/sqlite-provider-evidence-store.ts:657-667 creates evidence_outbox(outbox_key PK, event_class, payload_json, state, created_utc, applied_sequence). (2) Persist identity before enqueue: src/projectx/evidence-write-queue.ts:153-155 calls options.onStageIdentity (wired at src/service.ts:165-167 to providerEvidenceStore.stageIdentityOutbox) unconditionally before the identity high-water-mark check at line 156, so the durable row is written even on the path where the in-memory window is full and the event is not physically enqueued (evidence-write-queue.ts:156-160). stageIdentityOutbox (sqlite-provider-evidence-store.ts:136-148) does INSERT OR IGNORE with state='pending' inside a transaction. (3) Resume cursor reconstruction: src/service.ts:238-251 startResources() drains providerEvidenceStore.loadPendingOutboxEvents(500) in a page loop on startup, resubmitting each with skipOutboxStage:true and draining the queue -- this is exactly the 'restart drains pending events' acceptance criterion, and it directly answers the original finding text ('resume cursor cannot reconstruct pending events'): the outbox rows, not the in-memory resumeCursor field, are the source of truth for what must be replayed. markOutboxApplied (sqlite-provider-evidence-store.ts:675-681, called from line 124 after a batch commits) marks rows 'applied' only after durable commit, so replay is idempotent (INSERT OR IGNORE on stage, UPDATE...WHERE state='pending' on apply). (4) Durable identity backlog is an authoritative shutdown blocker: src/service.ts:749-755 shouldRetainShutdownRecoveryState() (explicitly commented 'TS-REAUDIT-02/08') returns true when providerEvidenceStore.outboxPendingCount() > 0, retaining the lock/evidence handles instead of reporting a clean stop. Acceptance criteria 1/2/4 (kill/ENOSPC/write-failure loses zero identity events; restart drains exactly once; shutdown cannot report stopped with backlog) are met by this mechanism. Acceptance criterion 3 ('heap remains stable at TS-R2-07 rates') is a soak/observability claim rather than a code defect and is covered by the still-open TS-REAUDIT-05 cache-bounding work plus the project-wide pending 72h PRAC soak (see plan Fase 0.4/4.3) -- not re-opening this ticket for that, since the specific identity-durability finding this ticket describes is resolved. One adjacent, distinct gap found while verifying: evidence-write-queue.ts restore() (lines 336-344) restores head/pending/identityPending counters after a failed writer.appendBatch() but does not restore pendingByKey coalescing-index entries removed by takeBatch() for the same failed batch -- this affects quote/depth coalescing only (identity events are never coalesced, so it does not weaken this ticket's identity-durability guarantee); opening as a new low-priority follow-up (see audit catalog TS-AUDIT31-PX-04) rather than blocking this closure. npm run build and full npm test (492/492) green on the 2026-08-31 audit pass (unrelated schemas.ts change from the same pass)."
     },
     {
       "id": "TS-REAUDIT-03",
       "title": "Make residual working orders impossible at flatten completion",
-      "status": "open",
+      "status": "done",
       "priority": "P0",
       "owner_role": "execution_control",
       "issue": 186,
@@ -1801,7 +1807,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/186"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): flattenControlPhaseAfterReceipt requires ownWorkingOrders===0 on fallback branch; table-driven receipt tests. Residual: restart fixtures, full receipt×venue matrix, phase deadline persistence."
+      "implementation_note": "Wave 1 (#210): flattenControlPhaseAfterReceipt requires ownWorkingOrders===0 on fallback branch; table-driven receipt tests. Residual: restart fixtures, full receipt×venue matrix, phase deadline persistence.",
+      "closure_note": "audit_2026_08_31: Re-verified the exact reproduced scenario (closed/flat/one residual owned order). src/control/flatten-control-saga.ts:36-40 (the fallback branch reached by any receiptStatus outside the special-cased sets, e.g. closed/ignored/unknown) now requires venue.ownWorkingOrders===0 in addition to instrumentOpenContracts===0 and stateComplete before returning 'completed' -- symmetric with the early-return branch at lines 22-28. Wired into production (not a dangling extraction): src/service.ts:837,1063,1114 call resolveFlattenAfterReceipt/resolveFlattenAfterRestart/shouldCompletePendingFlatten from src/service/flatten-workflow.ts, which delegate to flattenControlPhaseAfterReceipt. Directly regression-tested: tests/flatten-saga.test.ts:56-64 ('does not complete on closed receipt with residual owned working orders (TS-REAUDIT-03)') asserts phase stays 'waiting_for_flat' for receiptStatus='closed' with ownWorkingOrders=1, plus a table-driven terminality test at lines 66-86 covering submitted/accepted/open_protected/closed -> completed and rejected/shadowed/ambiguous -> manual_intervention_required. npm run check green (492/492) on 2026-08-31 audit pass. Residual acceptance items not required for this specific finding (restart fixtures beyond flatten-workflow.test.ts, full receipt x venue cross-product, phase-deadline persistence) remain legitimate but are scope creep beyond the reproduced bug; if wanted, open as a new low-priority follow-up rather than reopening this P0 finding."
     },
     {
       "id": "TS-REAUDIT-04",
@@ -1841,7 +1848,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/187"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210/#163): GET /intent/status + deriveIntentDeliveryState; profile retain on receipt-only 404; supersession discard only when status=not_seen. Residual: paired CI fixtures, retention generation, crash registered/inflight tests."
+      "implementation_note": "Wave 1 (#210/#163): GET /intent/status + deriveIntentDeliveryState; profile retain on receipt-only 404; supersession discard only when status=not_seen. Residual: paired CI fixtures, retention generation, crash registered/inflight tests.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31. The core gateway-side mechanism is real and live, not a dangling extraction: src/domain/intent-delivery-status.ts defines the versioned not_seen|registered|mutation_inflight|ambiguous|terminal contract via deriveIntentDeliveryState, and GET /intent/status (src/server/local-gateway.ts:235-242, delegating to ExecutionCoordinator.intentDeliveryStatus at src/execution/coordinator.ts:209-211) always returns 200 with a derived state -- it never 404s, so it structurally cannot be mistaken for 'safe to delete'. Unit coverage exists: tests/intent-delivery-status.test.ts exercises all five states from the pure derivation function. However three concrete gaps remain open, matching the recorded residual: (1) the OLD receipt-only endpoint GET /intent/receipt (local-gateway.ts:244-255) still returns a bare 404 (intent_receipt_not_found) with no delivery-state envelope -- it was not removed or deprecated, so any caller still using it (rather than the new /intent/status) still hits exactly the original failure mode; (2) the Hermes-profile consumer side ('retain on receipt-only 404', 'discard only when not_seen') lives in a separate repository (glitch-topstep-hermes-profile) not present in this checkout, so the retain-safe behavior on the consumer cannot be verified from this repo -- only the gateway's half of the contract is provable here; (3) no test exercises the full crash-after-registration path through SqliteExecutionStore end-to-end (only the pure deriveIntentDeliveryState mapping is tested with hand-built inputs) -- acceptance criteria 'Crash after registration and before receipt returns registered' and 'Post-submission crash returns mutation_inflight or ambiguous until recovery' are not yet proven against the real store/recovery path. Scoped remaining work: deprecate or redirect /intent/receipt now that /intent/status exists; add a store-level integration test that registers an intent, kills the process before a receipt exists, restarts, and asserts /intent/status still reports 'registered' (not 'not_seen'); add the paired consumer-driven contract fixture once the Hermes-profile repo is in scope. Staying open/P0 -- this is a replan, not a close."
     },
     {
       "id": "TS-REAUDIT-05",
@@ -1876,7 +1884,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/188"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): MAX_HOT_OUTCOMES LRU in trade-outcome-store; rearmStates.clear on flat. Residual: provider-event-recorder hash bound, cache metrics, multi-day heap soak."
+      "implementation_note": "Wave 1 (#210): MAX_HOT_OUTCOMES LRU in trade-outcome-store; rearmStates.clear on flat. Residual: provider-event-recorder hash bound, cache metrics, multi-day heap soak.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: all three named caches are now code-bounded, including the one item the 2026-08-27 implementation_note still listed as residual. (1) rearmStates (src/execution/coordinator.ts:96, a Map, out of this ticket's file scope but named directly in the finding) is cleared on every flat transition: coordinator.ts:967-971 rearmTrancheProtectionSerial clears this.rearmStates.clear() whenever snapshot.instrumentOpenContracts===0, and deletes the per-tranche entry on confirm (line 1007) -- matches resolution bullet 1 exactly. (2) trade outcomes: src/storage/trade-outcome-store.ts:5-6,174-179 MAX_HOT_OUTCOMES=2048 LRU eviction on the `known` Map, with SQLite (SqliteOutcomeFeed) as the authoritative store per the class comment at line 165 -- matches resolution bullet 2. (3) REST content hashes: src/projectx/provider-event-recorder.ts:46-47,94-107 ProviderRestSnapshotRecorder now has MAX_CACHE_ENTRIES=4096 with LRU eviction (rememberContentHash) and a cacheEvictions counter exposed via cacheMetrics(), which src/service.ts:571 surfaces as restEvidenceRecorder.cacheMetrics() in the health payload -- this was explicitly listed as residual in the 2026-08-27 note ('provider-event-recorder hash bound, cache metrics') and is now done, matching resolution bullets 3 and 4 (cardinality/eviction metrics exposed; heap-slope metric is not separately exposed). Remaining scoped gap, keeping this open: acceptance criterion 'A multi-day synthetic soak shows stable post-GC heap slope' has no evidence in docs/evidence/ -- this is a proof/soak deliverable, not a further code change (all three caches already have hard bounds), and it is the same class of residual work called out project-wide in the parent audit plan (Fase 0.4 / Fase 4 item 3: 72h PRAC soak never run). Downgrading is not warranted since the acceptance criterion is explicit and unmet, but the remaining work is narrowly the soak run itself, not new cache-bounding code. Separately, per this audit's scope note: src/execution/coordinator.ts is owned by a different audit slice (2.2) -- flagging only that rearmStates is confirmed already bounded above so that slice does not duplicate this investigation."
     },
     {
       "id": "TS-REAUDIT-06",
@@ -1912,7 +1921,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/189"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): unprotected_since_utc persisted in execution store; invariant metrics prefer truthful duration. Residual: supervisor authority promotion, gate parity soak, per-invariant owners."
+      "implementation_note": "Wave 1 (#210): unprotected_since_utc persisted in execution store; invariant metrics prefer truthful duration. Residual: supervisor authority promotion, gate parity soak, per-invariant owners.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31. Resolution item 1 (persist unprotected_since_utc) is genuinely wired end to end: SqliteExecutionStore.updateUnprotectedSince/unprotectedSinceUtc (src/storage/sqlite-execution-store.ts:1041-1053) is called every /health cycle from src/service.ts:542-545 and fed into buildInvariantMetrics (src/service.ts:570), which prefers the persisted since-time over ambiguous_age_ms (src/observability/invariant-metrics.ts:47-57). Resolution item 3 (compare reason-level supervisor vs execution-gate decisions and alert on divergence) is also done: evaluateSafetySupervisor computes gate_divergence_detail (src/safety/safety-supervisor.ts:95-102), it flows into invariant_metrics.supervisor_gate_divergence (src/service.ts:572, src/observability/invariant-metrics.ts:71), and buildHealthAlerts fires a warning-severity supervisor_gate_divergence alert on it (src/observability/health-alerts.ts:39-45). Resolution items 2 (authoritative owner/gate contract per invariant) and 4 (promote invariants individually) are NOT done: the invariants array (src/safety/safety-supervisor.ts:67-85) carries no owner/contract metadata, and evaluateSafetySupervisor unconditionally returns mode: 'observe' (src/safety/safety-supervisor.ts:21-22 comment, 104-105 return) with no code path that ever promotes it — the supervisor never blocks anything on its own today, only computes what it would do and reports agreement/divergence. Doc-vs-code check: GATEWAY-SPEC.md:220 claims /health exposes 'safety_supervisor (aligned with execution gates)' — this is accurate as a field-content description (it does expose agrees_with_execution_gates/gate_divergence_detail) and is not a factual contradiction, but the doc nowhere states the supervisor is advisory-only/observe-mode, which the code comment (safety-supervisor.ts:21) is explicit about. Readers of GATEWAY-SPEC.md alone could reasonably believe the supervisor is authoritative; recommend a one-line addition to GATEWAY-SPEC.md's /health section noting observe-only status, out of scope for this pass. Remaining scoped work to close TS-REAUDIT-06: (a) per-invariant owner + gate-contract table, (b) a shadow soak measuring supervisor/execution-gate divergence rate over time, (c) an actual promotion mechanism so mode can move beyond 'observe' for individually-proven invariants. Staying open/P1 — this is a replan, not a close."
     },
     {
       "id": "TS-REAUDIT-07",
@@ -1951,7 +1961,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/190"
       ],
       "pull_request": 214,
-      "implementation_note": "Wave 1 (#210): IntentDeliveryStatusPort. Wave 3 merged (#214, 437b6a6): AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, OutcomeProjection ports; production-ports adapters; composition-root.test.ts. Residual: wire AppService to ports, shrink orchestration baseline, import-cycle gate, semantic-parity proof before removing duplicates."
+      "implementation_note": "Wave 1 (#210): IntentDeliveryStatusPort. Wave 3 merged (#214, 437b6a6): AuthenticatedProjectX, FlattenSaga, EvidenceOutbox, OutcomeProjection ports; production-ports adapters; composition-root.test.ts. Residual: wire AppService to ports, shrink orchestration baseline, import-cycle gate, semantic-parity proof before removing duplicates.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31 with an actual line-count measurement, since the acceptance criterion 'Orchestration files shrink against the recorded baseline' was never given a numeric baseline anywhere (docs/ledger/audits/2026-08-20-workflow-decomposition-baseline.md lists only the extracted module names, no sizes). Measured directly: at commit a346ced (2026-08-21, the REAUDIT wave-1 baseline), src/execution/coordinator.ts was 1596 lines and src/service.ts was 1420 lines. At the current audit pass (2026-08-31, HEAD ea56591 + uncommitted work), coordinator.ts is 1612 lines (+16) and service.ts is 1588 lines (+168, +12%). Both orchestration files grew, not shrank, across the exact window in which three extraction waves (#210, #213/#214) were supposedly landing this fix. This is not because extraction didn't happen -- it did: src/service/flatten-workflow.ts, src/service/lifecycle-supervisor.ts, src/execution/protection-supervisor.ts, src/service/reconciliation-service.ts, src/service/auth-session-workflow.ts, src/projectx/auth-manager.ts, src/composition/production-ports.ts, and src/domain/ports/* all exist, are genuinely wired into service.ts/coordinator.ts (verified: buildFlattenVenueSnapshot/resolveFlattenAfterReceipt/resolveFlattenAfterRestart/shouldCompletePendingFlatten are called from src/service.ts:837,1063,1114; evaluateProtectionHealth is called from coordinator.ts), and are covered by tests/workflow-decomposition.test.ts + tests/composition-root.test.ts -- so the 'extracted but not wired' failure mode this item also warns about is NOT what's happening. What's happening instead is that new orchestration logic keeps landing directly in the two big files as fast as (or faster than) logic is extracted out of them, so the files never shrink. coordinator.ts src/execution/coordinator.ts still has 6 ponytail markers (lines 95, 375, 525, 617, 817, 1321 -- highest concentration in the repo) documenting known simplifications (in-memory-only rearm state, two duplicate 'recovery can race submitting->ambiguous' comments, an amendment with no outbox row). Composition tests (tests/composition-root.test.ts) do prove ports are reachable from startup and there is no import-cycle gate yet. Scoped remaining work: (a) record a numeric line-count baseline going forward so 'shrink' is falsifiable, (b) add a CI check (e.g. a line-count ratchet or import-cycle lint) that fails a PR that grows coordinator.ts/service.ts without a matching extraction, (c) actually move one of the 6 marked coordinator.ts blocks (rearm state, partial-EXIT submission, or the breakeven-tighten amendment at line 1321 which has no outbox row) into its own tested module rather than adding new ports beside the same two files. Staying open/P1 -- this is a replan with a concrete baseline, not a close."
     },
     {
       "id": "TS-REAUDIT-08",
@@ -1987,7 +1998,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/191"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): stopSerial fails on lifecycle.drain() disposer errors; evidenceQueue.close() no longer swallowed. Residual: critical vs best-effort disposer taxonomy, lock retention on failed_shutdown, AppService fault tests."
+      "implementation_note": "Wave 1 (#210): stopSerial fails on lifecycle.drain() disposer errors; evidenceQueue.close() no longer swallowed. Residual: critical vs best-effort disposer taxonomy, lock retention on failed_shutdown, AppService fault tests.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31. Partial fix, real residual risk remains -- staying open. What's done: LifecycleSupervisor (src/service/lifecycle-supervisor.ts) now classifies disposers critical vs best-effort via register(name, dispose, {critical:true}); only 'realtime' (SignalR stop, service.ts:446-449) and 'local_gateway' (HTTP stop, service.ts:657-660) are registered critical. drain()/disposeAll() (lifecycle-supervisor.ts:63-83) stops unwinding and returns criticalFailed on a critical disposer's exception, and AppService.stopSerial() (service.ts:706-747) throws when drainResult.criticalFailed.length>0, transitioning to failed_shutdown. This exact behavior is unit-tested: tests/lifecycle-supervisor.test.ts:69-80 ('critical disposer failure is surfaced separately (TS-REAUDIT-08)') and is the proof cited by the fault-matrix registry (tests/reaudit-fault-matrix.test.ts id lifecycle_critical_shutdown). What's NOT done, and is the exact scenario this finding warns about: stopSerial's catch block (service.ts:729-746) does not unconditionally retain state on critical failure. It calls shouldRetainShutdownRecoveryState() (service.ts:750-756), which only checks evidence-queue backlog and provider-evidence outbox depth -- it has no knowledge of which disposer failed or whether that disposer (realtime/local_gateway) has an in-flight writer. If a critical disposer fails AND the evidence-queue/outbox backlog happens to be empty, stopSerial proceeds to closeStores() (service.ts:758-775) anyway, which unconditionally closes the execution/control/provider-evidence/trade-outcome stores AND releases the runtime lock (line 774: await this.runtimeLock.release(), outside the storesClosed guard) -- while the failed critical disposer (e.g. local_gateway.stop() timing out on a stuck in-flight HTTP order-mutation handler, or realtime.stop() failing mid-callback) may still have a live writer. No test in this repo exercises this exact composition (AppService-level critical disposer failure x empty evidence backlog x assert lock/stores are NOT released) -- lifecycle-supervisor.test.ts only proves the LifecycleSupervisor unit in isolation, not the AppService.stopSerial()/shouldRetainShutdownRecoveryState() interaction. Note: local-gateway.ts does have a shutdownDeadlineMs (src/server/local-gateway.ts:35,124) that force-closes stuck HTTP connections, which bounds but does not eliminate the exposure window. Scoped remaining work exactly matches the pre-existing residual note: (a) taxonomy fix -- shouldRetainShutdownRecoveryState should also retain when drainResult.criticalFailed is non-empty, not only on evidence backlog; (b) a test that registers a critical disposer that throws, drives AppService.stop(), and asserts runtimeLock.release() and closeStores() were NOT called; (c) do not release the runtime lock on any critical-disposer failure path, full stop, since a stuck writer cannot be positively ruled out. Staying open/P0 -- this is a replan, not a close; do not treat the existing LifecycleSupervisor-level test as proof this finding is resolved."
     },
     {
       "id": "TS-REAUDIT-09",
@@ -2030,7 +2042,7 @@
       "id": "TS-REAUDIT-10",
       "title": "Require crash and fault injection before armed promotion",
       "status": "open",
-      "priority": "P0",
+      "priority": "P1",
       "owner_role": "quality_engineering",
       "issue": 193,
       "depends_on": [
@@ -2064,7 +2076,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/193"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): intent-delivery-status.test.ts added to audit regression matrix file list. Residual: deterministic kill matrix CI gate, immutable fault proof JSON, release manifest enforcement."
+      "implementation_note": "Wave 1 (#210): intent-delivery-status.test.ts added to audit regression matrix file list. Residual: deterministic kill matrix CI gate, immutable fault proof JSON, release manifest enforcement.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: this is no longer accurately described as 'no matrix, only a file-list stub.' scripts/reaudit-fault-matrix-gate.mjs runs a real set of fault-injection tests -- tests/kill-matrix.test.ts genuinely spawns a child process and delivers deterministic GLITCH_KILL_POINT signals across src/execution/kill-hook.ts KILL_POINTS, asserting no duplicate placeOrder calls and correct recovery (tests/kill-matrix.test.ts:1-100+); tests/reaudit-fault-matrix.test.ts covers auth_read_401_recovery and 429 mutation-no-retry; plus lifecycle-supervisor.test.ts, flatten-workflow.test.ts, gateway-shutdown-deadline.test.ts, sqlite-execution-store.test.ts, and the profile's tests/test_fault_injection.py (scripts/reaudit-fault-matrix-proofs.json:1-21). The gate script emits an immutable, schema-versioned proof JSON (glitch.topstep.reaudit_fault_matrix_proof.v1) with per-file sha256 and gateway/profile commit SHAs (scripts/reaudit-fault-matrix-gate.mjs:89-148), and IS wired as a required, verified step in .github/workflows/release.yml's paired-release-candidate workflow before the release artifact/manifest is built (release.yml:49-68 runs reaudit:fault-matrix then rejects a missing/mismatched profile_commit or malformed proof). Two real gaps remain, narrower than the original P0 framing: (1) this only runs on the manual workflow_dispatch armed-release path -- it is NOT in .github/workflows/ci.yml and NOT part of `npm run check` (package.json:13), so ordinary PR merges to main are not gated by it; (2) the proof bundle (scripts/reaudit-fault-matrix-proofs.json) has no dedicated ENOSPC / SQLite-busy-or-corruption / stream-lag fault cases, though the resolution list called for them, and some disk-fault coverage exists elsewhere in the repo (e.g. TS-PROD-04 evidence) unlisted in this bundle. Downgraded P0->P1: the armed-release path is genuinely gated today; residual work is (a) add fault-matrix as a required check on every PR/push, not just manual release dispatch, and (b) extend the proof bundle to ENOSPC/SQLite-corruption/stream-lag scenarios."
     },
     {
       "id": "TS-REAUDIT-11",
@@ -2098,7 +2111,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/194"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): SLO threshold table documented in docs/OPERATIONS.md. Residual: actionable alerts with hysteresis, health breach runbook links, automatic downgrade wiring."
+      "implementation_note": "Wave 1 (#210): SLO threshold table documented in docs/OPERATIONS.md. Residual: actionable alerts with hysteresis, health breach runbook links, automatic downgrade wiring.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: still unresolved as originally found. src/observability/health-alerts.ts buildHealthAlerts() (lines 9-47) is a pure stateless function -- given the current InvariantMetrics snapshot it re-evaluates raw booleans/thresholds each call (auth_degraded, evidence_queue_degraded, unprotected_open_quantity>0, execution_recovery_blocking, supervisor_gate_divergence) with no persisted last-fired state anywhere. It is invoked fresh on every /health request (src/service.ts:623: `health_alerts: buildHealthAlerts(invariantMetrics)`), so there is no dedup (no suppression of a repeat-fire alert), no hysteresis (no distinct clear threshold/window separate from the raise threshold), and the HealthAlert type (id/severity/message only, health-alerts.ts:3-7) has no runbook-link field at all. This is a live doc-vs-code gap: docs/OPERATIONS.md:217-229 documents a 'Hysteresis' column for the TS-REAUDIT-11 SLIs (e.g. unprotected_seconds_estimate 'clear after 60s covered', flatten_pending_seconds 'clear when control terminal', evidence_queue_depth 'clear below low-water', reconciliation_age_ms 'clear after one success', auth_degraded 'clear after successful refresh') as if this behavior is implemented; none of it exists in health-alerts.ts. Recommend correcting docs/OPERATIONS.md to mark that column 'planned, not yet implemented' (out of scope for this pass since it's a docs-only change outside src/safety, src/observability, src/market). Remaining scoped code work to close TS-REAUDIT-06/11: add a per-alert-id last-fired timestamp + explicit clear threshold/window + dedup key + runbook URL field to HealthAlert and wire selected critical breaches to new-exposure block/downgrade per the original acceptance criteria. Staying open/P1 -- this is a replan, not a close."
     },
     {
       "id": "TS-REAUDIT-12",
@@ -2194,7 +2208,82 @@
         "data/gateway-watchdog.log",
         "https://gateway.docs.projectx.com/docs/realtime/"
       ],
-      "implementation_note": "Plan authored 2026-08-27 from operational flap 2026-08-26 EDT + code audit. PR order: A hub/debounce → B recovery controller → C retry → D serial reconnect → E watchdog progress → soak 72h → F–H scheduler/persistence. Do not use GLITCH_STREAM_LIVENESS_MS=60000 in armed without controlled experiment. PR-A–E implemented 2026-08-27 locally; pending 72h PRAC soak for acceptance."
+      "implementation_note": "Plan authored 2026-08-27 from operational flap 2026-08-26 EDT + code audit. PR order: A hub/debounce → B recovery controller → C retry → D serial reconnect → E watchdog progress → soak 72h → F–H scheduler/persistence. Do not use GLITCH_STREAM_LIVENESS_MS=60000 in armed without controlled experiment. PR-A–E implemented 2026-08-27 locally; pending 72h PRAC soak for acceptance.",
+      "audit_2026_08_31_note": "Confirmed 2026-08-31: no docs/evidence/PRAC-SOAK-2026-08-27* or later file exists (docs/evidence/ only has PRAC-SOAK-2026-08-21-single-active-position.md and PRAC-SOAK-2026-08-25-post-audit-wave.md) -- the 72h PRAC soak this item's own acceptance criteria requires was never run. A fresh flapping recurrence occurred 2026-08-31 (61 restarts). This recurrence is evidence the soak gate was correctly withheld: PR-A-E were 'implemented, not proven,' and shipping them to continuous unattended autostart before the soak completed would not have caught this regression either. Do not close this item and do not treat PR-A-E as sufficient. PR-F (scheduler unification replacing the 4 independent timers) was never started: src/projectx/rest-concurrency.ts:1 still carries the exact comment 'ponytail: global REST gate — upgrade path is priority scheduler (PR-F)' and RestConcurrencyGate (rest-concurrency.ts:2-19) remains a simple counting semaphore with a FIFO waiter queue, not a priority scheduler; no other file in src/ references PR-F. The 4 timers PR-F is meant to unify are confirmed still independent and uncoordinated in src/service.ts: reconcile every this.config.reconcileIntervalMs (default 3000ms via GLITCH_RECONCILE_INTERVAL_MS, src/config.ts:474), set up at src/service.ts:457-462; history sync every this.historySyncIntervalMs (default 60_000ms, src/service.ts:83/189, src/config.ts:293), set up at src/service.ts:467-472; market observation every MARKET_OBSERVATION_REFRESH_MS=60_000 (src/service.ts:85), set up at src/service.ts:480-483; order flow every ORDER_FLOW_REFRESH_MS=10_000 (src/service.ts:88), set up at src/service.ts:488-491. Each is its own unref'd setInterval with no shared scheduler, no priority ordering, and no coordination with the others or with REST concurrency pressure. PR-G (adaptive reconcile) and PR-H (persistence/health tuning for DB ~500MB+) were also never started -- no references anywhere in src/. Status stays in_progress; remaining work is unchanged in scope (72h PRAC soak, then PR-F/G/H) but now has direct 2026-08-31 evidence that skipping the soak gate would have been the wrong call."
+    },
+    {
+      "id": "TS-AUDIT31-EX-01",
+      "title": "status:8 (suspended bracket child) counted as proven protection with price:null",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "execution_safety",
+      "finding": "resolveProtectiveLeg/bindProtection (src/ownership/protection.ts:98-128,177-240) and evaluateProtectionHealth (src/execution/protection-supervisor.ts:33-38) check only providerOrderId!==null and order.type, never order.status or price-nullness. ProjectX's undocumented status:8 (suspended bracket child, awaiting entry fill, no price yet) therefore satisfies 'proven'/'stopCovered' with price:null. receipt-reconciliation.ts:97-127 can mark protection_status:'confirmed' off this. Reachable in production via the scale-in path (src/ownership/scale-in.ts + coordinator.ts:348-357: a new bracketed MARKET entry while already positioned creates a fresh status-8 window). Currently masked only because entries are MARKET-only (~8ms observed window, coordinator.ts:351 hardcodes type:2) — see also TS-AUDIT31-EX-02, same root cause.",
+      "resolution": [
+        "Capture order.status alongside providerOrderId/type in protective-leg matching.",
+        "Treat status:8 as 'allocated, not yet priced' — a distinct state from proven/stopCovered, not a match failure and not a proof.",
+        "Add a regression test: status:8 child present, price:null, must not be reported as proven protection."
+      ],
+      "acceptance": [
+        "A synthetic status:8 leg (providerOrderId set, price null) is never reported protection_status:'confirmed'.",
+        "Existing scale-in and protection tests remain green.",
+        "npm run check green."
+      ],
+      "sources": [
+        "src/ownership/protection.ts",
+        "src/execution/protection-supervisor.ts",
+        "src/ownership/scale-in.ts",
+        "src/execution/coordinator.ts",
+        "docs/PROJECTX-API-REFERENCE.md (section 4, D2)"
+      ],
+      "implementation_note": "Found during 2026-08-31 full-repo audit (docs/plans -> see docs/AUDIT-2026-08-31.md). Confirmed a real, structurally-wrong check (not a false positive) by direct code read; currently masked by MARKET-only entries, not proof it can't fire — scale-in already exercises the adjacent code path with a position already open.",
+      "closure_note": "Fixed 2026-08-31 (plano-completo Fase 1.6.1). bindProtection (src/ownership/protection.ts) now flags a leg with providerOrderId+correct type but price:null as 'stop_leg_unpriced'/'target_leg_unpriced' -> status stays 'pending', never 'proven'. evaluateProtectionHealth (src/execution/protection-supervisor.ts) requires price!==null for stopCovered, so unprotected_open_quantity correctly counts a suspended (status:8) leg as unprotected. All downstream consumers (receipt-reconciliation.ts, coordinator.ts, lifecycle-facts.ts, trade-outcome-flat.ts) read protection.status and are fixed automatically. Tests: tests/protection.test.ts (unpriced leg not proven, distinguishable reason, confirms once priced), tests/protection-supervisor.test.ts (unprotected_open_quantity=1 for suspended leg). npm run check green, 495/495."
+    },
+    {
+      "id": "TS-AUDIT31-EX-02",
+      "title": "REST reconciliation blind spot: searchOpen never returns status:8 bracket children",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "execution_safety",
+      "finding": "openOrdersEvidence (src/ownership/projectx-order-ownership.ts:330-349) builds its authoritative order set purely from REST open_orders_snapshot (Order/searchOpen) history, which ProjectX never populates with status:8 (suspended bracket child) rows (confirmed: docs/PROJECTX-API-REFERENCE.md section 5.3, zero occurrences across the recorded dataset). Between order placement and entry fill, a freshly-allocated bracket is real (has orderId, parentOrderId, tick distance) but invisible to REST reconciliation — only the SignalR stream sees it in that window. A process restart or stream loss during that window makes protection state genuinely unknowable via REST alone. Currently bounded to ~8ms because entries are MARKET-only (coordinator.ts:351 hardcodes type:2); would become a real multi-second/minute exposure window immediately on any move to LIMIT/STOP entries.",
+      "resolution": [
+        "Document the ~8ms MARKET-only bound explicitly as a load-bearing safety assumption, not an implementation detail.",
+        "Gate any future LIMIT/STOP entry support behind closing this blind spot (e.g. treat the place-to-fill window as an explicit non-reconcilable interval requiring stream health, not REST, as the sole truth source).",
+        "Add a test asserting entry submission stays MARKET-only until this is resolved."
+      ],
+      "acceptance": [
+        "Explicit test pins entry order type to MARKET.",
+        "docs/ARCHITECTURE.md and docs/THREAT-MODEL.md state the bound as a safety-relevant constraint.",
+        "Any PR introducing a non-MARKET entry type must reference and resolve this item first."
+      ],
+      "sources": [
+        "src/ownership/projectx-order-ownership.ts",
+        "src/execution/coordinator.ts",
+        "docs/PROJECTX-API-REFERENCE.md (section 5.3, D3)"
+      ],
+      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Confirmed accurate and confirmed entries are provably MARKET-only today by direct code read; latent, not active."
+    },
+    {
+      "id": "TS-AUDIT31-PX-01",
+      "title": "ReadCircuitBreaker uses one shared failure counter across all read endpoints",
+      "status": "open",
+      "priority": "P1",
+      "owner_role": "reliability",
+      "finding": "src/projectx/read-circuit-breaker.ts takes a 'path' parameter into recordFailure/recordSuccess but keeps a single process-wide failure counter regardless of which endpoint failed (client.ts:296 calls this.readCircuit.recordFailure(path) unconditionally). A burst of failures concentrated on one endpoint (e.g. retrieveBars during a reconnect storm) can open the circuit for unrelated reconciliation-critical reads (searchOpenPositions/searchOpenOrders/searchAccounts) too, amplifying a localized transport blip into a broader state_complete=false block on new exposure. Corroborates the 2026-08-24/31 flapping investigation.",
+      "resolution": [
+        "Key the failure counter/cooldown by endpoint family (e.g. retrieveBars vs account/order/position reads) instead of one global counter.",
+        "Keep the mutation-path exclusion unchanged (mutations never go through this breaker)."
+      ],
+      "acceptance": [
+        "A synthetic failure burst on retrieveBars alone does not open the circuit for searchOpenPositions/searchOpenOrders/searchAccounts.",
+        "Existing circuit-breaker tests remain green; new test pins per-family isolation.",
+        "npm run check green."
+      ],
+      "sources": [
+        "src/projectx/read-circuit-breaker.ts",
+        "src/projectx/client.ts",
+        "docs/plans/2026-08-27-stream-recovery-implementation-plan.md"
+      ],
+      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Design question flagged for discussion, not applied — touches live reconnect/reconciliation control flow."
     }
   ],
   "reaudit_program_2026_08_20": {
