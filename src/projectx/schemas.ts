@@ -149,7 +149,11 @@ export function parseOrder(input: unknown): OrderInfo {
     contractId: requiredString(input, "contractId"),
     ...(typeof input.symbolId === "string" ? { symbolId: input.symbolId } : {}),
     creationTimestamp: requiredString(input, "creationTimestamp"),
-    updateTimestamp: requiredString(input, "updateTimestamp"),
+    // D5: legacy docs show updateTimestamp can be null; fall back to creationTimestamp
+    // instead of rejecting the event as a payload fault (never observed live, cheap to guard).
+    updateTimestamp: typeof input.updateTimestamp === "string" && input.updateTimestamp.length > 0
+      ? input.updateTimestamp
+      : requiredString(input, "creationTimestamp"),
     status: coercedInteger(input, "status"),
     type: coercedInteger(input, "type"),
     side: coercedInteger(input, "side"),
