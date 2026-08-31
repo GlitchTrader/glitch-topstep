@@ -101,3 +101,50 @@ export class LifecycleSupervisor {
     return this.disposeAll();
   }
 }
+
+/**
+ * A critical disposer (e.g. realtime, local_gateway) that failed to unwind may still hold a live
+ * writer against the stores shutdown is about to close. That must retain recovery state — the
+ * runtime lock and store handles — regardless of whether the durable backlog is empty, otherwise
+ * closeStores() can release the lock and close SQLite under a writer that never actually stopped
+ * (TS-REAUDIT-08).
+ */
+export function requiresShutdownRetention(
+  criticalFailedDisposers: readonly string[],
+  backlogPending: boolean,
+): boolean {
+  return criticalFailedDisposers.length > 0 || backlogPending;
+}
+
+export interface ShutdownFailureRecoveryInput {
+  criticalFailedDisposers: readonly string[];
+  backlogPending: boolean;
+  /** Closes durable stores and releases the runtime lock. Only ever called when NOT retaining. */
+  closeStores: () => Promise<void>;
+  /** Closes network-facing handles only (HTTP server, order flow poller, ...) -- stores and the
+   * runtime lock must stay untouched. Only ever called when retaining. */
+  retainNetworkHandles: (criticalFailedDisposers: readonly string[]) => void;
+  onCleanupError?: (error: unknown) => void;
+}
+
+/**
+ * The exact recovery sequence `AppService.stopSerial()`'s catch block runs after a shutdown
+ * failure -- extracted so the composition (not just `requiresShutdownRetention`'s boolean) is
+ * independently testable against real side-effecting callbacks (e.g. a real file-based
+ * `RuntimeScopeLock`), without needing to construct all of `AppService` (TS-REAUDIT-08).
+ *
+ * Returns which branch actually ran, so a caller/test can assert on it directly rather than only
+ * inferring it from side effects.
+ */
+export async function runShutdownFailureRecovery(
+  input: ShutdownFailureRecoveryInput,
+): Promise<"closed" | "retained"> {
+  if (!requiresShutdownRetention(input.criticalFailedDisposers, input.backlogPending)) {
+    await input.closeStores().catch((error: unknown) => {
+      input.onCleanupError?.(error);
+    });
+    return "closed";
+  }
+  input.retainNetworkHandles(input.criticalFailedDisposers);
+  return "retained";
+}

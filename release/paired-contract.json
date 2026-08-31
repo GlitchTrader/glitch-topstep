@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.paired_contract.v1",
   "protocol_revision": "glitch.topstep.paired.v3",
-  "health_schema": "glitch.direct.health.v2",
+  "health_schema": "glitch.direct.health.v3",
   "runtime_intent_schema": "glitch.intent.v3",
   "gateway_accepted_intent_schemas": [
     "glitch.intent.v2",

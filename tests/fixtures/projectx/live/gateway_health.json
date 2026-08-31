@@ -1,11 +1,11 @@
 {
   "http_status": 200,
   "health": {
-    "schema_version": "glitch.direct.health.v2",
+    "schema_version": "glitch.direct.health.v3",
     "compatibility": {
       "gateway_name": "glitch-topstep",
       "gateway_version": "0.2.0",
-      "health_schema": "glitch.direct.health.v2",
+      "health_schema": "glitch.direct.health.v3",
       "protocol_revision": "glitch.topstep.paired.v3",
       "intent_schemas": [
         "glitch.intent.v2",

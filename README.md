@@ -10,7 +10,7 @@ Glitch Topstep (this repo)
   normalize · persist evidence · calculate · verify · execute · reconcile · recover
              │ sanitized evidence packet
              ▼
-Hermes Topstep operator  →  glitch.intent.v2  →  Glitch Topstep → ProjectX orders
+Hermes Topstep operator  →  glitch.intent.v3 (v2 compat)  →  Glitch Topstep → ProjectX orders
 ```
 
 Companion cognition: [`GlitchTrader/glitch-topstep-hermes-profile`](https://github.com/GlitchTrader/glitch-topstep-hermes-profile).
@@ -87,7 +87,13 @@ curl -H "Authorization: Bearer $env:GLITCH_LOCAL_TOKEN" http://127.0.0.1:8790/pa
 | `GET /packet` | bearer | Decision packet + market observation + order flow |
 | `GET /evidence` | bearer | Provider evidence journal (`limit` ≤ 1000) |
 | `GET /ownership` | bearer | Entry/fill identity (protection ownership still P0) |
-| `POST /intent` | bearer | Strict `glitch.intent.v2` execution |
+| `GET /outcomes`, `GET /outcomes/feed` | bearer | Trade outcome journal / canonical revision feed |
+| `GET /execution/facts` | bearer | Immediate lifecycle facts per `intent_id` |
+| `GET /intent/status`, `GET /intent/receipt` | bearer | Intent lifecycle lookup |
+| `POST /intent` | bearer | Strict `glitch.intent.v3` (v2 compat) execution |
+| `POST /control`, `GET /control` | operator bearer | Flatten, pause, operator status |
+
+This table lists the routes this codebase actually serves today (`src/server/local-gateway.ts`). [`docs/GATEWAY-SPEC.md`](docs/GATEWAY-SPEC.md) describes a rebuild-target contract (`POST /intents`, plural) that has not been reconciled with the live route name yet — treat GATEWAY-SPEC's naming as proposed, not current.
 
 ### Data stores
 
@@ -157,16 +163,9 @@ gh pr create                        # or push main
 
 `.env`, API keys, JWTs, `data/` runtime stores, or sanitized fixtures containing secrets.
 
-### Suggested next work (ledger)
+### Suggested next work
 
-| ID | Title | Status |
-|----|-------|--------|
-| TS-R4-00 | Nonterminal intents until native bracket proof | ready |
-| TS-R1-01 | Process-kill recovery fixtures | ready |
-| TS-R4-01 | Provider bracket ownership from explicit IDs | backlog (P0) |
-| TS-R2-01 | Real ProjectX auth in shadow | blocked (needs API subscription) |
-
-Recent NT parity shipped: **TS-R1-05** atomic UUID + body-hash claim.
+See [`docs/ledger/ledger.json`](docs/ledger/ledger.json) for the current, authoritative work queue — this README does not keep its own copy of ledger state, since a hardcoded snapshot here drifts stale by design as the ledger moves.
 
 ---
 

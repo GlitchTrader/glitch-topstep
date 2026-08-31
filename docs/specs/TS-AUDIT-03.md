@@ -4,6 +4,8 @@
 **Priority:** P1  
 **Status:** implemented; repository verification pending
 
+Durable authority rationale for this decision lives in [`docs/AUTHORITY.md`](../AUTHORITY.md#ts-audit-03-decision-quiet-tape) — this file is the point-in-time spec (intent, change, acceptance, non-goals).
+
 ## Intent
 
 Keep ProjectX order-flow measurements available to Hermes without converting one market condition into a hidden deterministic entry strategy.

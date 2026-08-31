@@ -215,11 +215,18 @@ export function bindProtection(
     issues.push("stop_child_not_observed");
   } else if (stop.observedOrder?.type !== STOP_ORDER_TYPE) {
     issues.push("stop_type_mismatch");
+  } else if (stop.price === null) {
+    // ProjectX allocates bracket children as suspended (undocumented order status 8) with no
+    // price until the entry fills. providerOrderId + type alone would otherwise satisfy "proven"
+    // for a leg that cannot actually stop a loss yet (TS-AUDIT31-EX-01).
+    issues.push("stop_leg_unpriced");
   }
   if (!target.providerOrderId) {
     issues.push("target_child_not_observed");
   } else if (target.observedOrder?.type !== TARGET_ORDER_TYPE) {
     issues.push("target_type_mismatch");
+  } else if (target.price === null) {
+    issues.push("target_leg_unpriced");
   }
 
   if (issues.length > 0) {

@@ -97,6 +97,8 @@ The selected account and contract are the current acceptance scope, not a perman
 
 ## TS-AUDIT-03 decision: quiet tape
 
+Full spec, acceptance criteria, and non-goals: [`docs/specs/TS-AUDIT-03.md`](specs/TS-AUDIT-03.md). This section states the durable authority rationale; the spec file states the point-in-time change.
+
 A 60-second window with zero prints is not an execution boundary. It does not invalidate the selected account, contract, quantity, bracket, venue state, ownership, or protection. The observation remains in `order_flow` so Hermes can judge whether the market is too thin, inactive, or simply between prints.
 
 Applied to the change test:

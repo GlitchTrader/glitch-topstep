@@ -30,7 +30,7 @@ Topstep = final account-program and rule authority
 
 Hermes may make a bad trade. Alan may make a bad trade. Glitch may not cause either operator to act on false identity, false state, incorrect calculations, duplicate execution, wrong-order mutation, or missing protection.
 
-See [`AUTHORITY.md`](AUTHORITY.md).
+See [`AUTHORITY.md`](AUTHORITY.md). For rebuild objectives and requirements, see [`GATEWAY-SPEC.md`](GATEWAY-SPEC.md). For evidence-graded, field-by-field ProjectX API behavior (including undocumented fields and known divergences between docs and code), see [`PROJECTX-API-REFERENCE.md`](PROJECTX-API-REFERENCE.md).
 
 ## Runtime topology
 
@@ -213,7 +213,8 @@ Still requiring real acceptance:
 - ProjectX timestamp inclusivity/exclusivity at window boundaries;
 - any undocumented result cap or pagination behavior;
 - late corrections, voids, and partial-fill updates;
-- raw REST response envelopes.
+- raw REST response envelopes;
+- whether `POST /api/Position/partialCloseContract` auto-resizes an existing native stop-loss/take-profit bracket to the reduced position size, leaves it oversized, or leaves it unresized — undocumented, and load-bearing for `protected_reduction_saga_v1`'s "proven stop coverage" claim.
 
 ## Exact order and fill ownership
 
@@ -259,7 +260,9 @@ The following are prohibited as ownership evidence:
 - working-order geometry;
 - aggregate position state alone.
 
-A nearby stop or target is not attributed. `MOVE_STOP`, `MOVE_TP`, bracket correction, and protection reconstruction remain disabled until ProjectX supplies an explicit child-order, OCO, or equivalent relationship that can be reconciled durably.
+A nearby stop or target is not attributed by price/time proximity. `customTag` convention (`<entry-tag>-SL`/`-TP`) is the primary match, since the venue always tags a bracket child that way when the entry itself carried a `customTag`. ProjectX's SignalR `GatewayUserOrder` stream also carries an explicit `parentOrderId` (child → parent entry order) and `linkedOrderId` (take-profit → stop-loss sibling) relation — undocumented by ProjectX's public API reference, but parsed by this gateway (`src/projectx/schemas.ts`) and used as a fallback ownership match in `resolveProtectiveLeg` (`src/ownership/protection.ts`) precisely for brackets the venue creates without a client-supplied tag, e.g. account-level "Position Brackets." `MOVE_STOP` and `MOVE_TP` are live-validated against this ownership model (`docs/PARITY.md`, 2026-07-30).
+
+Still unproven: the `parentOrderId` fallback path itself has not been exercised against a real "Position Brackets" (untagged) scenario in PRAC — see `docs/PROJECTX-API-REFERENCE.md`, "NÃO CONFIRMADO" item 5. The code path exists; live proof of it does not yet.
 
 ## Truthful packets
 
@@ -301,7 +304,7 @@ Trusted local configuration resolves numeric provider identities. The gateway cu
 - `HOLD`
 - `NOTHING`
 
-`MOVE_STOP` and `MOVE_TP` remain known but non-executable until durable protective-order ownership is implemented.
+`MOVE_STOP` and `MOVE_TP` are live-validated against `customTag`-based protective-order ownership (`docs/PARITY.md`, 2026-07-30): moving one leg leaves the sibling and position quantity unchanged. Ownership still rests on `customTag` convention, not the provider's `parentOrderId`/`linkedOrderId` relation — see "Exact order and fill ownership" above.
 
 ## Absolute geometry over provider transport
 
@@ -334,6 +337,8 @@ Execution persistence already includes:
 
 The settlement latch prevents a second entry while a submitted entry has not yet appeared in reconciled ProjectX order or position state. This is execution correctness, not a trading strategy.
 
+ProjectX requires `customTag` to be unique per account for the account's lifetime, not merely per process or session — the generation scheme behind custom-tag recovery must guarantee that uniqueness durably across restarts and retries, or entry submission will be rejected by the provider.
+
 Still missing:
 
 - aggregate position ownership;
@@ -348,3 +353,5 @@ The companion profile independently persists cognition attempts, outbox, decisio
 ## Current transport sources
 
 ProjectX connection URLs, realtime subscription names, and payload contracts must come from current official documentation and observed sanitized runtime evidence. When official documentation and observed payloads disagree, Glitch records the discrepancy and fails visibly rather than making fields optional to suppress errors.
+
+Session tokens obtained via `POST /api/Auth/loginKey` expire in ~24h; `POST /api/Auth/validate` revalidates the current token but there is no separate refresh-token flow. Auth belongs to W0: the gateway must revalidate before expiry and degrade `/health` explicitly on failure rather than mutate ProjectX with a stale token.

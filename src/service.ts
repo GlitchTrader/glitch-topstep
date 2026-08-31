@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
@@ -63,13 +64,18 @@ import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "./domain/operator.js";
-import { LifecycleSupervisor } from "./service/lifecycle-supervisor.js";
+import { LifecycleSupervisor, runShutdownFailureRecovery } from "./service/lifecycle-supervisor.js";
+import { TaskScheduler } from "./service/task-scheduler.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
-import { buildHealthAlerts } from "./observability/health-alerts.js";
-import { ProjectXAuthManager, type ProjectXAuthStatus } from "./projectx/auth-manager.js";
+import { HealthAlertTracker } from "./observability/health-alerts.js";
+import {
+  ProjectXAuthManager,
+  projectXAuthBackoffDelayMs,
+  type ProjectXAuthStatus,
+} from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
 import { resolveActivePositionScope, type ActivePositionScope } from "./market/active-position-scope.js";
@@ -129,8 +135,15 @@ export class GlitchTopstepService {
   private controlPaused = false;
   private runtimeTradingMode: TradingMode;
   private readonly lifecycle = new LifecycleSupervisor();
+  /** Persists across /health polls so hysteresis/dedup state (TS-REAUDIT-11) is real, not per-call. */
+  private readonly healthAlerts = new HealthAlertTracker();
+  /** Coordinates the four periodic REST-bound timers below (TS-STREAM-RECOVERY-01 PR-F). */
+  private readonly taskScheduler = new TaskScheduler({ maxConcurrent: 2 });
   private readonly marketHubRecovery = new HubRecoveryController();
   private lastMetadataReconcileAt: string | null = null;
+  /** Bounded jittered backoff on repeated reconcile failures (TS-STREAM-RECOVERY-01 PR-G). */
+  private reconcileConsecutiveFailures = 0;
+  private nextReconcileAttemptAtMs = 0;
   private readonly runtimeLock: RuntimeScopeLock;
   private stopping: Promise<void> | null = null;
   private starting: Promise<void> | null = null;
@@ -454,10 +467,21 @@ export class GlitchTopstepService {
       console.error("ProjectX reconciliation failed during service start", error);
     }
 
+    // Each timer below still fires on its own unchanged cadence; TaskScheduler only coordinates
+    // ordering and concurrency of the resulting REST-bound work (TS-STREAM-RECOVERY-01 PR-F) --
+    // it does not change what runs or how often it's requested, only how many run at once and
+    // in what priority order a post-reconnect burst drains in.
     this.reconciliationTimer = setInterval(() => {
-      void this.reconcile().catch((error: unknown) => {
-        console.error("ProjectX reconciliation failed", error);
-      });
+      // Skip this tick entirely while backed off from repeated failures, rather than hammering
+      // ProjectX with reconcile calls every interval during an outage (TS-STREAM-RECOVERY-01 PR-G).
+      if (Date.now() < this.nextReconcileAttemptAtMs) {
+        return;
+      }
+      this.taskScheduler.enqueue("critical_reconcile", "reconcile", () => (
+        this.reconcile().catch((error: unknown) => {
+          console.error("ProjectX reconciliation failed", error);
+        })
+      ), this.config.reconcileIntervalMs);
     }, this.config.reconcileIntervalMs);
     this.reconciliationTimer.unref();
     this.lifecycle.register("reconciliation_timer", () => {
@@ -465,9 +489,11 @@ export class GlitchTopstepService {
     });
 
     this.historySyncTimer = setInterval(() => {
-      void this.historySync.sync().catch((error: unknown) => {
-        console.error("ProjectX history synchronization failed", error);
-      });
+      this.taskScheduler.enqueue("history_sync", "history_sync", () => (
+        this.historySync.sync().catch((error: unknown) => {
+          console.error("ProjectX history synchronization failed", error);
+        })
+      ), this.historySyncIntervalMs);
     }, this.historySyncIntervalMs);
     this.historySyncTimer.unref();
     this.lifecycle.register("history_sync_timer", () => {
@@ -478,7 +504,16 @@ export class GlitchTopstepService {
     // stale packet already fails to resolve. Invalidating here only killed packets a client
     // was still holding.
     this.marketObservationTimer = setInterval(() => {
-      void this.refreshMarketObservations();
+      // The scheduler already logs failures via its onError handler; this timer doesn't need
+      // the result, but must still handle the returned promise's rejection itself or it becomes
+      // an unhandled rejection (a caller that DOES need the result, e.g. handleHubReconnected,
+      // awaits and catches this same task id normally).
+      this.taskScheduler.enqueue(
+        "market_observation",
+        "market_observation",
+        () => this.refreshMarketObservations(),
+        MARKET_OBSERVATION_REFRESH_MS,
+      ).catch(() => undefined);
     }, MARKET_OBSERVATION_REFRESH_MS);
     this.marketObservationTimer.unref();
     this.lifecycle.register("market_observation_timer", () => {
@@ -486,7 +521,9 @@ export class GlitchTopstepService {
     });
 
     this.orderFlowTimer = setInterval(() => {
-      void Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
+      this.taskScheduler.enqueue("order_flow", "order_flow", async () => {
+        await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
+      }, ORDER_FLOW_REFRESH_MS).catch(() => undefined);
     }, ORDER_FLOW_REFRESH_MS);
     this.orderFlowTimer.unref();
     this.lifecycle.register("order_flow_timer", () => {
@@ -511,6 +548,7 @@ export class GlitchTopstepService {
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
       () => {
+        const healthBuildStartMs = performance.now();
         const recordedAt = new Date();
         const current = snapshot();
         const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
@@ -573,7 +611,13 @@ export class GlitchTopstepService {
           now: recordedAt,
         });
         return {
-          schema_version: "glitch.direct.health.v2",
+          // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
+          // first_last_fired_utc/thresholds/runbook_url (alert_id replaces id); added
+          // task_scheduler, persistence_bytes, heap_used_bytes, health_build_ms,
+          // read_circuit_breaker. All additive except the health_alerts id->alert_id rename --
+          // confirmed no consumer in the paired profile reads health_alerts today
+          // (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
+          schema_version: "glitch.direct.health.v3",
           compatibility: GATEWAY_COMPATIBILITY,
           status:
             quality.stateComplete
@@ -620,8 +664,13 @@ export class GlitchTopstepService {
           protected_reduction: protectedReduction,
           safety_supervisor: safetySupervisor,
           invariant_metrics: invariantMetrics,
-          health_alerts: buildHealthAlerts(invariantMetrics),
+          health_alerts: this.healthAlerts.evaluate(invariantMetrics),
+          task_scheduler: this.taskScheduler.counts(),
+          read_circuit_breaker: this.authManager.readCircuitStatus(),
           recovery: this.marketHubRecovery.snapshot(),
+          persistence_bytes: this.persistenceSizeBytes(),
+          heap_used_bytes: process.memoryUsage().heapUsed,
+          health_build_ms: Math.round(performance.now() - healthBuildStartMs),
         };
       },
       snapshot,
@@ -705,10 +754,12 @@ export class GlitchTopstepService {
 
   private async stopSerial(): Promise<void> {
     this.lifecycle.transition("draining", "stop_requested");
+    let criticalFailedDisposers: readonly string[] = [];
     try {
       // Intents already queued must settle before the stores they write to close.
       await this.coordinator?.drainExecutionQueue();
       const drainResult = await this.lifecycle.drain("disposing_runtime_resources");
+      criticalFailedDisposers = drainResult.criticalFailed;
       if (drainResult.criticalFailed.length > 0) {
         throw new Error(`lifecycle_dispose_failed:${drainResult.criticalFailed.join(",")}`);
       }
@@ -721,6 +772,7 @@ export class GlitchTopstepService {
         this.scannerMarketData?.waitForIdle() ?? Promise.resolve(),
         this.orderFlow?.waitForIdle() ?? Promise.resolve(),
         this.ledger.waitForIdle(),
+        this.taskScheduler.waitForIdle(),
       ]);
       await this.tradeOutcomePublication;
       await this.ledger.waitForIdle();
@@ -731,17 +783,24 @@ export class GlitchTopstepService {
         "failed_shutdown",
         error instanceof Error ? error.message : String(error),
       );
-      if (!this.shouldRetainShutdownRecoveryState()) {
-        await this.closeStores().catch((cleanupError: unknown) => {
+      await runShutdownFailureRecovery({
+        criticalFailedDisposers,
+        backlogPending: this.shouldRetainShutdownRecoveryState(),
+        closeStores: () => this.closeStores(),
+        onCleanupError: (cleanupError) => {
           console.error("shutdown cleanup failed", cleanupError);
-        });
-      } else {
-        this.orderFlow?.close();
-        this.orderFlow = null;
-        this.gateway = null;
-        this.realtime = null;
-        this.packets = null;
-      }
+        },
+        retainNetworkHandles: (disposers) => {
+          if (disposers.length > 0) {
+            console.error(`shutdown_retained_critical_disposer_failed:${disposers.join(",")}`);
+          }
+          this.orderFlow?.close();
+          this.orderFlow = null;
+          this.gateway = null;
+          this.realtime = null;
+          this.packets = null;
+        },
+      });
       throw error;
     }
   }
@@ -1131,21 +1190,49 @@ export class GlitchTopstepService {
     }
     try {
       if (kind === "market") {
-        await this.reconcile({ includeMetadata: false });
+        // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
+        // into this recovery run instead of firing a redundant duplicate REST call
+        // (TS-STREAM-RECOVERY-01 PR-F).
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "reconcile",
+          () => this.reconcile({ includeMetadata: false }),
+          this.config.reconcileIntervalMs,
+        );
         if (recovery.isStaleCallback(generation)) {
           return;
         }
-        await this.refreshMarketObservations();
-        for (const service of this.orderFlows.values()) {
-          await service.refresh();
-        }
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "market_observation",
+          () => this.refreshMarketObservations(),
+          MARKET_OBSERVATION_REFRESH_MS,
+        );
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "order_flow",
+          async () => {
+            await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
+          },
+          ORDER_FLOW_REFRESH_MS,
+        );
         if (recovery.isStaleCallback(generation)) {
           return;
         }
-        await this.historySync.sync();
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "history_sync",
+          () => this.historySync.sync(),
+          this.historySyncIntervalMs,
+        );
         recovery.complete(generation, new Date().toISOString());
       } else {
-        await this.reconcile({ includeMetadata: false });
+        await this.taskScheduler.enqueue(
+          "market_recovery",
+          "reconcile",
+          () => this.reconcile({ includeMetadata: false }),
+          this.config.reconcileIntervalMs,
+        );
       }
     } catch (error: unknown) {
       if (kind === "market") {
@@ -1162,6 +1249,28 @@ export class GlitchTopstepService {
       return true;
     }
     return Date.now() - Date.parse(this.lastMetadataReconcileAt) >= RECONCILE_METADATA_INTERVAL_MS;
+  }
+
+  /**
+   * Bytes on disk for each durable store, surfaced in /health so DB growth is an observed fact,
+   * not something only discovered by an operator running out of disk (TS-STREAM-RECOVERY-01 PR-H).
+   * Never throws: a missing/unreadable file reports null rather than degrading /health itself.
+   */
+  private persistenceSizeBytes(): Record<string, number | null> {
+    const files = {
+      execution_store: "glitch-topstep.sqlite",
+      provider_evidence_store: "projectx-evidence.sqlite",
+      control_store: "glitch-topstep-controls.sqlite",
+    };
+    const sizes: Record<string, number | null> = {};
+    for (const [key, filename] of Object.entries(files)) {
+      try {
+        sizes[key] = statSync(join(this.config.dataDir, filename)).size;
+      } catch {
+        sizes[key] = null;
+      }
+    }
+    return sizes;
   }
 
   private async reconcile(options?: { includeMetadata?: boolean }): Promise<void> {
@@ -1210,8 +1319,16 @@ export class GlitchTopstepService {
         this.lastMetadataReconcileAt = new Date().toISOString();
       }
       await this.completePendingFlattenControls();
+      this.reconcileConsecutiveFailures = 0;
+      this.nextReconcileAttemptAtMs = 0;
     } catch (error) {
       this.state.markReconciliationFailed(error);
+      this.reconcileConsecutiveFailures += 1;
+      // Reuses the same bounded/jittered shape already proven for auth refresh (TS-REAUDIT-01) --
+      // the function is generic (base 1s, doubling per failure, capped at 30s, +jitter), not
+      // auth-specific despite its name.
+      this.nextReconcileAttemptAtMs = Date.now()
+        + projectXAuthBackoffDelayMs(this.reconcileConsecutiveFailures);
       throw error;
     } finally {
       this.reconciliationInFlight = false;

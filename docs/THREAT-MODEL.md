@@ -32,18 +32,16 @@ Mitigation:
 
 ### Duplicate execution
 
-Current mitigation:
-
-- in-process intent ID set
-- unique ProjectX custom tag
-- append-only receipt
-
-Required production mitigation:
+Mitigation (implemented — see `docs/ROADMAP.md` R1, all checked):
 
 - SQLite unique constraint on intent ID
-- restart reconciliation against open/historical orders by custom tag
-- atomic outbox before API call
+- unique ProjectX custom tag
+- atomic outbox persisted before the provider API call
 - durable delivery receipt after API response and stream confirmation
+- restart reconciliation against open/historical orders by custom tag
+- append-only receipt
+
+This section previously listed these as "required production mitigation" (not yet built); they have since shipped. Remaining open work in this area is process-kill fixture coverage at each of the four durability points above — see `docs/ROADMAP.md` R1's unchecked items, not a mitigation gap.
 
 ### Stale state
 
@@ -52,23 +50,23 @@ Mitigation:
 - quote and account-state age limits
 - stable decision snapshot hash
 - no entry when state is incomplete
-
-Required:
-
-- explicit SignalR connection health
-- sequence/gap detection where the provider exposes it
+- explicit SignalR connection health and reconnect-generation tracking (`VenueStateStore`)
 - REST reconciliation after reconnect
 - generation ID preventing pre-reconnect intents from executing
 
+Not available from the provider, not a code gap: ProjectX's SignalR payloads carry no sequence or offset field to detect a message gap (`docs/PROJECTX-API-REFERENCE.md` §7.6, confirmed against recorded evidence) — resubscribe-and-reconcile is the only recovery model the API supports.
+
+Still open: formal PRAC proof of disconnect/reconnect/generation-invalidation/REST-reconciliation behavior against a real account (`docs/ROADMAP.md` R2, unchecked).
+
 ### Unprotected fills
 
-Current scaffold requests provider-side brackets with the entry.
+Implemented: entry requests provider-side brackets (`stopLossBracket`/`takeProfitBracket`, tick distance) atomically with the entry order; ownership is proven via `customTag` convention (`<entry-tag>-SL`/`-TP`) against user-hub events, confirmed live 2026-07-30 (`docs/PARITY.md`).
 
-Required before acceptance:
+Required before further acceptance (unchanged in substance, now precisely scoped by `docs/PROJECTX-API-REFERENCE.md`'s divergence findings D1–D3):
 
-- confirm fill and child protection through user-hub events
-- map provider-created stop and target IDs
-- verify quantities
+- map provider-created stop and target IDs from the provider's own `parentOrderId`/`linkedOrderId` relation, not just `customTag` convention (D1 — the fields arrive on the stream today and are discarded by the parser)
+- recognize `status: 8` (suspended bracket child awaiting entry fill — undocumented by ProjectX, confirmed live) instead of treating it as ordinary "working" by exclusion (D2)
+- close the REST reconciliation blind spot: `Order/searchOpen` never returns `status: 8`, so a bracket allocated between `place` and fill is invisible to REST recovery — masked today only because entries are market-only (D3)
 - correct bracket prices to exact absolute structural levels when needed
 - flatten if protection cannot be proven within a bounded interval
 

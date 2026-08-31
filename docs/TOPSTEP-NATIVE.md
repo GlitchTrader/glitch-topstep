@@ -1,6 +1,6 @@
 # Topstep-native design
 
-**Last reviewed:** July 28, 2026
+**Last reviewed:** August 31, 2026
 
 Glitch Topstep is **not** a port of Glitch NinjaTrader. It is a venue-native operator stack for Topstep accounts on the official ProjectX trader API. The only design constraint is: **meet Topstep requirements using what Topstep and ProjectX actually provide.**
 
@@ -46,7 +46,7 @@ Otherwise the effective mode is `degraded_armed` and orders are not placed.
 
 ### 6. Protection follows ProjectX ownership
 
-Brackets are placed via ProjectX tick-distance fields on `placeOrder`. Child-order ownership uses explicit `trade.orderId` and `customTag` evidence — not NT-style proximity heuristics. `MOVE_STOP` / `MOVE_TP` stay disabled until durable ownership is proven.
+Brackets are placed via ProjectX tick-distance fields on `placeOrder`. Child-order ownership uses explicit `trade.orderId` and `customTag` evidence — not NT-style proximity heuristics. `MOVE_STOP` / `MOVE_TP` are live-validated against that `customTag`-based ownership (`docs/PARITY.md`, 2026-07-30). ProjectX's stream also carries an explicit `parentOrderId`/`linkedOrderId` relation that would strengthen this proof further; it is not yet consumed (see `docs/PROJECTX-API-REFERENCE.md` §2.3, divergence D1).
 
 ### 7. Policy facts are explicit
 

@@ -10,6 +10,7 @@ import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import type { OutcomeRevisionPage } from "../storage/sqlite-outcome-feed.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
 import { formatLogError } from "../observability/log-sanitize.js";
+import { resolveIntentReceiptResponse } from "../domain/intent-delivery-status.js";
 
 const EVIDENCE_SOURCES = new Set<ProviderEvidenceSource>([
   "projectx_rest",
@@ -248,11 +249,13 @@ export class LocalGatewayServer {
           return;
         }
         const receipt = this.coordinator.receiptForIntent(intentId);
-        if (!receipt) {
-          this.json(response, 404, { error: "intent_receipt_not_found" });
-          return;
-        }
-        this.json(response, 200, receipt);
+        // A missing receipt does not mean the intent never happened -- fall back to delivery
+        // status so a non-terminal intent is never reported as a bare 404 (TS-REAUDIT-04).
+        const resolved = resolveIntentReceiptResponse(
+          receipt,
+          this.coordinator.intentDeliveryStatus(intentId),
+        );
+        this.json(response, resolved.httpStatus, resolved.body);
         return;
       }
       if (request.method === "POST" && url.pathname === "/intent") {

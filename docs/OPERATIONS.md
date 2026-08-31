@@ -216,17 +216,21 @@ Fixture corpus for CI: `glitch-topstep-hermes-profile/tests/fixtures/frozen_corp
 
 ## Runtime SLOs and alerts (TS-REAUDIT-11)
 
-Observe-only thresholds for `/health` invariant metrics until paired soak promotes them:
+Observe-only thresholds for `/health` invariant metrics until paired soak promotes them. Implemented in `src/observability/health-alerts.ts` (`HealthAlertTracker`), wired as a single instance persisted for the process lifetime in `AppService` so hysteresis state survives across `/health` polls.
 
-| SLI | Warn | Critical | Hysteresis |
-|-----|------|----------|------------|
-| `unprotected_seconds_estimate` | > 30s | > 120s | clear after 60s covered |
-| `flatten_pending_seconds` | > 45s | > 180s | clear when control terminal |
-| `evidence_queue_depth` | > 1000 | high-water mark | clear below low-water |
-| `reconciliation_age_ms` | > 120_000 | > 300_000 | clear after one success |
-| `auth_degraded` | true | true + new exposure attempt | clear after successful refresh |
+**Hysteresis is evaluation-count-based, not wall-clock-second-based.** Each `/health` build is one evaluation; an alert needs `open_threshold_evaluations` (default 2) consecutive active evaluations before it's reported (`recovery_state: "open"`, suppressing single-poll noise), and `clear_threshold_evaluations` (default 2) consecutive clean evaluations before it disappears (`recovery_state: "clearing"` in between). This is a deliberately weaker but real substitute for the wall-clock-second design below — polling cadence isn't fixed at this layer, so tick-based hysteresis is what's actually implemented and tested (`tests/health-alerts.test.ts`).
 
-Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle state.
+| SLI | Warn | Critical | Status |
+|-----|------|----------|--------|
+| `unprotected_seconds_estimate` | > 30s | > 120s | **implemented** (tick-based hysteresis, not the "clear after 60s covered" wall-clock design originally noted here) |
+| `flatten_pending_seconds` | > 45s | > 180s | **implemented** (tick-based hysteresis) |
+| `reconciliation_age_ms` | > 120_000 | > 300_000 | **implemented** (tick-based hysteresis) |
+| `auth_degraded` | true | true + new exposure attempt | partially implemented — the plain `auth_degraded=true` alert exists; the compound "critical only if a new-exposure attempt was also made" condition is **not implemented** (no unambiguous signal for "attempt" in `InvariantMetrics` today; guessing one for a safety alert was judged worse than the simpler always-critical-when-degraded behavior currently shipped) |
+| `evidence_queue_depth` | > 1000 | high-water mark | **not implemented** — `evidence_queue_degraded` (boolean) is alerted instead; the specific numeric warn/critical/low-water thresholds above were never given a concrete source and are not wired |
+
+Each alert carries `alert_id`, `dedup_key`, `recovery_state`, `first_fired_utc`, `last_fired_utc`, `open_threshold_evaluations`, `clear_threshold_evaluations`, and `runbook_url` (this section) — see `GET /health`'s `health_alerts` array.
+
+Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle state (both already implemented as immediate boolean alerts, `execution_recovery_blocking` and via the lifecycle state itself).
 
 ## Armed promotion and rollback (TS-REAUDIT-12)
 
@@ -247,6 +251,7 @@ Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle s
 
 - **HTTP/trading:** only `GlitchTopstep_Gateway` (+ optional `GlitchTopstep_GatewayWatchdog`).
 - **Hermes cron scheduler** (not port 8790): one `glitch-topstep` Hermes gateway process for `hermes cron` ticks. Autostart via `Startup\Hermes_Gateway_glitch-topstep.vbs` (idempotent; reads `gateway.pid`).
+- If `hermes cron status` reports "Gateway is not running" while ticks have stopped, repair with `powershell -ExecutionPolicy Bypass -File scripts/ensure-hermes-gateway-scheduler.ps1` (runs `hermes -p glitch-topstep gateway start`, which writes `gateway.pid` + `gateway.lock`).
 - Disable duplicate Task Scheduler entries: `powershell -ExecutionPolicy Bypass -File scripts/disable-hermes-gateway-scheduled-tasks.ps1` (elevated once). No-op stubs live under `%LOCALAPPDATA%\hermes\...\gateway-service\` for `Hermes_Gateway` and `Hermes_Gateway_glitch`.
 
 **Stream disconnect recovery**

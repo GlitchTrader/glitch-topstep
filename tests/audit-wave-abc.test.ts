@@ -77,7 +77,7 @@ describe("health alerts", () => {
       execution_recovery_blocking: false,
       orphan_protective_orders: 0,
     });
-    assert.ok(alerts.some((alert) => alert.id === "auth_degraded"));
-    assert.ok(alerts.some((alert) => alert.id === "unprotected_open_quantity"));
+    assert.ok(alerts.some((alert) => alert.alert_id === "auth_degraded"));
+    assert.ok(alerts.some((alert) => alert.alert_id === "unprotected_open_quantity"));
   });
 });
