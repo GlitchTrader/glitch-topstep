@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-31T15:37:49.694Z",
-  "gateway_commit": "cf914a2b7f51e113b87c7c818fb16ff453029513",
+  "recorded_utc": "2026-08-31T15:55:45.580Z",
+  "gateway_commit": "05a6efcb19657149838c105a2ce02525328d2e07",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
@@ -66,6 +66,14 @@
     {
       "file": "tests/intent-delivery-status.test.ts",
       "sha256": "6d59f6666fb42a4b80a72669da3b3774b284db26d27b2ae9254005617fedd47c"
+    },
+    {
+      "file": "tests/sqlite-busy-fault.test.ts",
+      "sha256": "b660a234e9239924ec12edab9b159d464a94ad2511261f374e9ded753bbd11c1"
+    },
+    {
+      "file": "tests/task-scheduler.test.ts",
+      "sha256": "ff5b1c0cdb736d2afe967d333ece810021701fdb9254b06bf4e1ad7280e03edd"
     },
     {
       "file": "scripts/rollback-rehearsal.mjs",
