@@ -115,3 +115,36 @@ export function requiresShutdownRetention(
 ): boolean {
   return criticalFailedDisposers.length > 0 || backlogPending;
 }
+
+export interface ShutdownFailureRecoveryInput {
+  criticalFailedDisposers: readonly string[];
+  backlogPending: boolean;
+  /** Closes durable stores and releases the runtime lock. Only ever called when NOT retaining. */
+  closeStores: () => Promise<void>;
+  /** Closes network-facing handles only (HTTP server, order flow poller, ...) -- stores and the
+   * runtime lock must stay untouched. Only ever called when retaining. */
+  retainNetworkHandles: (criticalFailedDisposers: readonly string[]) => void;
+  onCleanupError?: (error: unknown) => void;
+}
+
+/**
+ * The exact recovery sequence `AppService.stopSerial()`'s catch block runs after a shutdown
+ * failure -- extracted so the composition (not just `requiresShutdownRetention`'s boolean) is
+ * independently testable against real side-effecting callbacks (e.g. a real file-based
+ * `RuntimeScopeLock`), without needing to construct all of `AppService` (TS-REAUDIT-08).
+ *
+ * Returns which branch actually ran, so a caller/test can assert on it directly rather than only
+ * inferring it from side effects.
+ */
+export async function runShutdownFailureRecovery(
+  input: ShutdownFailureRecoveryInput,
+): Promise<"closed" | "retained"> {
+  if (!requiresShutdownRetention(input.criticalFailedDisposers, input.backlogPending)) {
+    await input.closeStores().catch((error: unknown) => {
+      input.onCleanupError?.(error);
+    });
+    return "closed";
+  }
+  input.retainNetworkHandles(input.criticalFailedDisposers);
+  return "retained";
+}

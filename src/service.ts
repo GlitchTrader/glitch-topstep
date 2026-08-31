@@ -64,7 +64,7 @@ import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "./domain/operator.js";
-import { LifecycleSupervisor, requiresShutdownRetention } from "./service/lifecycle-supervisor.js";
+import { LifecycleSupervisor, runShutdownFailureRecovery } from "./service/lifecycle-supervisor.js";
 import { TaskScheduler } from "./service/task-scheduler.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
@@ -783,22 +783,24 @@ export class GlitchTopstepService {
         "failed_shutdown",
         error instanceof Error ? error.message : String(error),
       );
-      if (!requiresShutdownRetention(criticalFailedDisposers, this.shouldRetainShutdownRecoveryState())) {
-        await this.closeStores().catch((cleanupError: unknown) => {
+      await runShutdownFailureRecovery({
+        criticalFailedDisposers,
+        backlogPending: this.shouldRetainShutdownRecoveryState(),
+        closeStores: () => this.closeStores(),
+        onCleanupError: (cleanupError) => {
           console.error("shutdown cleanup failed", cleanupError);
-        });
-      } else {
-        if (criticalFailedDisposers.length > 0) {
-          console.error(
-            `shutdown_retained_critical_disposer_failed:${criticalFailedDisposers.join(",")}`,
-          );
-        }
-        this.orderFlow?.close();
-        this.orderFlow = null;
-        this.gateway = null;
-        this.realtime = null;
-        this.packets = null;
-      }
+        },
+        retainNetworkHandles: (disposers) => {
+          if (disposers.length > 0) {
+            console.error(`shutdown_retained_critical_disposer_failed:${disposers.join(",")}`);
+          }
+          this.orderFlow?.close();
+          this.orderFlow = null;
+          this.gateway = null;
+          this.realtime = null;
+          this.packets = null;
+        },
+      });
       throw error;
     }
   }

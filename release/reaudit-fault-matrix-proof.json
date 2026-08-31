@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-31T15:55:45.580Z",
-  "gateway_commit": "05a6efcb19657149838c105a2ce02525328d2e07",
+  "recorded_utc": "2026-08-25T23:57:54.322Z",
+  "gateway_commit": "169eabd0c1f64f61a5becfdeac3fe4315df3dbac",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
@@ -9,7 +9,7 @@
     },
     {
       "file": "tests/projectx-auth-manager.test.ts",
-      "sha256": "8fa4b796ee3403adb197a17d0e489b1d98427e064f4c4cf89139620f1006a553"
+      "sha256": "4fbb8f47860e531f2295f3b2702d98e3481bb1d9695583c8fcd512ead54768c9"
     },
     {
       "file": "tests/reaudit-phase1.test.ts",
@@ -17,7 +17,7 @@
     },
     {
       "file": "tests/lifecycle-supervisor.test.ts",
-      "sha256": "aa155cd43cfc260fc9903e02e6b794521bfb7ce29e31ad8df7b9079c15b29e94"
+      "sha256": "5ed44cbbc3f6e33a47e0e4f4a4e0477221bf1bd8f32c8d45a981185c004d1195"
     },
     {
       "file": "tests/flatten-workflow.test.ts",
@@ -25,11 +25,11 @@
     },
     {
       "file": "tests/kill-matrix.test.ts",
-      "sha256": "cc7d9b65ecdfff6544a152fd483a2758368c23344ced612dec6df19ff77febe3"
+      "sha256": "05daf7a97f92480aa5992a00e01446fb9e7f8d3bf791899d13ac817a64c4b80f"
     },
     {
       "file": "tests/paired-release-manifest.test.ts",
-      "sha256": "0d2a59b56148ec7fb8e41f11a0af1603fdaf34b55fbe5217b4df9ca18454fe2f"
+      "sha256": "b4bcece161ba7ef96a89829aad5d3dc7f6720b1fcf5fd8bb79f3aa790bacdb8b"
     },
     {
       "file": "tests/projectx-client.test.ts",
@@ -41,7 +41,7 @@
     },
     {
       "file": "tests/audit-wave-abc.test.ts",
-      "sha256": "8d7a4198c7713a7cd603f4032726dde19403b14eb380d97724b35726a3af62ea"
+      "sha256": "6f09fbed52bb4675e9bfbddff75c0fb693b762ba80cc331ae06d88a2bad3630f"
     },
     {
       "file": "tests/invariant-metrics.test.ts",
@@ -49,42 +49,18 @@
     },
     {
       "file": "tests/sqlite-execution-store.test.ts",
-      "sha256": "58cbed5e845d97f9132b93aa92bab2f2c615d29d917846e120ff3df22eed783c"
-    },
-    {
-      "file": "tests/protection.test.ts",
-      "sha256": "9a9a89a98578275b1e4504b6dbab415d48a4e199cdb435230aa788811e2894ec"
-    },
-    {
-      "file": "tests/protection-supervisor.test.ts",
-      "sha256": "cc2a4e79350b34e9d48933ea2c13fba303ab3d396da8cbeb1ec07df181a39c3e"
-    },
-    {
-      "file": "tests/read-circuit-breaker.test.ts",
-      "sha256": "ac07e23c171fe692eca9a6a9bfa4bf7785c419894cd0abcc84e28e1a83064d72"
-    },
-    {
-      "file": "tests/intent-delivery-status.test.ts",
-      "sha256": "6d59f6666fb42a4b80a72669da3b3774b284db26d27b2ae9254005617fedd47c"
-    },
-    {
-      "file": "tests/sqlite-busy-fault.test.ts",
-      "sha256": "b660a234e9239924ec12edab9b159d464a94ad2511261f374e9ded753bbd11c1"
-    },
-    {
-      "file": "tests/task-scheduler.test.ts",
-      "sha256": "ff5b1c0cdb736d2afe967d333ece810021701fdb9254b06bf4e1ad7280e03edd"
+      "sha256": "3a2b12d4fa52e97922a50af36ec563de29d3e51e2106b15d34bc551938c68bb1"
     },
     {
       "file": "scripts/rollback-rehearsal.mjs",
       "sha256": "9b057b065e56dfe00b2db7fe359e7971ec951a0a89c85091281c094775d12376"
     }
   ],
-  "profile_commit": "7fd382d4290877be1df154391c4004baafd7b396",
+  "profile_commit": "6552c752e443cda7687a1881e5e34bf80f71883d",
   "profile_proofs": [
     {
       "file": "tests/test_fault_injection.py",
-      "sha256": "d1671e8c1fb0341fbcb6576cba82a6647235c5532e2d79e5e74e05b4aa9c31c4"
+      "sha256": "9e9183745a74f8dbe8ef398aecb3c4254b553ea150d6dd0c0f119605f58c9c6d"
     }
   ]
 }

@@ -1,5 +1,5 @@
 {
   "_comment": "TS-REAUDIT-07: max allowed line counts for files that repeatedly absorb new orchestration logic instead of shrinking after extraction. A file exceeding its baseline fails `npm run check`. To grow a file deliberately (extraction elsewhere isn't possible this PR), bump its number here in the same commit -- that makes the growth decision visible in review instead of silent. Recorded 2026-08-31 at the current measured size (src/service.ts 1420 -> 1597 lines, src/execution/coordinator.ts 1596 -> 1612 lines since the 2026-08-21 baseline in docs/ledger/audits/2026-08-20-workflow-decomposition-baseline.md) -- this is a ratchet against further growth, not a claim that these sizes are healthy.",
-  "src/service.ts": 1703,
+  "src/service.ts": 1705,
   "src/execution/coordinator.ts": 1612
 }
