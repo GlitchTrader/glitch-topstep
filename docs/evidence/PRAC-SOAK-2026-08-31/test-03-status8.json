@@ -1,0 +1,51 @@
+{
+  "test_id": 3,
+  "title": "Alteração durante status:8 / classificação de proteção",
+  "recorded_utc": "2026-08-31T23:03:52Z",
+  "operator_authorized": true,
+  "entry_intent_id": "ba8be6a5-3e5d-4ced-aba5-c2b3e562d2a7",
+  "entry_order_id": 3470509441,
+  "stop_order_id": 3470509442,
+  "target_order_id": 3470509443,
+  "expected": {
+    "no_confirmed_with_null_prices": true,
+    "final_protection_confirmed_with_prices": true,
+    "move_stop_during_status8_observed": "optional — MARKET window ~8ms"
+  },
+  "observed": {
+    "entry_http_status": 202,
+    "entry_receipt_code": "entry_submitted_pending_reconciliation",
+    "poll_samples": 1,
+    "false_confirmed_with_null_prices": false,
+    "final_open_qty": 3,
+    "final_protection_status": "confirmed",
+    "final_stop_price": 29475,
+    "final_target_price": 29525,
+    "move_stop_attempts": 0,
+    "note": "First packet poll (~4s after submit) already showed proven/confirmed with priced legs; status:8 window not observable on MARKET PRAC path (expected per TS-AUDIT31-EX-02). Unit coverage: tests/protection.test.ts TS-AUDIT31-EX-01."
+  },
+  "result": "PASS",
+  "raw_evidence": "test-03-status8-raw.json",
+  "operator_ui_confirmed": {
+    "confirmed_utc": "2026-08-31T23:27:00Z",
+    "source": "TopstepX screenshot (operator, no text)",
+    "position": "+3 MNQ @ ~29495.00",
+    "unrealized_pnl_usd": 4.5,
+    "oco_bracket_panel": "OFF",
+    "venue_sl": { "qty": -3, "price": 29475.0 },
+    "venue_tp_limit": { "qty": -3, "price": 29527.25 },
+    "gateway_reconciliation_utc": "2026-08-31T23:29:00Z",
+    "gateway_open_qty": 3,
+    "gateway_protection_status": "confirmed",
+    "gateway_stop_order_id": 3470509442,
+    "gateway_stop_price": 29475,
+    "gateway_target_order_id": 3470509443,
+    "gateway_target_price": 29525,
+    "alignment": {
+      "position_qty": "match",
+      "stop_price": "exact_match",
+      "target_price": "ui_chart_29527.25_vs_gateway_29525_delta_2.25_ticks_9",
+      "note": "OCO toggle OFF no painel; SL/TP nativos visíveis no gráfico — comportamento esperado ProjectX."
+    }
+  }
+}

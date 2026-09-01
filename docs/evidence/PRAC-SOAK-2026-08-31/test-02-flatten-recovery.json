@@ -1,0 +1,41 @@
+{
+  "event": "supervised_flatten_after_test_2_failure",
+  "recorded_utc": "2026-08-31T17:11:07Z",
+  "operator_authorized": true,
+  "operator_ui_confirmed": {
+    "position_before": 2,
+    "oco_bracket": "OFF",
+    "note": "Operator screenshot showed +2 MNQ unprotected; authorized flatten."
+  },
+  "pre_flatten": {
+    "open_qty": 2,
+    "protection_status": "pending",
+    "unprotected_open_quantity": null,
+    "prior_saga": "reduction_ambiguous",
+    "prior_reduction_id": "0743bef2-7b00-463e-b1e1-87d1a74ddec5"
+  },
+  "control": {
+    "control_id": "aff1ddd8-40c5-4d7b-adf5-84cc209920e0",
+    "action": "flatten",
+    "account_id": 26919346,
+    "contract_id": "CON.F.US.MNQ.U26",
+    "http_status": 202,
+    "terminal_status": "completed",
+    "terminal_detail": "venue_flat_confirmed",
+    "reason": "PRAC-SOAK-2026-08-31 flatten after test-2 unprotected survivor"
+  },
+  "post_flatten": {
+    "open_qty": 0,
+    "working_orders": 0,
+    "protection_status": "unknown",
+    "poll_iterations": 1,
+    "poll_seconds": 4
+  },
+  "result": "PASS",
+  "session_impact": {
+    "test_2_partial_close": "FAIL (unchanged — root cause open)",
+    "directed_tests_3_11": "blocked pending P0 investigation",
+    "soak_72h": "not_started"
+  },
+  "script": "scripts/prac-operator-flatten-once.py"
+}

@@ -1,0 +1,33 @@
+{
+  "test_id": 11,
+  "title": "Breakeven automático sem intent Hermes",
+  "started_utc": "2026-09-01T11:12:25.596359Z",
+  "finished_utc": "2026-09-01T11:17:47.761Z",
+  "trading_day_id": "2026-09-01",
+  "cleared_outcome_seeds": 2,
+  "entry_intent_id": "788bde75-0d0d-428a-a8a1-5f54689fd212",
+  "entry_exit_code": 0,
+  "pre_stop_price": 29180.75,
+  "post_stop_price": 29200.75,
+  "tightened_events": [
+    {
+      "schema_version": "glitch.direct.event.v1",
+      "event_id": "792a5927-ee04-46c6-aab1-23cc110173e4",
+      "recorded_utc": "2026-09-01T11:17:47.761Z",
+      "event": "capture_lock_stop_tightened",
+      "payload": {
+        "tranche_intent_id": "788bde75-0d0d-428a-a8a1-5f54689fd212",
+        "provider_order_id": 3472654280,
+        "previous_stop_price": 29180.75,
+        "new_stop_price": 29200.75
+      }
+    }
+  ],
+  "pass_criteria": {
+    "daily_capture_locked": true,
+    "stop_tightened_or_event": true,
+    "intent_free_path": true
+  },
+  "result": "PASS",
+  "notes": "Script mediou post_stop 21ms antes do evento; tighten confirmado em data/events.jsonl. Fixes: clampCaptureLockBreakevenStop + maybeRetightenStopsAfterCaptureLock + clear_prac_trade_outcome_seeds."
+}

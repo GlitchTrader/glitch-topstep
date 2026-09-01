@@ -1,0 +1,30 @@
+{
+  "schema_version": "glitch.topstep.prac_metrics_summary.v1",
+  "session_id": "PRAC-SOAK-2026-08-31",
+  "phase": "baseline_only",
+  "recorded_utc": "2026-08-31T16:55:00Z",
+  "baseline": {
+    "heap_used_bytes": 35000296,
+    "health_build_ms_p50": 412,
+    "gateway_mode": "armed",
+    "state_complete": true,
+    "evidence_queue_physical_depth": 0,
+    "task_scheduler_completed_at_baseline": 16,
+    "sqlite_bytes": {
+      "glitch-topstep.sqlite": "locked_at_capture",
+      "glitch-topstep-controls.sqlite": "locked_at_capture",
+      "projectx-evidence.sqlite": "locked_at_capture",
+      "trade-outcomes.sqlite": "locked_at_capture"
+    }
+  },
+  "soak_targets": {
+    "reconnect_to_resubscribe_p95_seconds": 10,
+    "reconnect_to_reconcile_p95_seconds": 30,
+    "health_p95_ms": 500,
+    "watchdog_restarts_per_hour_rth_max": 1,
+    "market_liveness_restart_reduction_pct": 80
+  },
+  "observed": {
+    "soak_not_started": true
+  }
+}

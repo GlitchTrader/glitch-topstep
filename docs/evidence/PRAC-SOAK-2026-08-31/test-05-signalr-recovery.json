@@ -1,0 +1,24 @@
+{
+  "test_id": 5,
+  "title": "Perda/recuperação SignalR",
+  "recorded_utc": "2026-08-31T23:45:00Z",
+  "operator_authorized": true,
+  "method": "POST /acceptance/force-stream-gap (GLITCH_ACCEPTANCE_STREAM_GAP=1, supervisionado)",
+  "expected": {
+    "connected_to_reconnecting_to_connected": true,
+    "operational_generation_increments": true,
+    "recovery_under_30s": true
+  },
+  "observed": {
+    "generation_baseline_to_gap": "1→2",
+    "market_stream_transition": "connected → reconnecting → connected",
+    "gap_state_complete_false": true,
+    "health_recovered": true,
+    "elapsed_ms_gap_to_recovered": 8592,
+    "elapsed_ms_gap_phase_to_settled": 30,
+    "reconciliation_generation_final": 2
+  },
+  "result": "PASS",
+  "raw_evidence": "test-05-signalr-recovery-raw.json",
+  "notes": "Aceitação supervisionada via endpoint interno; p95 formal requer soak. Gateway reiniciado com GLITCH_ACCEPTANCE_STREAM_GAP=1 — remover após sessão PRAC se não for ambiente de dev."
+}

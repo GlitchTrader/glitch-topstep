@@ -507,20 +507,46 @@ export class SqliteExecutionStore {
   }
 
   public hasOpenExitMutation(): boolean {
-    const row = this.database.prepare(`
-      SELECT 1 AS ok
+    return this.hasExitMutationBlockingRearm();
+  }
+
+  /** Blocks rearm while an EXIT is in flight or a partial EXIT receipt is still unreconciled. */
+  public hasExitMutationBlockingRearm(): boolean {
+    const rows = this.database.prepare(`
+      SELECT outbox.state AS outbox_state,
+             receipt.status AS receipt_status,
+             json_extract(receipt.payload_json, '$.code') AS receipt_code
       FROM intents AS intent
       JOIN execution_outbox AS outbox ON outbox.intent_id = intent.intent_id
       LEFT JOIN execution_receipts AS receipt ON receipt.intent_id = intent.intent_id
       WHERE intent.action = 'EXIT'
         AND outbox.state IN ('prepared', 'submitting', 'submitted')
-        AND (
-          receipt.status IS NULL
-          OR receipt.status NOT IN ('rejected', 'ignored', 'ambiguous', 'closed')
-        )
-      LIMIT 1
-    `).get() as { ok: number } | undefined;
-    return row !== undefined;
+    `).all() as Array<{
+      outbox_state: string;
+      receipt_status: string | null;
+      receipt_code: string | null;
+    }>;
+    for (const row of rows) {
+      if (row.outbox_state === "prepared" || row.outbox_state === "submitting") {
+        return true;
+      }
+      if (row.receipt_status === null || row.receipt_status === "pending") {
+        return true;
+      }
+      if (row.receipt_code === "partial_exit_submitted_pending_reconciliation") {
+        return true;
+      }
+      if (
+        row.receipt_status === "submitted"
+        && row.receipt_code === "partial_exit_reconciled_pending_protection"
+      ) {
+        continue;
+      }
+      if (!["rejected", "ignored", "ambiguous", "closed"].includes(String(row.receipt_status))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public latchDailyCapture(tradingDayId: string, reachedUtc: string): void {
