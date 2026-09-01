@@ -1,0 +1,15 @@
+{
+  "finished_utc": "2026-09-01T02:15:21.981254Z",
+  "gateway": {
+    "ready": false,
+    "trading_mode": "armed",
+    "lifecycle_state": "ready"
+  },
+  "hermes_cron": {
+    "ensure_exit_code": 0,
+    "ensure_stdout": "Hermes gateway scheduler already running (PID 7532).",
+    "ensure_stderr": "",
+    "status_stdout": "\u00e2\u0153\u201c Gateway is running \u00e2\u20ac\u201d cron jobs will fire automatically\n  PID: 7532\n  Ticker heartbeat: 54s ago\n\n  3 active job(s)\n  Next run: 2026-08-31T22:15:00-04:00",
+    "scheduler_running": true
+  }
+}

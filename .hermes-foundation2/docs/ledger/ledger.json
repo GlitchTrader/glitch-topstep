@@ -1,0 +1,726 @@
+{
+  "schema_version": "2.0",
+  "project": "glitch-topstep-hermes-profile",
+  "updated": "2026-08-19",
+  "release_target": "paired gateway/profile beta",
+  "reconciliation": {
+    "date": "2026-08-19",
+    "merged_prs": [109, 110, 111],
+    "implementation_note": "Paired roadmap implementation and workflow dependency updates are merged. Open issues remain open when they still require live acceptance, operational evidence, or future learning/multi-instrument enablement.",
+    "validation": "172 Profile tests passed after checksum regeneration and workflow conflict resolution."
+  },
+  "profile_version": "0.2.0",
+  "gateway": {
+    "repository": "GlitchTrader/glitch-topstep",
+    "current_version": "0.2.0",
+    "intent_schema": "glitch.intent.v3",
+    "decision_packet_schemas": [
+      "glitch.direct.decision_packet.v1",
+      "glitch.direct.decision_packet.v2"
+    ],
+    "beta_acceptance": "glitch-topstep:TS-BETA-01"
+  },
+  "compatibility_manifest": "scripts/compatibility.py",
+  "constitution": {
+    "cognition": "Hermes owns market judgment, direction, timing, quantity, geometry, management, abstention, review, and learning.",
+    "worker": "The profile worker schedules explicit invocations and validates identity/schema/finite values/geometry/directives; it does not turn evidence into a hidden strategy.",
+    "gateway": "The gateway owns authenticated ProjectX evidence, account and contract identity, factual execution boundaries, native mutation, protection, reconciliation, and receipts.",
+    "objective": "Optimize long-run after-fee expectancy, survival, and realized payout quality. Daily profit and payout progress are Hermes objectives backed by packet evidence—not deterministic Glitch gates, quotas, or fixed risk baselines."
+  },
+  "history": {
+    "previous_schema": "1.0",
+    "previous_main_commit": "d98fc7f6b38b5c83e58e466d540fce55ef8b7a42",
+    "note": "Completed RAIL-002, RAIL-003, RAIL-004, RAIL-007, and RAIL-008 remain in Git history. RAIL-005 is superseded by GTHP-009. PROFILE-BETA-01 remains the external paired-artifact boundary in issue #24."
+  },
+  "items": [
+    {
+      "id": "GTHP-009",
+      "title": "Remove hidden flat-cycle vetoes and arbitrary daily-profit pressure",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "architect",
+      "issue": 21,
+      "evidence": [
+        "scripts/run-topstep-cycle.py",
+        "SOUL.md",
+        "docs/AUTHORITY.md",
+        "tests/test_direct_cycle.py",
+        "docs/specs/GTHP-009.md",
+        "rewrite committed only after py_compile and full unittest success"
+      ]
+    },
+    {
+      "id": "GTHP-010",
+      "title": "Enforce gateway/profile/schema compatibility and reconcile current capabilities",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "release_architecture",
+      "issue": 22,
+      "depends_on": [
+        "GTHP-009"
+      ],
+      "evidence": [
+        "scripts/compatibility.py",
+        "scripts/common.py",
+        "scripts/run-topstep-cycle.py",
+        "plugins/topstep-control/__init__.py",
+        "setup.ps1",
+        "tests/test_compatibility.py",
+        "docs/specs/GTHP-010.md",
+        "regenerated SHA256SUMS"
+      ]
+    },
+    {
+      "id": "RAIL-006",
+      "title": "Consolidate packet-ID minute-frame lookup without semantic change",
+      "status": "done",
+      "priority": "P3",
+      "owner_role": "coder",
+      "issue": 23,
+      "depends_on": [
+        "GTHP-009"
+      ],
+      "stop_line": "No new index, database, cadence, prompt, or delivery abstraction.",
+      "evidence": [
+        "scripts/parity.py",
+        "scripts/run-topstep-learning.py",
+        "tests/test_direct_cycle.py",
+        "regenerated SHA256SUMS"
+      ]
+    },
+    {
+      "id": "RAIL-009",
+      "title": "Promote gateway position management in Hermes cognition",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "acceptance": [
+        "SOUL, skills, and cycle prompt advertise MOVE_STOP, MOVE_TP, partial EXIT, scale-in, and multi-tranche target_intent_id when gateway PM acceptance is green.",
+        "run-topstep-cycle validates amendment and exit intent shapes against glitch.intent.v2.",
+        "MOVE_STOP and MOVE_TP are rejected locally when absent from execution.supported_actions."
+      ],
+      "depends_on": [
+        "GTHP-009"
+      ],
+      "evidence": [
+        "2026-08-03: gateway PM-0..PM-4 live acceptance on PRAC (glitch-topstep PR #38, PARITY.md).",
+        "2026-08-03: SOUL.md, topstep-build-intent, topstep-assess-risk, topstep-form-thesis, run-topstep-cycle prompt_version glitch-topstep-v3."
+      ],
+      "sources": [
+        "SOUL.md",
+        "skills/topstep-build-intent/SKILL.md",
+        "scripts/run-topstep-cycle.py",
+        "tests/test_direct_cycle.py"
+      ]
+    },
+    {
+      "id": "PROFILE-BETA-01",
+      "title": "Prove the immutable Topstep Hermes profile against the paired gateway beta artifact",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "operator_tests",
+      "issue": 24,
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-010",
+        "RAIL-009",
+        "RAIL-010",
+        "glitch-topstep:TS-R1-04",
+        "glitch-topstep:TS-R2-06",
+        "glitch-topstep:TS-R2-07"
+      ],
+      "acceptance": [
+        "Clean install/update, scheduled cognition, positioned management, and armed PRAC mutation evidenced on operator machine.",
+        "Abstention and entry/management/exit path documented with paired gateway receipts.",
+        "Known limitations explicit; no beta-ready claim without operator promotion."
+      ],
+      "evidence": [
+        "2026-08-03: PRAC armed session NOTHING → ENTER_LONG → HOLD → MOVE_STOP → NOTHING.",
+        "docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.md (PR #34).",
+        "Gateway terminal receipts gateway-receipts.jsonl (PR #35).",
+        "Issue #24 operator acceptance comment 2026-08-03."
+      ],
+      "sources": [
+        "docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.md",
+        "docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.decisions.jsonl",
+        "docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.receipts.jsonl",
+        "docs/evidence/PROFILE-BETA-01-prac-session-2026-08-03.gateway-receipts.jsonl"
+      ],
+      "stop_line": "No unattended evaluation/live claim. TS-BETA-01 promoted 2026-08-05 via operator shortcut acceptance (gateway docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md)."
+    },
+    {
+      "id": "RAIL-010",
+      "title": "Align Topstep SOUL doctrine with Glitch NinjaTrader operator contract",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "coder",
+      "depends_on": [
+        "RAIL-009"
+      ],
+      "acceptance": [
+        "SOUL carries cadence, initiating/progressing/exhausting, active management, overlay activation, and /long /short doctrine aligned with Glitch NT where venue permits.",
+        "Intentional non-portable stop lines are explicit.",
+        "topstep-observe-market and GTHP-010 no longer describe HOLD-only positioned management."
+      ],
+      "evidence": [
+        "2026-08-03: SOUL.md prompt_version glitch-topstep-v4; distribution 0.1.6.",
+        "skills/topstep-observe-market/SKILL.md updated for MOVE_STOP/MOVE_TP/partial EXIT."
+      ],
+      "sources": [
+        "SOUL.md",
+        "skills/topstep-observe-market/SKILL.md",
+        "docs/specs/GTHP-010.md",
+        "scripts/parity.py"
+      ]
+    },
+    {
+      "id": "GTHP-011",
+      "title": "Optimize direct-cycle LLM prompt payload",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 43,
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-010",
+        "RAIL-009"
+      ],
+      "acceptance": [
+        "Baseline prompt byte breakdown per section recorded.",
+        "Phase 1 quick wins reduce peak stdin ~40-50% without repair_rate regression >10%.",
+        "Adaptive frames and compact ledger tails land with tests.",
+        "prompt_version bump to glitch-topstep-v5 when implemented."
+      ],
+      "stop_line": "No cognition veto or hidden strategy introduced via prompt slimming.",
+      "evidence": [
+        "2026-08-03: ~16-20k tokens/cycle baseline documented.",
+        "2026-08-05: packet_for_cycle + continuity frames + compact ledger tails; adaptive flat frame count.",
+        "docs/specs/GTHP-011.md",
+        "tests/test_packet_model.py",
+        "tests/test_direct_cycle.py"
+      ],
+      "sources": [
+        "scripts/run-topstep-cycle.py",
+        "scripts/packet_model.py",
+        "scripts/parity.py",
+        "docs/specs/GTHP-011.md"
+      ]
+    },
+    {
+      "id": "GTHP-012",
+      "title": "Learning parity with Glitch NT supervisor (ingestion, rich outcomes, feedback loop)",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 45,
+      "depends_on": [
+        "GTHP-010",
+        "PROFILE-BETA-01",
+        "glitch-topstep:TS-R3-01",
+        "glitch-topstep:TS-R3-03"
+      ],
+      "acceptance": [
+        "Learning worker syncs gateway outcomes independently of the direct decision cron.",
+        "Debrief evidence consumes MAE/MFE, exit_reason, and R-multiple after TS-R3-03 lands.",
+        "Gateway rejections are classified into system_defect vs cognitive_rejection for decision episodes.",
+        "Summarized outcome_backed lessons appear in the direct-cycle ledger context without unbounded prompt growth.",
+        "Overlay activation defaults conservative (no auto-activate without posterior outcome evidence)."
+      ],
+      "stop_line": "Do not port NT master/follower replication or Apex multi-account semantics; do not let learning submit intents or bypass outcome_backed gates.",
+      "evidence": [
+        "2026-08-03: NT vs Topstep learning comparison documented.",
+        "2026-08-05: learning worker sync_gateway_outcomes_meta on every run; rejection_class on decision episodes; debrief outcome_execution v1.1; outcome_backed_lessons in direct-cycle ledger context.",
+        "2026-08-05: PRAC acceptance — TS-R3-03 closed; learning_eligible outcomes debriefed into trade-episodes.jsonl.",
+        "docs/specs/GTHP-012.md",
+        "tests/test_learning.py"
+      ],
+      "sources": [
+        "scripts/run-topstep-learning.py",
+        "scripts/run-topstep-cycle.py",
+        "scripts/parity.py",
+        "scripts/common.py",
+        "skills/topstep-review-outcomes/SKILL.md",
+        "skills/topstep-self-learning/SKILL.md",
+        "docs/OUTCOME-CONTRACT.md",
+        "docs/specs/GTHP-012.md"
+      ]
+    },
+    {
+      "id": "GTHP-013",
+      "title": "Idempotent intent delivery on duplicate and intent_body_conflict",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "issue": 47,
+      "pull_request": 52,
+      "depends_on": [
+        "GTHP-010"
+      ],
+      "acceptance": [
+        "Registered intent + profile transport failure recovers terminal receipt without intent_body_conflict loop.",
+        "Fresh snapshot_hash retry only when intent was not registered.",
+        "Positioned MOVE_STOP, MOVE_TP, and EXIT are not silently dropped after ambiguous delivery.",
+        "tests/test_direct_cycle.py fixtures green."
+      ],
+      "stop_line": "Do not weaken gateway body-hash identity rules.",
+      "evidence": [
+        "2026-08-05: merged PR #52; frozen delivery-wire + reconcile on intent_body_conflict.",
+        "glitch-topstep PR #79 GET /intent/receipt.",
+        "docs/specs/GTHP-013.md"
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-topstep-cycle.py",
+        "tests/test_direct_cycle.py"
+      ]
+    },
+    {
+      "id": "GTHP-014",
+      "title": "Skip flat direct-operator cycles outside RTH/session window",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "coder",
+      "issue": 48,
+      "depends_on": [
+        "GTHP-009"
+      ],
+      "acceptance": [
+        "Flat + outside configured session window skips Luna; events.jsonl records session_closed.",
+        "Positioned cycles and wake triggers still invoke.",
+        "Operator override documented for PRAC acceptance outside RTH.",
+        "Pairs with glitch-topstep:TS-R3-02 packet session fields when available."
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-topstep-cycle.py",
+        "docs/OPERATIONS.md"
+      ]
+    },
+    {
+      "id": "GTHP-015",
+      "title": "facts_sha256 audit envelope in trade debrief evidence",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "coder",
+      "issue": 49,
+      "depends_on": [
+        "GTHP-012",
+        "glitch-topstep:TS-R3-03"
+      ],
+      "acceptance": [
+        "debrief_evidence rows include facts and stable facts_sha256.",
+        "Debrief prompt references hash without duplicating full outcome blobs.",
+        "trading_influence outcome_backed gate unchanged."
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-topstep-learning.py",
+        "tests/test_learning.py"
+      ]
+    },
+    {
+      "id": "GTHP-016",
+      "title": "Keep compatibility manifest aligned with profile and prompt versions",
+      "status": "done",
+      "priority": "P2",
+      "owner_role": "release_architecture",
+      "issue": 50,
+      "depends_on": [
+        "GTHP-010"
+      ],
+      "acceptance": [
+        "tests/test_compatibility.py fails on manifest drift from parity.PROMPT_VERSION.",
+        "Single-source version bump checklist in docs/OPERATIONS.md.",
+        "Paired gateway /health compatibility accepts current profile after release."
+      ],
+      "evidence": [
+        "scripts/distribution_manifest.py TESTED_GATEWAY_VERSION single-source",
+        "tests/test_compatibility.py prompt + gateway drift guards",
+        "docs/OPERATIONS.md release version checklist"
+      ],
+      "sources": [
+        "scripts/compatibility.py",
+        "scripts/parity.py",
+        "setup.ps1",
+        "tests/test_compatibility.py"
+      ]
+    },
+    {
+      "id": "GTHP-017",
+      "title": "Daily economics as cognition evidence (eval vs approved playbooks)",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 51,
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-010",
+        "RAIL-010",
+        "glitch-topstep:TS-R3-04"
+      ],
+      "acceptance": [
+        "SOUL and skills distinguish evaluation vs approved daily objectives; Hermes owns stop/continue.",
+        "0.4-2% calibration band documented as objective feedback, not a gateway gate or trade quota.",
+        "Profile consumes policy.daily_economics mirror after TS-R3-04 without inventing null fields.",
+        "Planning/hourly loops may reference band position; GTHP-009 flat evidence and cadence unchanged.",
+        "No engine profit lock or ENTER_* rejection on daily PnL."
+      ],
+      "stop_line": "Do not implement v2 guardian profit lock or gateway daily PnL execution gates.",
+      "evidence": [
+        "2026-08-05: operator direction — daily profit is strategic objective via cognition, not engine lock.",
+        "docs/specs/GTHP-017.md"
+      ],
+      "sources": [
+        "SOUL.md",
+        "skills/topstep-assess-risk/SKILL.md",
+        "skills/topstep-form-thesis/SKILL.md",
+        "scripts/run-topstep-cycle.py",
+        "scripts/run-topstep-learning.py",
+        "docs/specs/GTHP-017.md",
+        "glitch-topstep:docs/specs/TS-R3-04.md"
+      ]
+    },
+    {
+      "id": "GTHP-018",
+      "title": "Market quiescence evidence gate for flat direct-operator cycles",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "coder",
+      "issue": 61,
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-014",
+        "glitch-topstep:TS-R4-07"
+      ],
+      "acceptance": [
+        "Flat + market_quiescent evidence skips Luna; events.jsonl records market_quiescent not session_closed.",
+        "Evidence uses stale quote age plus zero/minimal tape thresholds, not wall-clock RTH alone.",
+        "run-topstep-learning.py is not gated by quiescence.",
+        "Positioned cycles and wake triggers still invoke Luna.",
+        "docs/specs/GTHP-018.md and tests/test_direct_cycle.py coverage."
+      ],
+      "stop_line": "No hidden strategy gate; no learning cron suppression; no skip when positioned.",
+      "evidence": [
+        "2026-08-05 PRAC: 16:00-17:00 CDT maintenance — 12x llm_skipped stale_gateway_quote, trade_count_60s=0.",
+        "2026-07-31: parity.market_quiescent_skip_details; events market_quiescent; GLITCH_TOPSTEP_SKIP_MARKET_QUIESCENT default true.",
+        "2026-08-06: gate prefers packet.stream_health when present; reconnect_pending bypass; session.phase in recent_frames; PRICE_CROSS range uses session_high/low and order_flow window.",
+        "docs/specs/GTHP-018.md",
+        "tests/test_direct_cycle.py"
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-topstep-cycle.py",
+        "docs/OPERATIONS.md",
+        "docs/specs/GTHP-018.md",
+        "glitch-topstep:docs/specs/TS-R4-07.md"
+      ]
+    },
+    {
+      "id": "GTHP-019",
+      "title": "Persistent wake triggers and durable changeWhen monitor",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 62,
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-018",
+        "glitch-topstep:TS-R4-07"
+      ],
+      "acceptance": [
+        "supervisor/active-wake-triggers.json schema documented and survives restarts.",
+        "Monitor evaluates triggers against gateway evidence; fired trigger invokes direct-cycle with wake_reason.",
+        "Dedup cooldown documented; GTHP-018 quiescence skip respected when flat.",
+        "docs/specs/GTHP-019.md and regression tests."
+      ],
+      "stop_line": "Triggers schedule invocation only — no pre-baked trade decisions or hidden ENTER veto.",
+      "evidence": [
+        "2026-08-06: PRICE_CROSS + SESSION_PHASE schema; run-wake-trigger-monitor loop; launch-wake-trigger-monitor cron job.",
+        "parity evaluate_wake_triggers + cooldown fire_history; condition_change bypasses market_quiescent.",
+        "wake_reason on events.jsonl; tests/test_wake_triggers.py",
+        "distribution 0.1.23"
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-wake-trigger-monitor.py",
+        "scripts/launch-wake-trigger-monitor.py",
+        "supervisor/active-wake-triggers.json",
+        "docs/specs/GTHP-019.md",
+        "glitch-topstep:docs/specs/TS-R4-07.md"
+      ]
+    },
+    {
+      "id": "GTHP-020",
+      "title": "Bracket verification consumption (protection.protection_status)",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-012",
+        "glitch-topstep:TS-R4-08"
+      ],
+      "acceptance": [
+        "parity.packet_protection_status with legacy protection.status fallback.",
+        "validate_intent rejects MOVE_STOP/MOVE_TP unless protection_status is confirmed.",
+        "Cycle prompt and skills guide pending/failed/unknown positioned management.",
+        "docs/specs/GTHP-020.md, docs/OPERATIONS.md, tests/test_direct_cycle.py.",
+        "tested_gateway_version 0.1.6; profile 0.1.22."
+      ],
+      "stop_line": "No auto-flatten, flat-cycle skip, or ENTER veto from protection_status.",
+      "evidence": [
+        "2026-08-06: parity protection_status helpers; amendment guard in run-topstep-cycle.",
+        "SOUL.md, topstep-assess-risk, topstep-build-intent updated.",
+        "distribution 0.1.22 / tested_gateway_version 0.1.6."
+      ],
+      "sources": [
+        "scripts/parity.py",
+        "scripts/run-topstep-cycle.py",
+        "SOUL.md",
+        "skills/topstep-assess-risk/SKILL.md",
+        "skills/topstep-build-intent/SKILL.md",
+        "docs/specs/GTHP-020.md",
+        "glitch-topstep:docs/specs/TS-R4-08.md"
+      ]
+    },
+    {
+      "id": "GTHP-023",
+      "title": "Selective V2 skills (orderflow, session, post-trade)",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "architect",
+      "issue": 63,
+      "depends_on": [
+        "GTHP-010",
+        "GTHP-012",
+        "glitch-topstep:TS-R4-07",
+        "glitch-topstep:TS-R4-08"
+      ],
+      "acceptance": [
+        "skills/orderflow-liquidity, session-playbook, post-trade-review each have SKILL.md.",
+        "SOUL.md references skills without contradicting GTHP-009 or AUTHORITY.",
+        "No guardian auto-flatten or hidden execution gates via skills.",
+        "docs/specs/GTHP-023.md."
+      ],
+      "stop_line": "Do not port v2 guardian, multi-account, or glitch-decision-v2 schema.",
+      "sources": [
+        "SOUL.md",
+        "skills/",
+        "docs/specs/GTHP-023.md"
+      ]
+    },
+    {
+      "id": "GTHP-021",
+      "title": "Learning calibration and similar-decision grouping",
+      "status": "open",
+      "priority": "P2",
+      "owner_role": "architect",
+      "issue": 64,
+      "depends_on": [
+        "GTHP-012",
+        "GTHP-015"
+      ],
+      "acceptance": [
+        "Learning worker emits descriptive similarity clusters without auto-activating overlays.",
+        "outcome_backed gate unchanged; no anti-abstention or trade quotas.",
+        "Bounded cluster tail may appear in direct-cycle ledger when configured.",
+        "docs/specs/GTHP-021.md and tests/test_learning.py."
+      ],
+      "stop_line": "Similarity clusters inform cognition only — no automatic intent submission or gateway gates.",
+      "sources": [
+        "scripts/run-topstep-learning.py",
+        "scripts/parity.py",
+        "docs/specs/GTHP-021.md",
+        "tests/test_learning.py"
+      ]
+    },
+    {
+      "id": "GTHP-022",
+      "title": "Participation breadth — partial timeframe alignment without universal gates",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "depends_on": [
+        "GTHP-009",
+        "GTHP-011",
+        "GTHP-017"
+      ],
+      "acceptance": [
+        "SOUL and topstep-form-thesis treat 60m/5m/1m as complementary, not mandatory confirmation.",
+        "Flat audit answers path, move phase, participation condition, and invalidation.",
+        "Retest, closed candle, persistent flow, and full alignment are confidence boosters only.",
+        "prompt_version bump to glitch-topstep-v6; no trade quota or frequency pressure via size/stop.",
+        "docs/specs/GTHP-022.md and regenerated SHA256SUMS."
+      ],
+      "stop_line": "No gateway gates, trade quotas, or anti-abstention pressure; frequency discipline forbids artificial stop thinning or size increase.",
+      "evidence": [
+        "2026-08-05: SOUL ALTERADO sections for partial alignment, expanded hypotheses, frequency discipline.",
+        "skills/topstep-form-thesis Participation breadth section.",
+        "scripts/run-topstep-cycle.py ALTERED PARTICIPATION GUIDANCE in cycle prompt.",
+        "distribution 0.1.21 / prompt_version glitch-topstep-v6."
+      ],
+      "sources": [
+        "SOUL.md",
+        "skills/topstep-form-thesis/SKILL.md",
+        "scripts/run-topstep-cycle.py",
+        "scripts/distribution_manifest.py",
+        "docs/specs/GTHP-022.md"
+      ]
+    },
+    {
+      "id": "GTHP-024",
+      "title": "NT-style flat participation doctrine — failed continuation, range edges, audit checklist",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "depends_on": [
+        "GTHP-022"
+      ],
+      "evidence": [
+        "SOUL.md",
+        "skills/topstep-form-thesis/SKILL.md",
+        "skills/topstep-observe-market/SKILL.md",
+        "scripts/run-topstep-cycle.py",
+        "docs/specs/GTHP-024.md",
+        "prompt_version glitch-topstep-v7",
+        "distribution 0.1.24",
+        "regenerated SHA256SUMS"
+      ]
+    },
+    {
+      "id": "GTHP-025",
+      "title": "Neutral intent template, advisory change_condition, optional wake_triggers",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "architect",
+      "depends_on": [
+        "GTHP-024"
+      ],
+      "evidence": [
+        "scripts/run-topstep-cycle.py",
+        "scripts/parity.py",
+        "SOUL.md",
+        "skills/topstep-build-intent/SKILL.md",
+        "docs/specs/GTHP-025.md",
+        "prompt_version glitch-topstep-v8",
+        "distribution 0.1.25",
+        "regenerated SHA256SUMS",
+        "tests/test_direct_cycle.py"
+      ]
+    },
+    {
+      "id": "GTHP-026",
+      "title": "Import clear_pending_wake_invocation in direct cycle worker",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "coder",
+      "depends_on": [
+        "GTHP-025"
+      ],
+      "evidence": [
+        "scripts/run-topstep-cycle.py",
+        "tests/test_direct_cycle.py",
+        "distribution 0.1.26",
+        "regenerated SHA256SUMS"
+      ]
+    },
+    {
+      "id": "GTHP-027",
+      "title": "SHA256SUMS coverage for cycle scripts and worker status timestamp",
+      "status": "done",
+      "priority": "P0",
+      "owner_role": "release_architecture",
+      "depends_on": [
+        "GTHP-026"
+      ],
+      "evidence": [
+        "SHA256SUMS includes run-topstep-cycle.py and parity.py",
+        "scripts/run-topstep-cycle.py lazy import for clear_pending_wake_invocation",
+        "plugins/topstep-control/__init__.py worker status recorded_utc",
+        "distribution 0.1.27"
+      ]
+    },
+    {
+      "id": "GTHP-028",
+      "title": "Neutral template placeholders, cycle delta audit, safe update lock recovery",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 79,
+      "depends_on": [
+        "GTHP-025",
+        "GTHP-027"
+      ],
+      "evidence": [
+        "docs/specs/GTHP-028.md",
+        "scripts/run-topstep-cycle.py prompt v9",
+        "scripts/parity.py cycle_evidence_delta",
+        "distribution 0.1.31",
+        "prompt_version glitch-topstep-v9"
+      ]
+    },
+    {
+      "id": "GTHP-029",
+      "title": "Packet evidence sanitization for model prompts (#73 profile side)",
+      "status": "done",
+      "priority": "P1",
+      "owner_role": "architect",
+      "issue": 73,
+      "depends_on": [
+        "GTHP-027"
+      ],
+      "evidence": [
+        "docs/specs/GTHP-029.md",
+        "scripts/packet_model.py sanitize_market_for_model",
+        "scripts/parity.py compact_receipt_row field/error",
+        "distribution 0.1.31"
+      ]
+    }
+  ],
+  "implementation_run_2026_08_19": {
+    "paired_protocol": "glitch.topstep.paired.v3",
+    "prompt_version": "glitch-topstep-v10",
+    "operator_universe": ["MNQ", "MES", "MCL"],
+    "provider_alias_note": "MCL is Micro Crude Oil; MCLE is the ProjectX catalog family used only for exact runtime resolution.",
+    "implemented_orders": [16, 17, 18, 19, 20, 21, 22, 25],
+    "features": [
+      "0.5 percent daily context without quota",
+      "explicit partial and completed bar roles",
+      "frozen comparison trigger contract",
+      "v3 entry range and one reassessment",
+      "truthful worker lifecycle status",
+      "revision-aware outcome replacement and execution-fact separation",
+      "frozen-corpus prompt comparison harness",
+      "complete MNQ/MES/MCL candidate ledger and global ranking"
+    ],
+    "external_validation_pending": [
+      "real two-prompt frozen corpus run",
+      "simulated armed sessions against exact MNQ, MES, and MCL contracts",
+      "attested immutable paired release"
+    ]
+  },
+  "foundation_update_2026_08_19": {
+    "scope": "revisioned outcome projection",
+    "implementation": [
+      "scripts/outcome_store.py owns the local SQLite projection and cursor transaction",
+      "scripts/common.py exports JSONL only after the SQLite commit, preserving compatibility",
+      "duplicate sequence replay is idempotent and conflicting content fails closed",
+      "restart, bootstrap, atomic export, and integrity checks are covered by tests/test_outcome_store.py"
+    ],
+    "validation": "175 tests passed, 1 expected skip",
+    "live_acceptance_pending": [
+      "paired gateway feed replay with more than 10000 revisions",
+      "restart soak with a real PRAC outcome correction",
+      "confirm learning consumes the SQLite-backed projection without duplicate episodes"
+    ],
+    "live_validation_2026_08_19": {
+      "gateway_reconnect_proof": "passed after stabilization retry; generation 2 to 3; final state complete and reconciled",
+      "gateway_fixture_capture": "15 sanitized fixtures captured",
+      "outcome_live_acceptance": "pending; no real correction/replay soak claimed",
+      "related_gateway_issue_comments": [
+        "https://github.com/GlitchTrader/glitch-topstep/issues/110#issuecomment-5344359580",
+        "https://github.com/GlitchTrader/glitch-topstep/issues/112#issuecomment-5344359835"
+      ]
+    }
+  }
+}

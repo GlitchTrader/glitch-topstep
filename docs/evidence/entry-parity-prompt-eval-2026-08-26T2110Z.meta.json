@@ -1,0 +1,27 @@
+{
+  "schema_version": "glitch.topstep.prompt_eval.v1",
+  "recorded_utc": "2026-08-26T21:10:57.151189Z",
+  "packet_id": "9939e682-af0e-442b-a539-cd59b95f62f4",
+  "instrument": "MNQ",
+  "created_utc": "2026-08-26T21:10:02.903Z",
+  "gateway_version": "0.2.3",
+  "profile_version": null,
+  "prompt_version": "glitch-topstep-v16",
+  "prompt_chars": 191542,
+  "frame_count": 4,
+  "positioned": false,
+  "entry_band_guidance": {
+    "schema_version": "glitch.topstep.entry_band_guidance.v1",
+    "suggested_min_width_ticks": 59,
+    "spread_ticks": 57,
+    "notes": [
+      "Advisory only — Hermes sets entry_price_min/max as the EV-retaining zone, not raw bid/ask.",
+      "Band must contain decision reference (last/mid) and price plausible decision-to-delivery drift once."
+    ]
+  },
+  "template_entry_min": null,
+  "template_entry_max": null,
+  "intent_action": "NOTHING",
+  "intent_entry_min": null,
+  "intent_entry_max": null
+}

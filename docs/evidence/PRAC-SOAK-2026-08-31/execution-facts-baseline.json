@@ -1,0 +1,201 @@
+﻿{
+    "schema_version":  "glitch.topstep.execution_facts.v1",
+    "after_sequence":  0,
+    "high_water_sequence":  980,
+    "count":  5,
+    "facts":  [
+                  {
+                      "sequence":  1,
+                      "fact_id":  "fact:b77ecdb3-d9d7-5972-b53d-48abb65ba876:intent_admitted",
+                      "intent_id":  "b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "phase":  "intent_admitted",
+                      "revision":  1,
+                      "recorded_utc":  "2026-08-24T18:16:36.460Z",
+                      "status":  "superseded_by_outcome",
+                      "superseded_utc":  "2026-08-24T18:17:00.927Z",
+                      "superseded_by":  "outcome:b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "content_hash":  "531d48679dd2b19aabc3d30c2c89a117111282119b622cb9b8c4b340c03f15bb",
+                      "detail":  {
+                                     "action":  "ENTER_LONG",
+                                     "decision_latency_ms":  484
+                                 },
+                      "diagnostics":  {
+                                          "schema_version":  "glitch.topstep.lifecycle_diagnostics.v1",
+                                          "rejection_code":  null,
+                                          "fill":  {
+                                                       "observed":  false,
+                                                       "filled_quantity":  null,
+                                                       "remaining_quantity":  null,
+                                                       "partial":  null
+                                                   },
+                                          "protection":  {
+                                                             "fidelity":  "not_applicable",
+                                                             "reason":  null
+                                                         },
+                                          "latency":  {
+                                                          "decision_to_admission_ms":  484,
+                                                          "admission_to_submission_ms":  null,
+                                                          "submission_to_fill_ms":  null,
+                                                          "fill_to_protection_ms":  null
+                                                      },
+                                          "source_quality":  "observed"
+                                      }
+                  },
+                  {
+                      "sequence":  2,
+                      "fact_id":  "fact:b77ecdb3-d9d7-5972-b53d-48abb65ba876:provider_submission_acknowledged",
+                      "intent_id":  "b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "phase":  "provider_submission_acknowledged",
+                      "revision":  1,
+                      "recorded_utc":  "2026-08-24T18:16:36.651Z",
+                      "status":  "superseded_by_outcome",
+                      "superseded_utc":  "2026-08-24T18:17:00.927Z",
+                      "superseded_by":  "outcome:b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "content_hash":  "f50237e56efb6e527c849567d330fa3232889a5b192625bc6cd7d589de8076d2",
+                      "detail":  {
+                                     "status":  "pending",
+                                     "code":  "entry_submitted_pending_reconciliation",
+                                     "provider_order_id":  3441955406,
+                                     "transport_or_provider_detail":  "protected_risk_usd=14.50;hard_buffer_usd=2000.00"
+                                 },
+                      "diagnostics":  {
+                                          "schema_version":  "glitch.topstep.lifecycle_diagnostics.v1",
+                                          "rejection_code":  null,
+                                          "fill":  {
+                                                       "observed":  false,
+                                                       "filled_quantity":  null,
+                                                       "remaining_quantity":  null,
+                                                       "partial":  null
+                                                   },
+                                          "protection":  {
+                                                             "fidelity":  "pending",
+                                                             "reason":  "entry_submitted_pending_reconciliation"
+                                                         },
+                                          "latency":  {
+                                                          "decision_to_admission_ms":  null,
+                                                          "admission_to_submission_ms":  null,
+                                                          "submission_to_fill_ms":  null,
+                                                          "fill_to_protection_ms":  null
+                                                      },
+                                          "source_quality":  "observed"
+                                      }
+                  },
+                  {
+                      "sequence":  3,
+                      "fact_id":  "fact:b77ecdb3-d9d7-5972-b53d-48abb65ba876:fill",
+                      "intent_id":  "b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "phase":  "entry_fill_observed",
+                      "revision":  1,
+                      "recorded_utc":  "2026-08-24T18:16:38.715Z",
+                      "status":  "superseded_by_outcome",
+                      "superseded_utc":  "2026-08-24T18:17:00.927Z",
+                      "superseded_by":  "outcome:b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "content_hash":  "3bf748e1ebf379ff62f8f15d22f30182f0c81c3cbfdc993496c30b466c0ca727",
+                      "detail":  {
+                                     "filled_qty":  1,
+                                     "remaining_qty":  1,
+                                     "requested_qty":  1,
+                                     "instrument_flat":  false
+                                 },
+                      "diagnostics":  {
+                                          "schema_version":  "glitch.topstep.lifecycle_diagnostics.v1",
+                                          "rejection_code":  null,
+                                          "fill":  {
+                                                       "observed":  true,
+                                                       "filled_quantity":  1,
+                                                       "remaining_quantity":  1,
+                                                       "partial":  false
+                                                   },
+                                          "protection":  {
+                                                             "fidelity":  "proven",
+                                                             "reason":  "provider_child_orders_bound_by_custom_tag"
+                                                         },
+                                          "latency":  {
+                                                          "decision_to_admission_ms":  null,
+                                                          "admission_to_submission_ms":  null,
+                                                          "submission_to_fill_ms":  null,
+                                                          "fill_to_protection_ms":  null
+                                                      },
+                                          "source_quality":  "derived"
+                                      }
+                  },
+                  {
+                      "sequence":  4,
+                      "fact_id":  "fact:b77ecdb3-d9d7-5972-b53d-48abb65ba876:protection_confirmed",
+                      "intent_id":  "b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "phase":  "protection_confirmed",
+                      "revision":  1,
+                      "recorded_utc":  "2026-08-24T18:16:38.711Z",
+                      "status":  "superseded_by_outcome",
+                      "superseded_utc":  "2026-08-24T18:17:00.927Z",
+                      "superseded_by":  "outcome:b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "content_hash":  "0c83221f17b19a3f0fe4b2d1f3dee0618f2d7be57803110a778c152e280979b0",
+                      "detail":  {
+                                     "status":  "open_protected",
+                                     "code":  "entry_open_with_proven_protection",
+                                     "provider_order_id":  3441955406,
+                                     "transport_or_provider_detail":  "stop_order_id=3441955407;target_order_id=3441955408"
+                                 },
+                      "diagnostics":  {
+                                          "schema_version":  "glitch.topstep.lifecycle_diagnostics.v1",
+                                          "rejection_code":  null,
+                                          "fill":  {
+                                                       "observed":  true,
+                                                       "filled_quantity":  null,
+                                                       "remaining_quantity":  null,
+                                                       "partial":  null
+                                                   },
+                                          "protection":  {
+                                                             "fidelity":  "proven",
+                                                             "reason":  "entry_open_with_proven_protection"
+                                                         },
+                                          "latency":  {
+                                                          "decision_to_admission_ms":  null,
+                                                          "admission_to_submission_ms":  null,
+                                                          "submission_to_fill_ms":  2062,
+                                                          "fill_to_protection_ms":  0
+                                                      },
+                                          "source_quality":  "observed"
+                                      }
+                  },
+                  {
+                      "sequence":  5,
+                      "fact_id":  "fact:b77ecdb3-d9d7-5972-b53d-48abb65ba876:fill",
+                      "intent_id":  "b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "phase":  "entry_fill_observed",
+                      "revision":  2,
+                      "recorded_utc":  "2026-08-24T18:17:00.927Z",
+                      "status":  "superseded_by_outcome",
+                      "superseded_utc":  "2026-08-24T18:17:00.927Z",
+                      "superseded_by":  "outcome:b77ecdb3-d9d7-5972-b53d-48abb65ba876",
+                      "content_hash":  "9b3df0f6be54922900c1a740abfd6f9d0d4612580dc6347842429e01ef5ec246",
+                      "detail":  {
+                                     "filled_qty":  1,
+                                     "remaining_qty":  1,
+                                     "requested_qty":  1,
+                                     "instrument_flat":  true
+                                 },
+                      "diagnostics":  {
+                                          "schema_version":  "glitch.topstep.lifecycle_diagnostics.v1",
+                                          "rejection_code":  null,
+                                          "fill":  {
+                                                       "observed":  true,
+                                                       "filled_quantity":  1,
+                                                       "remaining_quantity":  1,
+                                                       "partial":  false
+                                                   },
+                                          "protection":  {
+                                                             "fidelity":  "proven",
+                                                             "reason":  "provider_child_orders_bound_by_custom_tag"
+                                                         },
+                                          "latency":  {
+                                                          "decision_to_admission_ms":  null,
+                                                          "admission_to_submission_ms":  null,
+                                                          "submission_to_fill_ms":  null,
+                                                          "fill_to_protection_ms":  null
+                                                      },
+                                          "source_quality":  "derived"
+                                      }
+                  }
+              ]
+}

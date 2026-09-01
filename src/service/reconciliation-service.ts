@@ -194,6 +194,7 @@ export async function runReconciliationCycle(
     runtime.scope.contractId,
     positionOpen,
     receivedAt,
+    afterOpen,
   );
   const requiresRecovery = runtime.executionStore.recoveryStatus().unresolvedMutations > 0
     || runtime.executionStore.terminalMutationsWithoutReceipts().length > 0

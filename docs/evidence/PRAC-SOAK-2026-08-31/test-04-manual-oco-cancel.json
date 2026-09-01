@@ -1,0 +1,83 @@
+{
+  "test_id": 4,
+  "title": "Cancelamento manual OCO — detecção de proteção incompleta",
+  "recorded_utc": "2026-08-31T23:41:00Z",
+  "operator_authorized": true,
+  "operator_authorization_text": "rode o teste 4 agora",
+  "entry_intent_id": "ba8be6a5-3e5d-4ced-aba5-c2b3e562d2a7",
+  "pre_test_orders": {
+    "entry_order_id": 3470509441,
+    "stop_order_id": 3470509442,
+    "stop_price": 29475,
+    "target_order_id": 3470509443,
+    "target_price": 29525,
+    "pre_test_protection_status": "confirmed"
+  },
+  "expected": {
+    "gateway_detects_incomplete_protection": true,
+    "new_entry_blocked": true,
+    "exit_recovery_flatten_available": true
+  },
+  "observed": {
+    "baseline_utc": "2026-08-31T23:38:26Z",
+    "baseline_protection_status": "pending",
+    "baseline_reason": "stop_child_not_observed",
+    "baseline_stop_order_id": null,
+    "baseline_target_order_id": 3470624225,
+    "baseline_target_price": 29525,
+    "baseline_working_orders": 1,
+    "baseline_unprotected_open_quantity_health": 3,
+    "baseline_note": "Stop já ausente no baseline — operador cancelou SL (e possivelmente TP original) antes/durante captura inicial; TP substituto 3470624225 ainda working.",
+    "operator_cancel_observed": true,
+    "operator_cancel_observed_at": "2026-08-31T23:40:32Z",
+    "operator_cancel_detail": "Poll iter 16: working_orders 1→0, target_order_id 3470624225→null — segunda perna (TP) cancelada durante monitoramento.",
+    "poll_iterations": 16,
+    "poll_interval_s": 4,
+    "final_protection_status": "pending",
+    "final_reason": "stop_child_not_observed;target_child_not_observed",
+    "final_stop_order_id": null,
+    "final_target_order_id": null,
+    "final_open_qty": 3,
+    "final_working_orders": 0,
+    "final_unprotected_open_quantity_health": 3,
+    "health_alert_unprotected": "critical — Unprotected open quantity is 3",
+    "enter_attempt": {
+      "script": "prac-directed-entry-once.py",
+      "quantity": 1,
+      "exit_code": 2,
+      "blocked": true,
+      "error": "quantity_exceeds_gateway_capacity",
+      "maximum_additional_contracts": 0
+    },
+    "packet_gates": {
+      "new_exposure_technically_supported": false,
+      "new_exposure_gate_detail": "capacity",
+      "supported_actions": ["HOLD", "EXIT", "NOTHING"],
+      "exit_available": true
+    },
+    "safety_supervisor": {
+      "new_exposure_blocked": true,
+      "risk_reduction_permitted": true,
+      "protection_coverage_ok": false
+    }
+  },
+  "pass_criteria_evaluation": {
+    "protection_not_confirmed_or_incomplete": true,
+    "unprotected_quantity_positive": true,
+    "stop_or_target_missing": true,
+    "new_entry_blocked": true,
+    "exit_in_supported_actions": true
+  },
+  "result": "PASS",
+  "raw_evidence": {
+    "baseline": "test-04-baseline-raw.json",
+    "poll": "test-04-poll-raw.json",
+    "final": "test-04-final-raw.json"
+  },
+  "next_action": "Flatten supervisionado recomendado antes do Teste 5 — posição +3 MNQ desprotegida (unprotected=3, zero working orders).",
+  "post_test_flatten": {
+    "success": true,
+    "control_id": "311d74ef-12b4-47cf-864b-78fba46f285a",
+    "recorded_utc": "2026-08-31T23:41:56Z"
+  }
+}

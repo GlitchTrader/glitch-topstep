@@ -1,0 +1,62 @@
+{
+  "test_id": 2,
+  "title": "Partial close",
+  "recorded_utc": "2026-08-31T17:06:30Z",
+  "operator_authorized": true,
+  "requested_quantity": 1,
+  "target_intent_id": "5d6201f5-66ed-44be-97d6-b7f3be1e93a2",
+  "position_before": 3,
+  "exit_intent_id": "be0ca89a-b6cc-4051-a206-ba1d35cb9f7b",
+  "exit_order_id": 3469618698,
+  "reduction_id": "0743bef2-7b00-463e-b1e1-87d1a74ddec5",
+  "initial_protection": {
+    "protection_status": "confirmed",
+    "entry_order_id": 3469609013,
+    "stop_order_id": 3469609014,
+    "target_order_id": 3469609015,
+    "stop_price": 29407.75,
+    "target_price": 29457.75
+  },
+  "expected": {
+    "position_after": 2,
+    "survivor_protection": "confirmed",
+    "saga_terminal": "completed or degraded_stop_only with coverage",
+    "no_involuntary_new_exposure": true
+  },
+  "observed_at_135s": {
+    "position_after_gateway": 2,
+    "receipt_status": "pending",
+    "receipt_code": "partial_exit_submitted_pending_reconciliation",
+    "intent_delivery_status": "mutation_inflight",
+    "protected_reduction_saga": "reduction_ambiguous",
+    "unprotected_open_quantity": 2,
+    "protection_status": "pending",
+    "protection_reason": "stop_child_not_observed;target_child_not_observed",
+    "working_orders_gateway": 0,
+    "tranche_attribution": [
+      "b77ecdb3-d9d7-5972-b53d-48abb65ba876 remaining=1 (stale Aug-24)",
+      "99311973-cbef-5885-88b0-5cb0ca8e1ab7 remaining=1 (stale Aug-26)"
+    ],
+    "test1_tranche_visible": false
+  },
+  "operator_ui_note": "Screenshot at test start showed 3 MNQ with native SL/TP still sized -3 at 29407.75/29457.75; gateway diverged after partial EXIT submit.",
+  "result": "FAIL",
+  "failure_modes": [
+    "survivor protection not confirmed within observation window",
+    "ProtectedReductionSaga stuck in reduction_ambiguous",
+    "full open quantity reported unprotected (2/2)",
+    "tranche attribution did not reference Test 1 intent after partial exit"
+  ],
+  "recommended_operator_action": [
+    "Verify live ProjectX position size and working SL/TP sizes immediately",
+    "Do not start soak; do not proceed to Test 3 until flat or protection re-confirmed",
+    "Consider supervised flatten if venue/gateway disagree or protection absent > abort threshold"
+  ],
+  "recovery": {
+    "flatten_utc": "2026-08-31T17:11:07Z",
+    "control_id": "aff1ddd8-40c5-4d7b-adf5-84cc209920e0",
+    "terminal_detail": "venue_flat_confirmed",
+    "post_flatten_open_qty": 0,
+    "evidence": "test-02-flatten-recovery.json"
+  }
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-31T16:17:33.984Z",
-  "gateway_commit": "985110c08da0eca48f13d3004e36c3086619c324",
+  "recorded_utc": "2026-08-31T16:53:31.328Z",
+  "gateway_commit": "f2de2ec0291a29063efc88f48219f9c8984f6490",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
@@ -61,7 +61,7 @@
     },
     {
       "file": "tests/read-circuit-breaker.test.ts",
-      "sha256": "ac07e23c171fe692eca9a6a9bfa4bf7785c419894cd0abcc84e28e1a83064d72"
+      "sha256": "c799ebb147a2d6c32c2d497718c57277bf75ddf73ce6fe0e0e0f8af6c7233219"
     },
     {
       "file": "tests/intent-delivery-status.test.ts",
@@ -69,22 +69,22 @@
     },
     {
       "file": "tests/sqlite-busy-fault.test.ts",
-      "sha256": "b660a234e9239924ec12edab9b159d464a94ad2511261f374e9ded753bbd11c1"
+      "sha256": "2de12c38332a23a51877966579290fa383f78ebeaed143e355680fb418980b16"
     },
     {
       "file": "tests/shutdown-failure-recovery.test.ts",
-      "sha256": "d81a8aaba1b3fe806f3ee7fc9c850bbd97c38d9c4afa40faeac630d34d1eeddc"
+      "sha256": "6382ddb52cf86f4a733cb9fcde7b1b32be02d54be669559eb4d8439894fd4ec0"
     },
     {
       "file": "tests/task-scheduler.test.ts",
-      "sha256": "ff5b1c0cdb736d2afe967d333ece810021701fdb9254b06bf4e1ad7280e03edd"
+      "sha256": "1eba93b5ba91dad2793839c9e9bbab2783f6da02ed9feb8346f410ba1b9c4962"
     },
     {
       "file": "scripts/rollback-rehearsal.mjs",
       "sha256": "9b057b065e56dfe00b2db7fe359e7971ec951a0a89c85091281c094775d12376"
     }
   ],
-  "profile_commit": "7fd382d4290877be1df154391c4004baafd7b396",
+  "profile_commit": "a35e5b5339648a00d900beac1243e105e185b9b7",
   "profile_proofs": [
     {
       "file": "tests/test_fault_injection.py",

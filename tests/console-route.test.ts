@@ -37,7 +37,7 @@ describe("local gateway /console route", () => {
   it("serves the read-only console HTML on loopback", async () => {
     const gateway = new LocalGatewayServer(
       { host: "127.0.0.1", port: 0, token: TOKEN },
-      () => ({ status: "ok" }),
+      (_authenticated) => ({ status: "ok" }),
       () => snapshot(),
       async () => ({ schema_version: "glitch.direct.decision_packet.v2" } as DirectDecisionPacket),
       () => [],

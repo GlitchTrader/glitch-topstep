@@ -20,8 +20,11 @@ if (-not $Token) { throw "Set GLITCH_LOCAL_TOKEN or configure .env" }
 
 $headers = @{ Authorization = "Bearer $Token" }
 $health = Invoke-RestMethod -Uri "$GatewayUrl/health" -Headers $headers
+$root = Split-Path $PSScriptRoot -Parent
+$pairedContract = Get-Content (Join-Path $root "release/paired-contract.json") -Raw | ConvertFrom-Json
+$expectedGatewayVersion = $pairedContract.gateway.version
 $checks = @(
-    [pscustomobject]@{ check = "gateway_version_0.2.2"; ok = ($health.compatibility.gateway_version -eq "0.2.2") },
+    [pscustomobject]@{ check = "gateway_version_$expectedGatewayVersion"; ok = ($health.compatibility.gateway_version -eq $expectedGatewayVersion) },
     [pscustomobject]@{ check = "trading_mode_armed"; ok = ($health.trading_mode -eq "armed") },
     [pscustomobject]@{ check = "lifecycle_ready"; ok = ($health.lifecycle.state -eq "ready") },
     [pscustomobject]@{ check = "auth_not_degraded"; ok = (-not $health.invariant_metrics.auth_degraded) },

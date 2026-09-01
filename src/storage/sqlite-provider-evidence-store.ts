@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { inSqliteTransaction } from "./sqlite-transaction.js";
 import type { ProviderHistorySyncStatus } from "../domain/provider-history.js";
 import type {
   ProviderEvidenceEvent,
@@ -40,6 +41,7 @@ interface PreparedEvidence {
 export interface ProviderEvidenceStoreOptions {
   marketEventRetention?: number;
   marketPruneInterval?: number;
+  appliedOutboxRetentionHours?: number;
 }
 
 export interface AppendIfChangedResult {
@@ -49,6 +51,7 @@ export interface AppendIfChangedResult {
 
 const DEFAULT_MARKET_EVENT_RETENTION = 500_000;
 const DEFAULT_MARKET_PRUNE_INTERVAL = 10_000;
+const DEFAULT_APPLIED_OUTBOX_RETENTION_HOURS = 168;
 const SECRET_KEY_FRAGMENTS = [
   "apikey",
   "authorization",
@@ -63,6 +66,7 @@ export class SqliteProviderEvidenceStore {
   private readonly database: DatabaseSync;
   private readonly marketEventRetention: number;
   private readonly marketPruneInterval: number;
+  private readonly appliedOutboxRetentionHours: number;
   private marketEventsSincePrune = 0;
 
   public constructor(path: string, options: ProviderEvidenceStoreOptions = {}) {
@@ -79,6 +83,13 @@ export class SqliteProviderEvidenceStore {
       "market_prune_interval",
       1,
       1_000_000,
+    );
+    this.appliedOutboxRetentionHours = integerOption(
+      options.appliedOutboxRetentionHours,
+      DEFAULT_APPLIED_OUTBOX_RETENTION_HOURS,
+      "applied_outbox_retention_hours",
+      24,
+      8_760,
     );
     if (this.marketPruneInterval > this.marketEventRetention) {
       throw new Error("market_prune_interval_exceeds_retention");
@@ -153,6 +164,26 @@ export class SqliteProviderEvidenceStore {
       SELECT COUNT(*) AS count FROM evidence_outbox WHERE state = 'pending'
     `).get() as { count: number | bigint };
     return Number(row.count);
+  }
+
+  /** Prune durable applied outbox rows older than the retention window; pending rows are never removed. */
+  public pruneAppliedOutbox(now = new Date()): { pruned: number; applied_remaining: number } {
+    const cutoff = new Date(
+      now.getTime() - this.appliedOutboxRetentionHours * 3_600_000,
+    ).toISOString();
+    return this.inTransaction(() => {
+      const result = this.database.prepare(`
+        DELETE FROM evidence_outbox
+        WHERE state = 'applied' AND created_utc < ?
+      `).run(cutoff);
+      const remaining = this.database.prepare(`
+        SELECT COUNT(*) AS count FROM evidence_outbox WHERE state = 'applied'
+      `).get() as { count: number | bigint };
+      return {
+        pruned: Number(result.changes),
+        applied_remaining: Number(remaining.count),
+      };
+    });
   }
 
   public loadPendingOutboxEvents(limit = 500): ProviderEvidenceEvent[] {
@@ -734,15 +765,7 @@ export class SqliteProviderEvidenceStore {
   }
 
   private inTransaction<T>(action: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = action();
-      this.database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+    return inSqliteTransaction(this.database, action);
   }
 }
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": "glitch.topstep.paired_release.v1",
+  "created_utc": "2026-08-25T01:22:44.733Z",
+  "immutable": true,
+  "armed_promotion_requires_human_approval": true,
+  "pair_digest": "78739f348407f450e677da40d59b4e6939c17fa4959a80d6e154337510cb0a2a",
+  "gateway": {
+    "repository": "GlitchTrader/glitch-topstep",
+    "commit": "5813d832e0e7cb65c203f28bf8bbeac3a2b89fc8",
+    "version": "0.2.2",
+    "package_lock_sha256": "9ecdf559b07b7f064f7c84a089262890a3dc72bff0080ec53cbc74ed2639e27b"
+  },
+  "profile": {
+    "repository": "GlitchTrader/glitch-topstep-hermes-profile",
+    "commit": "b0ecbfdcf2dc6341ae87cd577ea4b3a05ef5331f",
+    "version": "0.2.5",
+    "sha256sums_sha256": "43e21c0864fee31b3936b4556dae7fba7cfc475e36c1b70bdef18eae38aa8ff0",
+    "prompt_version": "glitch-topstep-v15"
+  },
+  "validation": {
+    "prac_or_shadow_evidence_ref": "docs/evidence/PRAC-SOAK-2026-08-21/gateway-health-preflight.json",
+    "partial_exit_provider_acceptance": "proven_prac_short_long_with_saga",
+    "gateway_paired_contract_sha256": "d85041b0ce9c0ec4f3f419d3b1120b1b17918d115d465cadc5635ecb69524a01"
+  }
+}

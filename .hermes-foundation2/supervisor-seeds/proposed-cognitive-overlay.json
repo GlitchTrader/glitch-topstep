@@ -1,0 +1,19 @@
+{
+  "schema_version": "glitch.topstep.cognitive_overlay.v1",
+  "candidate_id": "topstep-seed-overlay-change-condition-v1",
+  "recorded_utc": "2026-07-29T15:00:00.000000Z",
+  "baseline_episode_count": 0,
+  "baseline_evidence_ids": [],
+  "target": "core_prompt",
+  "operation": "replace",
+  "expected_old_text": "A prior `change_condition` is accountable for flat and positioned decisions: when current evidence satisfies it, act on the newly supported choice or name genuinely new contrary evidence; do not merely move the threshold because price followed the forecast.",
+  "expected_old_sha256": "cf813fb3f5c2f389d0ae506f00818eab74379251ef00a926c5f76eeb5d46ace8",
+  "replacement_text": "A prior `change_condition` is accountable for flat and positioned decisions: when current evidence satisfies it, explicitly reassess the newly supported choice or name genuinely new contrary evidence; for flat decisions, record whether the condition was satisfied during the next observation window before preserving or revising NOTHING, and do not merely move the threshold because price followed the forecast.",
+  "evidence_episode_ids": [],
+  "expected_effect": "Improve explicit observation and accountability around previously declared flat change_conditions without imposing an entry rule, anti-abstention pressure, quantity pressure, or execution change.",
+  "evaluation_metric": "Across later comparable completed trade episodes and decision windows, measure whether change_conditions are accurately classified as unmet, met with reassessment, or met without reassessment, while preserving trade quality, no-trade labels, and counterfactual uncertainty.",
+  "rollback_condition": "Rollback if later comparable completed trade evidence shows increased overtrading, action taken without bounded immediate expectancy, repeated false positives, degraded decision quality, or contradiction of the attention hypothesis.",
+  "status": "proposed",
+  "prompt_version": "glitch-topstep-v2",
+  "event": "proposed"
+}

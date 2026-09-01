@@ -1,0 +1,22 @@
+{
+  "finished_utc": "2026-09-01T03:12:00Z",
+  "results": {
+    "6": "PASS",
+    "7": "PASS",
+    "8": "PASS",
+    "9": "PASS",
+    "10": "PASS",
+    "11": "FAIL"
+  },
+  "all_pass": false,
+  "ready_for_soak": false,
+  "flat_confirmed": true,
+  "blocker": "BLOCKER-test-11-breakeven.md",
+  "scripts_added": [
+    "scripts/prac-gateway-restart.ps1",
+    "scripts/prac_gateway_helpers.py",
+    "scripts/prac-directed-tests-6-11.py",
+    "scripts/prac-directed-test-11-minimal.py",
+    "scripts/prac-clear-seed-outcomes.py"
+  ]
+}

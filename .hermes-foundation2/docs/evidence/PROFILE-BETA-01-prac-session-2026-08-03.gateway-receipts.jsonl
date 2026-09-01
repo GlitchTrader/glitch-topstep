@@ -1,0 +1,2 @@
+{"intent_id":"774b92f8-61a2-5c3a-b68e-e7f722bf1cf0","action":"ENTER_LONG","recorded_utc":"2026-08-03T13:57:08.539Z","status":"open_protected","code":"entry_open_with_proven_protection","detail":"stop_order_id=3353603012;target_order_id=3353603013","source":"gateway execution_receipts (glitch-topstep.sqlite)"}
+{"intent_id":"7190dddb-d671-5659-a523-ddc1a43dbc6e","action":"MOVE_STOP","recorded_utc":"2026-08-03T13:59:42.083Z","status":"submitted","code":"move_stop_reconciled","detail":"stop_price=28578.25","source":"gateway execution_receipts (glitch-topstep.sqlite)"}

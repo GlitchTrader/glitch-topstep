@@ -94,43 +94,58 @@ export async function recoverExecutionMutations(
     }
 
     for (const mutation of uncertainEntries) {
-      const live = store.mutationForIntent(mutation.intentId);
-      if (!live || isTerminalMutationState(live.state)) {
-        continue;
-      }
-      if (
-        live.state === "submitting"
-        && live.submittingUtc
-        && now.getTime() - new Date(live.submittingUtc).getTime() < 15_000
-      ) {
-        continue;
-      }
-      const outcome = reconcileEntryMutation(live, historicalOrders, accountId, contractId);
-      if (outcome.orderId !== null) {
-        store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
-        changed = true;
-        resolved += 1;
+      try {
+        const live = store.mutationForIntent(mutation.intentId);
+        if (!live || isTerminalMutationState(live.state)) {
+          continue;
+        }
+        if (
+          live.state === "submitting"
+          && live.submittingUtc
+          && now.getTime() - new Date(live.submittingUtc).getTime() < 15_000
+        ) {
+          continue;
+        }
+        const outcome = reconcileEntryMutation(live, historicalOrders, accountId, contractId);
+        if (outcome.orderId !== null) {
+          store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
+          changed = true;
+          resolved += 1;
+          resolutions.push({
+            intentId: mutation.intentId,
+            operation: mutation.operation,
+            outcome: "submitted",
+            code: "entry_recovered_from_projectx_custom_tag",
+            providerOrderId: outcome.orderId,
+            detail: "A unique historical ProjectX order matched custom tag and complete order identity.",
+          });
+          continue;
+        }
+        store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+        changed = changed || mutation.state === "submitting";
+        ambiguous += 1;
         resolutions.push({
           intentId: mutation.intentId,
           operation: mutation.operation,
-          outcome: "submitted",
-          code: "entry_recovered_from_projectx_custom_tag",
-          providerOrderId: outcome.orderId,
-          detail: "A unique historical ProjectX order matched custom tag and complete order identity.",
+          outcome: "ambiguous",
+          code: "projectx_mutation_outcome_ambiguous",
+          providerOrderId: null,
+          detail: outcome.error,
         });
-        continue;
+      } catch (error) {
+        ambiguous += 1;
+        const detail = error instanceof Error ? error.message : String(error);
+        store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+        changed = true;
+        resolutions.push({
+          intentId: mutation.intentId,
+          operation: mutation.operation,
+          outcome: "ambiguous",
+          code: "recovery_item_failed",
+          providerOrderId: null,
+          detail,
+        });
       }
-      store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
-      changed = changed || mutation.state === "submitting";
-      ambiguous += 1;
-      resolutions.push({
-        intentId: mutation.intentId,
-        operation: mutation.operation,
-        outcome: "ambiguous",
-        code: "projectx_mutation_outcome_ambiguous",
-        providerOrderId: null,
-        detail: outcome.error,
-      });
     }
 
     const uncertainModifyEntries = unresolved.filter(
@@ -150,40 +165,55 @@ export async function recoverExecutionMutations(
     }
 
     for (const mutation of uncertainModifyEntries) {
-      const live = store.mutationForIntent(mutation.intentId);
-      if (!live || isTerminalMutationState(live.state)) {
-        continue;
-      }
-      const outcome = reconcileModifyMutation(live, historicalOrders, accountId, contractId);
-      if (outcome.recovered) {
-        store.markMutationSubmitted(
-          mutation.intentId,
-          outcome.orderId,
-          now.toISOString(),
-        );
-        changed = true;
-        resolved += 1;
+      try {
+        const live = store.mutationForIntent(mutation.intentId);
+        if (!live || isTerminalMutationState(live.state)) {
+          continue;
+        }
+        const outcome = reconcileModifyMutation(live, historicalOrders, accountId, contractId);
+        if (outcome.recovered) {
+          store.markMutationSubmitted(
+            mutation.intentId,
+            outcome.orderId,
+            now.toISOString(),
+          );
+          changed = true;
+          resolved += 1;
+          resolutions.push({
+            intentId: mutation.intentId,
+            operation: mutation.operation,
+            outcome: "submitted",
+            code: "modify_recovered_from_projectx_order_state",
+            providerOrderId: outcome.orderId,
+            detail: outcome.detail,
+          });
+          continue;
+        }
+        store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+        changed = changed || mutation.state === "submitting";
+        ambiguous += 1;
         resolutions.push({
           intentId: mutation.intentId,
           operation: mutation.operation,
-          outcome: "submitted",
-          code: "modify_recovered_from_projectx_order_state",
-          providerOrderId: outcome.orderId,
-          detail: outcome.detail,
+          outcome: "ambiguous",
+          code: "projectx_mutation_outcome_ambiguous",
+          providerOrderId: null,
+          detail: outcome.error,
         });
-        continue;
+      } catch (error) {
+        ambiguous += 1;
+        const detail = error instanceof Error ? error.message : String(error);
+        store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+        changed = true;
+        resolutions.push({
+          intentId: mutation.intentId,
+          operation: mutation.operation,
+          outcome: "ambiguous",
+          code: "recovery_item_failed",
+          providerOrderId: null,
+          detail,
+        });
       }
-      store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
-      changed = changed || mutation.state === "submitting";
-      ambiguous += 1;
-      resolutions.push({
-        intentId: mutation.intentId,
-        operation: mutation.operation,
-        outcome: "ambiguous",
-        code: "projectx_mutation_outcome_ambiguous",
-        providerOrderId: null,
-        detail: outcome.error,
-      });
     }
 
     const contractStillOpen = positions.some(

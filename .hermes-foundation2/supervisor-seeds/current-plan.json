@@ -1,0 +1,41 @@
+{
+  "schema_version": "glitch.topstep.portfolio_plan.v1",
+  "plan_id": "topstep-seed-plan-change-condition-v1",
+  "recorded_utc": "2026-07-29T15:00:00.000000Z",
+  "horizon_minutes": 360,
+  "regime_posture": "Evaluate the current transition between higher-timeframe structure, local support or resistance reactions, and continuation attempts as unresolved until current packet evidence clarifies timing.",
+  "objectives": [
+    "Review each flat cycle on the configured flat cadence and forecast the next observation window while giving primary timing weight to immediate and next one-minute behavior.",
+    "Treat conflicting multi-timeframe structure as evidence to compare ENTER_LONG, ENTER_SHORT, and NOTHING symmetrically.",
+    "Use completed trade outcomes when available to calibrate expectancy, quantity, and management quality; decision-only counterfactuals remain informational and cannot create entry or sizing pressure.",
+    "When daily_economics mirrors are present, compare net daily PnL to the calibration band for day-quality feedback only; Hermes owns stop/continue — not the gateway (outcome_backed: false until repeated attributable episodes).",
+    "Explicitly reassess each previously declared change_condition during the following observation window and record whether it was unmet, tested but unaccepted, satisfied with reassessment, or satisfied without reassessment.",
+    "Keep the proposed change-condition overlay inert until later comparable completed trade episodes and contradiction review support activation."
+  ],
+  "risk_guidance": "Keep quantity adaptive within policy.max_contracts and execution.maximum_additional_contracts, selected from the full current packet, current edge, structural risk, remaining opportunity, drawdown state, and repeated risk-adjusted trade outcomes when available. Do not establish a fixed or provisional one-contract baseline. Use lower quantity or remain flat when structure-aware risk is large, immediate expectancy is marginal, native protection is uncertain, or remaining movement is compressed. Do not use the proportional daily objective, caution, or desire for more data to constrain cognition or create quantity pressure.",
+  "geometry_guidance": "Define invalidation before reward for every hypothetical or live entry. Prefer absolute stops beyond the nearest local structure that genuinely invalidates the stated horizon thesis, with room for observable one-minute noise; do not use distant higher-timeframe pivots or thin stops to manufacture reward/risk. Compare remaining plausible movement with local structural risk and supplied reference levels when present. Distinguish initiating, progressing, and exhausting local movement.",
+  "management_guidance": "For any new exposure, require protected risk with absolute structural stop and target planning before participation. While positioned, review each minute and actively choose among HOLD, MOVE_STOP, MOVE_TP, partial or full EXIT, and scale-in only when execution.supported_actions includes the matching ENTER_* action. When protection.tranches lists more than one open tranche, name target_intent_id on amendments and targeted exits. Never reverse through an entry, loosen an accepted live stop without evidence, add mechanically, grid, or martingale. After a stop or stale execution episode, require materially changed price, structure, or immediate behavior before same-direction re-entry and state the changed evidence explicitly.",
+  "experiments": [
+    "For each subsequent flat episode, compare the prior change_condition with the next observations and explicitly classify its status before preserving or revising NOTHING.",
+    "Run a symmetric local-geometry review: for each window, describe the best plausible long, short, and flat cases and compare immediate one-minute opportunity with structural invalidation without inventing fills or PnL.",
+    "Track repeated completed trade episodes for initial risk distance, volatility/noise units, MAE/MFE, realized PnL, quantity quality, and whether intended absolute levels were preserved."
+  ],
+  "preservation_conditions": [
+    "Preserve disciplined abstention when remaining plausible movement is compressed, local noise exceeds opportunity, or opposing one-minute evidence prevents bounded expectancy.",
+    "Preserve symmetric evaluation of ENTER_LONG, ENTER_SHORT, and NOTHING; flat is active observation, not a preferred action or performance failure.",
+    "Preserve counterfactual uncertainty for all decision-only episodes; excursions do not establish fills, target/stop ordering, reward/risk, or realized performance.",
+    "Preserve gateway and ProjectX facts over memory; classify accepted no-op receipts as no-trade execution evidence, not rejected intents or strategy lessons.",
+    "Preserve the proposed cognitive overlay as proposed and inert until later comparable completed trade outcomes support an independent activation decision."
+  ],
+  "revision_triggers": [
+    "A completed attributable trade episode supplies repeated risk-adjusted evidence that changes quantity calibration, initial geometry, management, or exit quality.",
+    "A later observation materially satisfies a prior change_condition; reassess the newly supported choice explicitly rather than silently moving the threshold.",
+    "Repeated completed outcomes contradict the current structural-risk or timing hypothesis.",
+    "The local regime transitions into accepted directional continuation, failed acceptance, or a new volatility structure.",
+    "Native protection, account eligibility, or gateway execution facts change; treat infrastructure facts as execution evidence, not strategy lessons unless attributable trading outcomes establish a separate cognitive effect."
+  ],
+  "trading_influence": "observational",
+  "prompt_version": "glitch-topstep-v6",
+  "trade_episode_count": 0,
+  "decision_episode_count": 0
+}

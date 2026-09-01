@@ -22,7 +22,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
-import { validateProtectiveAmendment, buildOriginalRiskEnvelope } from "./amendment-safety.js";
+import { validateProtectiveAmendment, buildOriginalRiskEnvelope, type PositionSide } from "./amendment-safety.js";
 import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
   gatewayModePermitsLiveOrders,
@@ -88,6 +88,23 @@ function observedStopDistanceTicks(
     (stop) => Math.abs(leg.averagePrice - stop.stopPrice!) / tickSize,
   )));
   return worst > 0 ? Math.ceil(worst) : null;
+}
+
+/** Keep AUTO_BREAKEVEN stops non-marketable when entry rounds to/at the ask (bid). */
+export function clampCaptureLockBreakevenStop(
+  side: PositionSide,
+  breakeven: number,
+  tickSize: number,
+  bestBid: number | null,
+  bestAsk: number | null,
+): number {
+  if (side === "long" && bestAsk !== null && breakeven >= bestAsk) {
+    return Math.round((bestAsk - tickSize) / tickSize) * tickSize;
+  }
+  if (side === "short" && bestBid !== null && breakeven <= bestBid) {
+    return Math.round((bestBid + tickSize) / tickSize) * tickSize;
+  }
+  return breakeven;
 }
 
 export class ExecutionCoordinator {
@@ -522,6 +539,16 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
+    const attributableTranches = this.attributableTranches().filter(
+      (tranche) => tranche.remaining_qty > 0,
+    );
+    if (partialExit && attributableTranches.length > 1 && intent.targetIntentId === undefined) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "target_intent_id_required",
+      });
+    }
     // ponytail: armed default admits partial EXIT via ProtectedReductionSaga (#109).
     // Emergency rollback: GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1 restores the old gate.
     if (partialExit && this.currentMode() === "armed" && partialExitFailClosedEnabled()) {
@@ -976,7 +1003,7 @@ export class ExecutionCoordinator {
         && order.contractId === this.config.scope.contractId
         && !isProtectiveCustomTag(order.customTag),
     );
-    if (nonProtective.length > 0 || this.store.hasOpenExitMutation()) {
+    if (nonProtective.length > 0 || this.store.hasExitMutationBlockingRearm()) {
       return false;
     }
     const exitTargets = this.store.submittedExitTargetIntentIds();
@@ -1272,7 +1299,13 @@ export class ExecutionCoordinator {
       return 0;
     }
     const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
-    const breakeven = Math.round(position.averagePrice / tickSize) * tickSize;
+    const breakeven = clampCaptureLockBreakevenStop(
+      side,
+      Math.round(position.averagePrice / tickSize) * tickSize,
+      tickSize,
+      snapshot.quote?.bestBid ?? null,
+      snapshot.quote?.bestAsk ?? null,
+    );
 
     let tightened = 0;
     for (const tranche of this.attributableTranches()) {

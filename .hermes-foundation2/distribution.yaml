@@ -1,0 +1,19 @@
+name: glitch-topstep
+version: 0.2.0
+description: "Experimental Glitch Topstep AI operator profile"
+hermes_requires: ">=0.18.2"
+author: "GlitchTrader"
+distribution_owned:
+  - distribution.yaml
+  - SOUL.md
+  - operator.json
+  - config.yaml
+  - skills
+  - plugins
+  - scripts
+  - docs
+  - setup.ps1
+  - README.md
+  - .gitignore
+  - .env.EXAMPLE
+  - SHA256SUMS

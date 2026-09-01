@@ -1,0 +1,49 @@
+{
+  "test_id": 1,
+  "title": "Entrada protegida",
+  "recorded_utc": "2026-08-31T17:01:29Z",
+  "operator_authorized": true,
+  "requested_quantity": 5,
+  "submitted_quantity": 3,
+  "quantity_note": "GLITCH_MAX_CONTRACTS=3 and packet.execution.maximum_additional_contracts=3 rejected qty 5 before submission",
+  "intent_id": "5d6201f5-66ed-44be-97d6-b7f3be1e93a2",
+  "receipt_id": "5efc35bc-4483-4b02-b651-6d443a73f555",
+  "provider_order_ids": {
+    "entry": 3469609013,
+    "stop": 3469609014,
+    "target": 3469609015
+  },
+  "geometry_submitted": {
+    "ask": 29428.5,
+    "stop_loss": 29408.5,
+    "take_profit_1": 29458.5
+  },
+  "geometry_venue": {
+    "stop_price": 29407.75,
+    "target_price": 29457.75
+  },
+  "initial_state": {
+    "flat": true,
+    "gateway_mode": "armed",
+    "state_complete": true
+  },
+  "expected": {
+    "receipt": "successful/open_protected",
+    "protection_status": "confirmed",
+    "sl_tp_native": true
+  },
+  "observed": {
+    "http_status": 202,
+    "receipt_status": "open_protected",
+    "receipt_code": "entry_open_with_proven_protection",
+    "protection_status": "confirmed",
+    "instrument_open_contracts": 3,
+    "unprotected_open_quantity": 0,
+    "intent_delivery_status": "terminal",
+    "stop_provider_order_id_present": true,
+    "target_provider_order_id_present": true,
+    "stop_price_non_null": true,
+    "target_price_non_null": true
+  },
+  "result": "PASS"
+}
