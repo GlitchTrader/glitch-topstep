@@ -1,0 +1,740 @@
+From e2b12039d13232e1c703328b45ddb140466ac8e1 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 7 Aug 2026 01:17:28 +0000
+Subject: [PATCH] feat: packet data quality and structured 422 diagnostics
+ (#73)
+
+- Clamp minor quote clock skew to zero and emit quote_clock_skew issue
+- Mark unreliable session_high/low null with session_levels_reliable flag
+- Add depth.available and order_flow_depth_unavailable data_quality issue
+- Expose progress_adjusted_volume_z_score_20 on partial bars
+- Return field/error/path on intent_schema_invalid receipts
+---
+ package-lock.json                   |  4 +-
+ src/domain/intents.ts               | 76 +++++++++++++++++------------
+ src/domain/market-observation.ts    |  1 +
+ src/domain/order-flow.ts            |  1 +
+ src/execution/coordinator.ts        | 28 ++++++++++-
+ src/hermes/packet-builder.ts        | 59 ++++++++++++++++++++--
+ src/market/observation.ts           | 45 +++++++++++++++--
+ src/market/order-flow.ts            |  4 ++
+ src/state/data-quality.ts           |  6 ++-
+ tests/data-quality.test.ts          | 13 +++++
+ tests/execution-coordinator.test.ts | 28 +++++++++++
+ tests/fixtures.ts                   |  1 +
+ tests/intents.test.ts               | 14 +++++-
+ tests/market-observation.test.ts    |  3 ++
+ tests/order-flow.test.ts            |  2 +
+ tests/packet-order-flow.test.ts     |  1 +
+ 16 files changed, 240 insertions(+), 46 deletions(-)
+
+diff --git a/package-lock.json b/package-lock.json
+index 868746b..e49773f 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1,12 +1,12 @@
+ {
+   "name": "glitch-topstep",
+-  "version": "0.1.3",
++  "version": "0.1.6",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "glitch-topstep",
+-      "version": "0.1.3",
++      "version": "0.1.6",
+       "dependencies": {
+         "@microsoft/signalr": "^8.0.7"
+       },
+diff --git a/src/domain/intents.ts b/src/domain/intents.ts
+index c3555f2..f240208 100644
+--- a/src/domain/intents.ts
++++ b/src/domain/intents.ts
+@@ -40,6 +40,20 @@ const AUDIT_FIELDS = new Set([
+   "final_choice",
+ ]);
+ 
++export class IntentParseError extends Error {
++  public readonly errorCode: string;
++  public readonly field?: string;
++  public readonly path?: string;
++
++  public constructor(errorCode: string, field?: string, path?: string) {
++    super(errorCode);
++    this.name = "IntentParseError";
++    this.errorCode = errorCode;
++    this.field = field;
++    this.path = path;
++  }
++}
++
+ function isRecord(value: unknown): value is Record<string, unknown> {
+   return typeof value === "object" && value !== null && !Array.isArray(value);
+ }
+@@ -47,7 +61,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
+ function stringField(value: Record<string, unknown>, key: string, maxLength = 1000): string {
+   const field = value[key];
+   if (typeof field !== "string" || field.trim().length === 0 || field.length > maxLength) {
+-    throw new Error(`invalid_string_field:${key}`);
++    throw new IntentParseError("invalid_string_field", key);
+   }
+   return field;
+ }
+@@ -58,33 +72,33 @@ function optionalNumber(value: Record<string, unknown>, key: string): number | u
+     return undefined;
+   }
+   if (typeof field !== "number" || !Number.isFinite(field)) {
+-    throw new Error(`invalid_number_field:${key}`);
++    throw new IntentParseError("invalid_number_field", key);
+   }
+   return field;
+ }
+ 
+ function parseAction(value: unknown): TradeAction {
+   if (typeof value !== "string" || !TradeActions.includes(value as TradeAction)) {
+-    throw new Error("invalid_action");
++    throw new IntentParseError("invalid_action", "action");
+   }
+   return value as TradeAction;
+ }
+ 
+ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit {
+   if (!isRecord(value)) {
+-    throw new Error("decision_audit_invalid");
++    throw new IntentParseError("decision_audit_invalid", "decision_audit");
+   }
+   for (const key of Object.keys(value)) {
+     if (!AUDIT_FIELDS.has(key)) {
+-      throw new Error(`decision_audit_unknown_field:${key}`);
++      throw new IntentParseError("decision_audit_unknown_field", `decision_audit.${key}`, `decision_audit.${key}`);
+     }
+   }
+   if (Object.keys(value).length !== AUDIT_FIELDS.size) {
+-    throw new Error("decision_audit_incomplete");
++    throw new IntentParseError("decision_audit_incomplete", "decision_audit");
+   }
+   const finalChoice = parseAction(value.final_choice);
+   if (finalChoice !== action) {
+-    throw new Error("final_choice must equal action");
++    throw new IntentParseError("final_choice_must_equal_action", "decision_audit.final_choice", "decision_audit.final_choice");
+   }
+   return {
+     bullCase: stringField(value, "bull_case", 500),
+@@ -101,37 +115,37 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit
+ 
+ export function parseTradeIntent(input: unknown): TradeIntent {
+   if (!isRecord(input)) {
+-    throw new Error("intent_must_be_object");
++    throw new IntentParseError("intent_must_be_object");
+   }
+   for (const key of Object.keys(input)) {
+     if (!CORE_FIELDS.has(key)) {
+-      throw new Error(`unknown_intent_field:${key}`);
++      throw new IntentParseError("unknown_intent_field", key);
+     }
+   }
+   if (input.schema_version !== "glitch.intent.v2") {
+-    throw new Error("schema_version_invalid");
++    throw new IntentParseError("schema_version_invalid", "schema_version");
+   }
+ 
+   const intentId = stringField(input, "intent_id", 64);
+   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(intentId)) {
+-    throw new Error("intent_id_must_be_uuid");
++    throw new IntentParseError("intent_id_must_be_uuid", "intent_id");
+   }
+   const createdUtc = stringField(input, "created_utc", 64);
+   if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(createdUtc) || !Number.isFinite(Date.parse(createdUtc))) {
+-    throw new Error("created_utc_invalid");
++    throw new IntentParseError("created_utc_invalid", "created_utc");
+   }
+   const operatorProfile = stringField(input, "operator_profile", 128);
+   if (operatorProfile !== GLITCH_TOPSTEP_OPERATOR_PROFILE) {
+-    throw new Error("operator_profile_mismatch");
++    throw new IntentParseError("operator_profile_mismatch", "operator_profile");
+   }
+   const promptVersion = stringField(input, "prompt_version", 128);
+   if (promptVersion !== GLITCH_TOPSTEP_PROMPT_VERSION) {
+-    throw new Error("prompt_version_mismatch");
++    throw new IntentParseError("prompt_version_mismatch", "prompt_version");
+   }
+   const action = parseAction(input.action);
+   const confidence = input.confidence;
+   if (typeof confidence !== "number" || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+-    throw new Error("confidence_invalid");
++    throw new IntentParseError("confidence_invalid", "confidence");
+   }
+ 
+   const quantity = optionalNumber(input, "quantity");
+@@ -143,34 +157,34 @@ export function parseTradeIntent(input: unknown): TradeIntent {
+   const targetIntentIdRaw = input.target_intent_id;
+   const orderType = input.order_type;
+   if (orderType !== undefined && orderType !== "MARKET") {
+-    throw new Error("order_type_invalid");
++    throw new IntentParseError("order_type_invalid", "order_type");
+   }
+ 
+   let targetIntentId: string | undefined;
+   if (targetIntentIdRaw !== undefined) {
+     if (action !== "EXIT" && action !== "MOVE_STOP" && action !== "MOVE_TP") {
+-      throw new Error("target_intent_id_only_allowed_on_exit_or_amendment");
++      throw new IntentParseError("target_intent_id_only_allowed_on_exit_or_amendment", "target_intent_id");
+     }
+     if (typeof targetIntentIdRaw !== "string") {
+-      throw new Error("target_intent_id_invalid");
++      throw new IntentParseError("target_intent_id_invalid", "target_intent_id");
+     }
+     targetIntentId = stringField({ target_intent_id: targetIntentIdRaw }, "target_intent_id", 64);
+     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetIntentId)) {
+-      throw new Error("target_intent_id_must_be_uuid");
++      throw new IntentParseError("target_intent_id_must_be_uuid", "target_intent_id");
+     }
+   }
+ 
+   const entry = action === "ENTER_LONG" || action === "ENTER_SHORT";
+   if (entry) {
+     if (!Number.isInteger(quantity) || (quantity ?? 0) < 1 || orderType !== "MARKET") {
+-      throw new Error("entries require quantity, MARKET order_type, stop_loss, and take_profit_1");
++      throw new IntentParseError("entry_fields_invalid", "quantity");
+     }
+     if (stopLoss === undefined || stopLoss <= 0 || takeProfit1 === undefined || takeProfit1 <= 0) {
+-      throw new Error("entries require quantity, MARKET order_type, stop_loss, and take_profit_1");
++      throw new IntentParseError("entry_fields_invalid", "stop_loss");
+     }
+   } else if (action === "MOVE_STOP") {
+     if (newStopPrice === undefined || newStopPrice <= 0) {
+-      throw new Error("MOVE_STOP requires new_stop_price");
++      throw new IntentParseError("move_stop_requires_new_stop_price", "new_stop_price");
+     }
+     if (
+       quantity !== undefined
+@@ -180,12 +194,12 @@ export function parseTradeIntent(input: unknown): TradeIntent {
+       || newTakeProfit !== undefined
+       || exitFraction !== undefined
+     ) {
+-      throw new Error("MOVE_STOP cannot carry unrelated entry or exit fields");
++      throw new IntentParseError("move_stop_extra_fields");
+     }
+   } else if (action === "MOVE_TP") {
+     const targetPrice = newTakeProfit ?? takeProfit1;
+     if (targetPrice === undefined || targetPrice <= 0) {
+-      throw new Error("MOVE_TP requires new_take_profit or take_profit_1");
++      throw new IntentParseError("move_tp_requires_target_price", "new_take_profit");
+     }
+     if (
+       quantity !== undefined
+@@ -194,23 +208,23 @@ export function parseTradeIntent(input: unknown): TradeIntent {
+       || newStopPrice !== undefined
+       || exitFraction !== undefined
+     ) {
+-      throw new Error("MOVE_TP cannot carry unrelated entry or exit fields");
++      throw new IntentParseError("move_tp_extra_fields");
+     }
+   } else if (action === "EXIT") {
+     if (orderType !== undefined || stopLoss !== undefined || takeProfit1 !== undefined) {
+-      throw new Error("EXIT cannot carry entry fields");
++      throw new IntentParseError("exit_entry_fields_forbidden");
+     }
+     if (newStopPrice !== undefined || newTakeProfit !== undefined) {
+-      throw new Error("EXIT cannot carry amendment fields");
++      throw new IntentParseError("exit_amendment_fields_forbidden");
+     }
+     if (quantity !== undefined && (!Number.isInteger(quantity) || quantity < 1)) {
+-      throw new Error("EXIT quantity must be a positive integer");
++      throw new IntentParseError("exit_quantity_invalid", "quantity");
+     }
+     if (exitFraction !== undefined && (exitFraction <= 0 || exitFraction > 1)) {
+-      throw new Error("EXIT exit_fraction must be in (0, 1]");
++      throw new IntentParseError("exit_fraction_invalid", "exit_fraction");
+     }
+     if (quantity !== undefined && exitFraction !== undefined) {
+-      throw new Error("EXIT cannot specify both quantity and exit_fraction");
++      throw new IntentParseError("exit_quantity_and_fraction_conflict");
+     }
+   } else if (
+     quantity !== undefined
+@@ -221,7 +235,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
+     || newTakeProfit !== undefined
+     || exitFraction !== undefined
+   ) {
+-    throw new Error("non-entry actions cannot carry entry fields in the initial direct gateway");
++    throw new IntentParseError("non_entry_fields_forbidden");
+   }
+ 
+   const resolvedTakeProfit = action === "MOVE_TP"
+diff --git a/src/domain/market-observation.ts b/src/domain/market-observation.ts
+index 7fbc248..83164cd 100644
+--- a/src/domain/market-observation.ts
++++ b/src/domain/market-observation.ts
+@@ -39,6 +39,7 @@ export interface DescriptiveMarketFeatures {
+   upper_wick_fraction: number | null;
+   lower_wick_fraction: number | null;
+   volume_z_score_20: number | null;
++  progress_adjusted_volume_z_score_20: number | null;
+ }
+ 
+ export interface TimeframeMarketObservation {
+diff --git a/src/domain/order-flow.ts b/src/domain/order-flow.ts
+index 4e5755a..bc3274e 100644
+--- a/src/domain/order-flow.ts
++++ b/src/domain/order-flow.ts
+@@ -28,6 +28,7 @@ export interface DepthLevelObservation {
+ }
+ 
+ export interface DepthBookObservation {
++  available: boolean;
+   depth_levels_requested: number;
+   reconstruction_basis: "since_latest_reset" | "bounded_window_without_reset";
+   book_complete: false;
+diff --git a/src/execution/coordinator.ts b/src/execution/coordinator.ts
+index d2aca98..9fef30a 100644
+--- a/src/execution/coordinator.ts
++++ b/src/execution/coordinator.ts
+@@ -1,6 +1,6 @@
+ import { randomUUID } from "node:crypto";
+ import type { AppConfig } from "../config.js";
+-import { parseTradeIntent } from "../domain/intents.js";
++import { parseTradeIntent, IntentParseError } from "../domain/intents.js";
+ import type { AccountVenueSnapshot, TradeIntent } from "../domain/models.js";
+ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
+ import {
+@@ -44,6 +44,9 @@ export interface ExecutionReceipt {
+   code: string;
+   order_id?: number;
+   detail?: string;
++  field?: string;
++  error?: string;
++  path?: string;
+   /** ISO timestamp when an open position was first observed for this entry. */
+   fill_observed_utc?: string;
+ }
+@@ -82,6 +85,17 @@ export class ExecutionCoordinator {
+     try {
+       intent = parseTradeIntent(input);
+     } catch (error) {
++      if (error instanceof IntentParseError) {
++        return this.record({
++          intentId: null,
++          status: "rejected",
++          code: "intent_schema_invalid",
++          detail: error.message,
++          field: error.field,
++          error: error.errorCode,
++          path: error.path,
++        });
++      }
+       return this.record({
+         intentId: null,
+         status: "rejected",
+@@ -1085,6 +1099,9 @@ export class ExecutionCoordinator {
+     status: ExecutionReceipt["status"];
+     code: string;
+     detail?: string;
++    field?: string;
++    error?: string;
++    path?: string;
+   }): ExecutionReceipt {
+     return {
+       schema_version: "glitch.direct.execution_receipt.v1",
+@@ -1095,6 +1112,9 @@ export class ExecutionCoordinator {
+       status: input.status,
+       code: input.code,
+       ...(input.detail === undefined ? {} : { detail: input.detail }),
++      ...(input.field === undefined ? {} : { field: input.field }),
++      ...(input.error === undefined ? {} : { error: input.error }),
++      ...(input.path === undefined ? {} : { path: input.path }),
+     };
+   }
+ 
+@@ -1104,6 +1124,9 @@ export class ExecutionCoordinator {
+     code: string;
+     orderId?: number;
+     detail?: string;
++    field?: string;
++    error?: string;
++    path?: string;
+   }): Promise<ExecutionReceipt> {
+     const receipt: ExecutionReceipt = {
+       schema_version: "glitch.direct.execution_receipt.v1",
+@@ -1115,6 +1138,9 @@ export class ExecutionCoordinator {
+       code: input.code,
+       ...(input.orderId === undefined ? {} : { order_id: input.orderId }),
+       ...(input.detail === undefined ? {} : { detail: input.detail }),
++      ...(input.field === undefined ? {} : { field: input.field }),
++      ...(input.error === undefined ? {} : { error: input.error }),
++      ...(input.path === undefined ? {} : { path: input.path }),
+     };
+     this.store.recordReceipt({ ...receipt });
+     maybeKill("after_receipt_before_jsonl");
+diff --git a/src/hermes/packet-builder.ts b/src/hermes/packet-builder.ts
+index ed6abea..6e0bed1 100644
+--- a/src/hermes/packet-builder.ts
++++ b/src/hermes/packet-builder.ts
+@@ -4,6 +4,7 @@ import type { MarketObservationState } from "../domain/market-observation.js";
+ import type { ProjectXOrderFlowState } from "../domain/order-flow.js";
+ import type {
+   AccountVenueSnapshot,
++  QuoteInfo,
+   RiskSettings,
+   TopstepPolicyState,
+   TradeAction,
+@@ -87,6 +88,8 @@ export interface DirectDecisionPacket {
+     session_open: number | null;
+     session_high: number | null;
+     session_low: number | null;
++    session_levels_reliable: boolean;
++    session_levels_note?: string;
+     volume: number | null;
+   };
+   market_observation: MarketObservationState;
+@@ -429,6 +432,12 @@ export function buildDecisionPacket(
+     remainingCapacity,
+     exitPermitted,
+   );
++  const sessionLevels = resolveSessionMarketLevels(quote);
++  const packetIssues = [...quality.issues];
++  const depthObservation = orderFlow.observation?.depth;
++  if (depthObservation?.available === false && !packetIssues.includes("order_flow_depth_unavailable")) {
++    packetIssues.push("order_flow_depth_unavailable");
++  }
+ 
+   return {
+     schema_version: "glitch.direct.decision_packet.v2",
+@@ -468,16 +477,18 @@ export function buildDecisionPacket(
+       spread_ticks: quote
+         ? (quote.bestAsk - quote.bestBid) / snapshot.contract.tickSize
+         : null,
+-      session_open: quote?.open ?? null,
+-      session_high: quote?.high ?? null,
+-      session_low: quote?.low ?? null,
++      session_open: sessionLevels.session_open,
++      session_high: sessionLevels.session_high,
++      session_low: sessionLevels.session_low,
++      session_levels_reliable: sessionLevels.reliable,
++      ...(sessionLevels.note === undefined ? {} : { session_levels_note: sessionLevels.note }),
+       volume: quote?.volume ?? null,
+     },
+     market_observation: structuredClone(marketObservation),
+     order_flow: structuredClone(orderFlow),
+     data_quality: {
+-      state_complete: quality.stateComplete,
+-      issues: [...quality.issues],
++      state_complete: packetIssues.length === 0,
++      issues: packetIssues,
+       quote_age_ms: quality.quoteAgeMs,
+       state_age_ms: quality.stateAgeMs,
+       generation: snapshot.operational.generation,
+@@ -554,3 +565,41 @@ export function buildDecisionPacket(
+     },
+   };
+ }
++
++function resolveSessionMarketLevels(quote: QuoteInfo | null): {
++  session_open: number | null;
++  session_high: number | null;
++  session_low: number | null;
++  reliable: boolean;
++  note?: string;
++} {
++  if (!quote) {
++    return {
++      session_open: null,
++      session_high: null,
++      session_low: null,
++      reliable: false,
++    };
++  }
++  const last = quote.lastPrice;
++  const open = quote.open;
++  const high = quote.high;
++  const low = quote.low;
++  let reliable = true;
++  if (high === low && high === last) {
++    reliable = false;
++  } else if (high === low && high === open && open === last) {
++    reliable = false;
++  }
++  return {
++    session_open: open,
++    session_high: reliable ? high : null,
++    session_low: reliable ? low : null,
++    reliable,
++    ...(reliable
++      ? {}
++      : {
++          note: "session_high/low mirror last or session_open; prefer order_flow 60s high/low or observation range features",
++        }),
++  };
++}
+diff --git a/src/market/observation.ts b/src/market/observation.ts
+index 376a3da..7b78858 100644
+--- a/src/market/observation.ts
++++ b/src/market/observation.ts
+@@ -81,6 +81,11 @@ export function findMarketBarGaps(
+ 
+ export function calculateDescriptiveMarketFeatures(
+   bars: AcceptedBar[],
++  partialContext?: {
++    latestBarPartial: boolean;
++    timeframeMinutes: MarketObservationTimeframeMinutes;
++    nowMs: number;
++  },
+ ): DescriptiveMarketFeatures {
+   const latest = bars.at(-1)!;
+   const previous = bars.at(-2) ?? null;
+@@ -132,9 +137,33 @@ export function calculateDescriptiveMarketFeatures(
+       ? null
+       : (Math.min(latest.open, latest.close) - latest.low) / range,
+     volume_z_score_20: zScore(bars.map((bar) => bar.volume), 20),
++    progress_adjusted_volume_z_score_20: partialContext?.latestBarPartial
++      ? progressAdjustedVolumeZScore(
++          bars,
++          partialContext.timeframeMinutes,
++          partialContext.nowMs,
++        )
++      : null,
+   };
+ }
+ 
++function progressAdjustedVolumeZScore(
++  bars: AcceptedBar[],
++  timeframeMinutes: MarketObservationTimeframeMinutes,
++  nowMs: number,
++): number | null {
++  const latest = bars.at(-1);
++  if (!latest) {
++    return null;
++  }
++  const barMs = timeframeMinutes * MINUTE_MS;
++  const progress = Math.max((nowMs - latest.epochMs) / barMs, 0.05);
++  const adjustedVolumes = bars.map((bar, index) => (
++    index === bars.length - 1 ? bar.volume / progress : bar.volume
++  ));
++  return zScore(adjustedVolumes, 20);
++}
++
+ function observeTimeframe(
+   input: CanonicalMarketBar[],
+   timeframeMinutes: MarketObservationTimeframeMinutes,
+@@ -142,17 +171,25 @@ function observeTimeframe(
+ ): TimeframeMarketObservation {
+   const accepted = normalizeMarketBars(input);
+   const latest = accepted.at(-1) ?? null;
++  const latestBarPartial = latest === null
++    ? false
++    : latest.epochMs + timeframeMinutes * MINUTE_MS > nowMs;
++  const features = latest === null
++    ? null
++    : calculateDescriptiveMarketFeatures(accepted, {
++        latestBarPartial,
++        timeframeMinutes,
++        nowMs,
++      });
+   return {
+     timeframe_minutes: timeframeMinutes,
+     bars_received: input.length,
+     bars_accepted: accepted.length,
+     rejected_bars: input.length - accepted.length,
+     latest_bar_utc: latest?.timestamp ?? null,
+-    latest_bar_partial: latest === null
+-      ? false
+-      : latest.epochMs + timeframeMinutes * MINUTE_MS > nowMs,
++    latest_bar_partial: latestBarPartial,
+     gaps: findMarketBarGaps(accepted, timeframeMinutes),
+-    features: latest === null ? null : calculateDescriptiveMarketFeatures(accepted),
++    features,
+   };
+ }
+ 
+diff --git a/src/market/order-flow.ts b/src/market/order-flow.ts
+index 4123a09..9ed0b7a 100644
+--- a/src/market/order-flow.ts
++++ b/src/market/order-flow.ts
+@@ -250,7 +250,11 @@ function buildDepthObservation(input: {
+   const bidVolume = bids.reduce((total, level) => total + level.current_volume, 0);
+   const askVolume = asks.reduce((total, level) => total + level.current_volume, 0);
+   const totalVolume = bidVolume + askVolume;
++  const available = bestBid !== null
++    && bestAsk !== null
++    && (bidVolume > 0 || askVolume > 0);
+   return {
++    available,
+     depth_levels_requested: input.depthLevels,
+     reconstruction_basis: input.latestResetSequence === null
+       ? "bounded_window_without_reset"
+diff --git a/src/state/data-quality.ts b/src/state/data-quality.ts
+index fe50316..46b706d 100644
+--- a/src/state/data-quality.ts
++++ b/src/state/data-quality.ts
+@@ -21,7 +21,7 @@ export function evaluateSnapshotDataQuality(
+     issues.add("venue_state_incomplete");
+   }
+ 
+-  const quoteAgeMs = snapshot.quote
++  let quoteAgeMs = snapshot.quote
+     ? ageMilliseconds(snapshot.quote.timestamp, now)
+     : null;
+   const stateAgeMs = ageMilliseconds(snapshot.capturedAt, now);
+@@ -31,6 +31,10 @@ export function evaluateSnapshotDataQuality(
+       issues.add("quote_timestamp_invalid");
+     } else if (quoteAgeMs < -FUTURE_TOLERANCE_MS) {
+       issues.add("quote_timestamp_future");
++      quoteAgeMs = 0;
++    } else if (quoteAgeMs < 0) {
++      issues.add("quote_clock_skew");
++      quoteAgeMs = 0;
+     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
+       issues.add("quote_stale");
+     }
+diff --git a/tests/data-quality.test.ts b/tests/data-quality.test.ts
+index d5cf52d..ca9cecf 100644
+--- a/tests/data-quality.test.ts
++++ b/tests/data-quality.test.ts
+@@ -95,4 +95,17 @@ describe("snapshot data quality", () => {
+     assert.ok(futureResult.issues.includes("quote_timestamp_future"));
+     assert.ok(futureResult.issues.includes("account_state_timestamp_future"));
+   });
++
++  it("clamps minor quote clock skew to zero and records an explicit issue", () => {
++    const skewed = snapshot();
++    skewed.quote = { ...skewed.quote!, timestamp: "2026-07-21T12:00:05.500Z" };
++    const result = evaluateSnapshotDataQuality(
++      skewed,
++      settings,
++      new Date("2026-07-21T12:00:05Z"),
++    );
++    assert.equal(result.quoteAgeMs, 0);
++    assert.ok(result.issues.includes("quote_clock_skew"));
++    assert.ok(!result.issues.includes("quote_timestamp_future"));
++  });
+ });
+diff --git a/tests/execution-coordinator.test.ts b/tests/execution-coordinator.test.ts
+index 507f877..510d62d 100644
+--- a/tests/execution-coordinator.test.ts
++++ b/tests/execution-coordinator.test.ts
+@@ -436,4 +436,32 @@ describe("execution coordinator serialization", () => {
+       rmSync(directory, { recursive: true, force: true });
+     }
+   });
++
++  it("returns structured field and error metadata for schema-invalid intents", async () => {
++    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-coordinator-invalid-"));
++    const store = new SqliteExecutionStore(":memory:");
++    try {
++      const appConfig = config(directory);
++      const coordinator = new ExecutionCoordinator(
++        appConfig,
++        { placeOrder: async () => 9001, closePosition: async () => undefined } as unknown as ProjectXApiClient,
++        new JsonlEventStore(directory),
++        store,
++        () => snapshot(),
++        () => null,
++        () => store.invalidateIssuedPackets(new Date().toISOString()),
++      );
++      const receipt = await coordinator.handleWireIntent({
++        ...intent("00000000-0000-4000-8000-000000000701", "snapshot", new Date().toISOString()),
++        prompt_version: "glitch-topstep-v1",
++      });
++      assert.equal(receipt.status, "rejected");
++      assert.equal(receipt.code, "intent_schema_invalid");
++      assert.equal(receipt.field, "prompt_version");
++      assert.equal(receipt.error, "prompt_version_mismatch");
++    } finally {
++      store.close();
++      rmSync(directory, { recursive: true, force: true });
++    }
++  });
+ });
+diff --git a/tests/fixtures.ts b/tests/fixtures.ts
+index 5a3b196..f527629 100644
+--- a/tests/fixtures.ts
++++ b/tests/fixtures.ts
+@@ -51,6 +51,7 @@ export function orderFlowWithTrades(tradeCount: number): ProjectXOrderFlowState
+       ],
+       depth: {
+         depth_levels_requested: 10,
++        available: true,
+         reconstruction_basis: "bounded_window_without_reset",
+         book_complete: false,
+         latest_reset_sequence: null,
+diff --git a/tests/intents.test.ts b/tests/intents.test.ts
+index d0acea7..81e9551 100644
+--- a/tests/intents.test.ts
++++ b/tests/intents.test.ts
+@@ -61,7 +61,17 @@ describe("Glitch intent contract", () => {
+     );
+     const mismatch = baseIntent();
+     mismatch.decision_audit.final_choice = "HOLD";
+-    assert.throws(() => parseTradeIntent(mismatch), /final_choice must equal action/);
++    assert.throws(() => parseTradeIntent(mismatch), /final_choice_must_equal_action/);
++  });
++
++  it("exposes structured field metadata on parse errors", () => {
++    try {
++      parseTradeIntent({ ...baseIntent(), prompt_version: "glitch-topstep-v1" });
++      assert.fail("expected prompt_version_mismatch");
++    } catch (error) {
++      assert.equal((error as { errorCode?: string }).errorCode, "prompt_version_mismatch");
++      assert.equal((error as { field?: string }).field, "prompt_version");
++    }
+   });
+ 
+   it("rejects unprotected entries", () => {
+@@ -70,7 +80,7 @@ describe("Glitch intent contract", () => {
+       ...input,
+       action: "ENTER_LONG",
+       decision_audit: { ...input.decision_audit, final_choice: "ENTER_LONG" },
+-    }), /entries require/);
++    }), /entry_fields_invalid/);
+   });
+ 
+   it("accepts MOVE_STOP and MOVE_TP amendment intents", () => {
+diff --git a/tests/market-observation.test.ts b/tests/market-observation.test.ts
+index 781fbbf..86cd42d 100644
+--- a/tests/market-observation.test.ts
++++ b/tests/market-observation.test.ts
+@@ -59,6 +59,9 @@ describe("strategy-neutral market observation", () => {
+     assert.equal(observation.timeframes[0]?.gaps[0]?.missing_bars, 1);
+     assert.equal(observation.timeframes[0]?.latest_bar_partial, true);
+     assert.equal(observation.timeframes[0]?.rejected_bars, 0);
++    assert.ok(
++      observation.timeframes[0]?.features?.progress_adjusted_volume_z_score_20 !== undefined,
++    );
+   });
+ 
+   it("emits descriptive features without a signal, score, or action", () => {
+diff --git a/tests/order-flow.test.ts b/tests/order-flow.test.ts
+index 4c2f4de..b0c01b5 100644
+--- a/tests/order-flow.test.ts
++++ b/tests/order-flow.test.ts
+@@ -104,6 +104,7 @@ describe("ProjectX order flow", () => {
+     });
+ 
+     assert.equal(observation.depth.reconstruction_basis, "since_latest_reset");
++    assert.equal(observation.depth.available, true);
+     assert.equal(observation.depth.book_complete, false);
+     assert.equal(observation.depth.latest_reset_sequence, 2);
+     assert.deepEqual(observation.depth.bid_levels, [
+@@ -138,5 +139,6 @@ describe("ProjectX order flow", () => {
+     assert.ok(observation.issues.includes("input_not_strictly_sequence_ordered"));
+     assert.ok(observation.issues.includes("market_evidence_does_not_cover_full_lookback"));
+     assert.ok(observation.issues.includes("market_evidence_query_truncated"));
++    assert.equal(observation.depth.available, false);
+   });
+ });
+diff --git a/tests/packet-order-flow.test.ts b/tests/packet-order-flow.test.ts
+index 0ca8dc4..aa019e0 100644
+--- a/tests/packet-order-flow.test.ts
++++ b/tests/packet-order-flow.test.ts
+@@ -108,6 +108,7 @@ it("changes packet identity with order flow but never turns flow into an executi
+         windows: [],
+         depth: {
+           depth_levels_requested: 10,
++          available: true,
+           reconstruction_basis: "bounded_window_without_reset",
+           book_complete: false,
+           latest_reset_sequence: null,
+-- 
+2.43.0
+

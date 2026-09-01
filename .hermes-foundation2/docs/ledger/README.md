@@ -1,0 +1,1 @@
+`docs/ledger/ledger.json` is the canonical work authority for glitch-topstep-hermes-profile under `RAIL-*` ids. Active execution and recovery work is tracked in the gateway ledger at `glitch-topstep/docs/ledger/ledger.json` (`TS-*` ids). This profile ledger coordinates profile-only work and cross-repo bindings.

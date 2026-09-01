@@ -1,0 +1,479 @@
+From d1179834ab3fe02eb3343a2e549ed936cbf72e3c Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 6 Aug 2026 18:38:52 +0000
+Subject: [PATCH] fix: accept glitch-topstep-v9 prompt version from Hermes
+ profile 0.1.31
+
+Bump GLITCH_TOPSTEP_PROMPT_VERSION to glitch-topstep-v9 so intents from
+the paired Hermes profile (GTHP-028 / prompt v9) pass gateway validation.
+
+Without this pairing, every delivery receipt fails with
+intent_schema_invalid / prompt_version_mismatch even for valid NOTHING.
+
+Update test fixtures and acceptance scripts to the paired prompt contract.
+
+Pairing: glitch-topstep-hermes-profile v0.1.31 / PR #83
+---
+ ...S-BETA-01-immutable-baseline-2026-08-04.md |  2 +-
+ scripts/acceptance-r1-04-kill-matrix.mjs      |  4 +--
+ scripts/pm4-phase-c-e2e.mjs                   |  2 +-
+ src/domain/operator.ts                        |  2 +-
+ tests/execution-coordinator.test.ts           |  4 +--
+ tests/execution-recovery.test.ts              |  2 +-
+ tests/intent-body-hash.test.ts                |  4 +--
+ tests/intents.test.ts                         |  2 +-
+ tests/kill-matrix-child.ts                    |  6 ++--
+ tests/kill-matrix.test.ts                     |  2 +-
+ tests/orphan-intent-recovery.test.ts          |  2 +-
+ tests/position-management.test.ts             | 36 +++++++++----------
+ tests/projectx-order-ownership.test.ts        |  4 +--
+ tests/receipt-reconciliation.test.ts          |  4 +--
+ tests/recovery-flatten.test.ts                |  4 +--
+ tests/risk-engine.test.ts                     |  2 +-
+ tests/sqlite-execution-store.test.ts          |  2 +-
+ 17 files changed, 42 insertions(+), 42 deletions(-)
+
+diff --git a/docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md b/docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md
+index c9df572..b1ad3b3 100644
+--- a/docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md
++++ b/docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md
+@@ -23,7 +23,7 @@ Supersedes the 2026-08-04 candidate pin (`0.1.3` / `0.1.13` on account `90809185
+ | Hermes profile | `glitch-topstep` | **0.1.17** (installed `distribution.yaml`) |
+ | Profile source commit | `glitch-topstep-hermes-profile` `origin/main` | `efb8c2245ffb0c8d0e6766475ffa2bcc6827e8b8` (`efb8c22`) |
+ | Profile install path | `%LOCALAPPDATA%\hermes\profiles\glitch-topstep` | updated 2026-08-05 |
+-| Prompt contract | gateway `GLITCH_TOPSTEP_PROMPT_VERSION` | `glitch-topstep-v5` |
++| Prompt contract | gateway `GLITCH_TOPSTEP_PROMPT_VERSION` | `glitch-topstep-v9` |
+ | Health / intent schemas | `glitch.direct.health.v2`, `glitch.intent.v2` | decision packet `v1`/`v2` |
+ | Outcome publisher | `TRADE_OUTCOME_PUBLISHER_VERSION` | `0.1.3-r3-03c` |
+ | Compatibility | Hermes ↔ gateway | `compatible (profile 0.1.17, gateway 0.1.4)` via `/health` |
+diff --git a/scripts/acceptance-r1-04-kill-matrix.mjs b/scripts/acceptance-r1-04-kill-matrix.mjs
+index 6272366..40c6332 100644
+--- a/scripts/acceptance-r1-04-kill-matrix.mjs
++++ b/scripts/acceptance-r1-04-kill-matrix.mjs
+@@ -226,7 +226,7 @@ function buildEntryIntent(intentId, pkt, killPoint) {
+     confidence: 0.6,
+     snapshot_hash: pkt.market.snapshot_hash,
+     model_version: "r1-04-kill-matrix",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: `TS-R1-04 kill ${killPoint}`,
+     decision_audit: audit("ENTER_LONG"),
+     quantity: 1,
+@@ -386,7 +386,7 @@ async function ensureFlat(steps, label = "FLAT") {
+       confidence: 0.6,
+       snapshot_hash: pkt.market.snapshot_hash,
+       model_version: "r1-04-kill-matrix",
+-      prompt_version: "glitch-topstep-v5",
++      prompt_version: "glitch-topstep-v9",
+       reason: `${label} flatten`,
+       decision_audit: audit("EXIT"),
+     };
+diff --git a/scripts/pm4-phase-c-e2e.mjs b/scripts/pm4-phase-c-e2e.mjs
+index 1dd6066..3398f20 100644
+--- a/scripts/pm4-phase-c-e2e.mjs
++++ b/scripts/pm4-phase-c-e2e.mjs
+@@ -204,7 +204,7 @@ function baseIntent(action, snap, intentId = randomUUID()) {
+     confidence: 0.6,
+     snapshot_hash: snap,
+     model_version: "pm4-phase-c-e2e",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: `pm4-phase-c ${action}`,
+     decision_audit: audit(action),
+   };
+diff --git a/src/domain/operator.ts b/src/domain/operator.ts
+index 6faecf9..1abbf1a 100644
+--- a/src/domain/operator.ts
++++ b/src/domain/operator.ts
+@@ -1,2 +1,2 @@
+ export const GLITCH_TOPSTEP_OPERATOR_PROFILE = "glitch-topstep";
+-export const GLITCH_TOPSTEP_PROMPT_VERSION = "glitch-topstep-v5";
++export const GLITCH_TOPSTEP_PROMPT_VERSION = "glitch-topstep-v9";
+diff --git a/tests/execution-coordinator.test.ts b/tests/execution-coordinator.test.ts
+index 5942e61..507f877 100644
+--- a/tests/execution-coordinator.test.ts
++++ b/tests/execution-coordinator.test.ts
+@@ -82,7 +82,7 @@ function intent(
+     confidence: 0.6,
+     snapshot_hash: snapshotHash,
+     model_version: "test",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: "Test concurrent entry.",
+     decision_audit: {
+       bull_case: "Bull case.",
+@@ -349,7 +349,7 @@ describe("execution coordinator serialization", () => {
+         confidence: 0.4,
+         snapshot_hash: "expired-or-unknown-hash",
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "No trade this cycle.",
+         decision_audit: {
+           bull_case: "Bull case.",
+diff --git a/tests/execution-recovery.test.ts b/tests/execution-recovery.test.ts
+index 59c6e7d..7762dba 100644
+--- a/tests/execution-recovery.test.ts
++++ b/tests/execution-recovery.test.ts
+@@ -19,7 +19,7 @@ function intent(id: string, action: "ENTER_LONG" | "EXIT" = "ENTER_LONG"): Trade
+     confidence: 0.6,
+     snapshotHash: "snapshot-hash",
+     modelVersion: "test",
+-    promptVersion: "glitch-topstep-v5",
++    promptVersion: "glitch-topstep-v9",
+     reason: "Test.",
+     decisionAudit: {
+       bullCase: "Bull.",
+diff --git a/tests/intent-body-hash.test.ts b/tests/intent-body-hash.test.ts
+index b0343bf..4e46b9a 100644
+--- a/tests/intent-body-hash.test.ts
++++ b/tests/intent-body-hash.test.ts
+@@ -16,7 +16,7 @@ describe("intent body hash", () => {
+       confidence: 0.6,
+       snapshot_hash: "snapshot-hash",
+       model_version: "test",
+-      prompt_version: "glitch-topstep-v5",
++      prompt_version: "glitch-topstep-v9",
+       reason: "Stable hash.",
+       decision_audit: {
+         bull_case: "Bull case.",
+@@ -51,7 +51,7 @@ describe("intent body hash", () => {
+       confidence: 0.6,
+       snapshot_hash: "snapshot-hash",
+       model_version: "test",
+-      prompt_version: "glitch-topstep-v5",
++      prompt_version: "glitch-topstep-v9",
+       reason: "First reason.",
+       decision_audit: {
+         bull_case: "Bull case.",
+diff --git a/tests/intents.test.ts b/tests/intents.test.ts
+index 034939f..d0acea7 100644
+--- a/tests/intents.test.ts
++++ b/tests/intents.test.ts
+@@ -14,7 +14,7 @@ function baseIntent() {
+     confidence: 0.5,
+     snapshot_hash: "snapshot",
+     model_version: "test",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: "No edge.",
+     decision_audit: {
+       bull_case: "Limited bullish evidence.",
+diff --git a/tests/kill-matrix-child.ts b/tests/kill-matrix-child.ts
+index 968ec48..b0907b8 100644
+--- a/tests/kill-matrix-child.ts
++++ b/tests/kill-matrix-child.ts
+@@ -116,7 +116,7 @@ function entryIntent(snapshotHash: string, createdUtc: string): Record<string, u
+     confidence: 0.6,
+     snapshot_hash: snapshotHash,
+     model_version: "test",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: "Kill-matrix entry fixture.",
+     decision_audit: {
+       bull_case: "Bull case.",
+@@ -148,7 +148,7 @@ function exitIntent(snapshotHash: string, createdUtc: string): Record<string, un
+     confidence: 0.9,
+     snapshot_hash: snapshotHash,
+     model_version: "test",
+-    prompt_version: "glitch-topstep-v5",
++    prompt_version: "glitch-topstep-v9",
+     reason: "Kill-matrix exit fixture.",
+     decision_audit: {
+       bull_case: "Bull case.",
+@@ -190,7 +190,7 @@ async function runRecoveryScenario(dbPath: string): Promise<void> {
+       confidence: 0.6,
+       snapshotHash: "kill-matrix-recovery",
+       modelVersion: "test",
+-      promptVersion: "glitch-topstep-v5",
++      promptVersion: "glitch-topstep-v9",
+       reason: "Recovery kill seed.",
+       decisionAudit: {
+         bullCase: "Bull.",
+diff --git a/tests/kill-matrix.test.ts b/tests/kill-matrix.test.ts
+index 357344e..6c4dbe2 100644
+--- a/tests/kill-matrix.test.ts
++++ b/tests/kill-matrix.test.ts
+@@ -282,7 +282,7 @@ describe("TS-R1-01 process-kill matrix (fake provider)", () => {
+         confidence: 0.6,
+         snapshotHash: "restart-hash",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Restart persistence.",
+         decisionAudit: {
+           bullCase: "Bull.",
+diff --git a/tests/orphan-intent-recovery.test.ts b/tests/orphan-intent-recovery.test.ts
+index 31d2afe..19f8fab 100644
+--- a/tests/orphan-intent-recovery.test.ts
++++ b/tests/orphan-intent-recovery.test.ts
+@@ -16,7 +16,7 @@ function intent(id: string, action: TradeAction): TradeIntent {
+     confidence: 0.6,
+     snapshotHash: "snapshot-hash",
+     modelVersion: "test",
+-    promptVersion: "glitch-topstep-v5",
++    promptVersion: "glitch-topstep-v9",
+     reason: "Test.",
+     decisionAudit: {
+       bullCase: "Bull.",
+diff --git a/tests/position-management.test.ts b/tests/position-management.test.ts
+index 82ba005..e1b1ead 100644
+--- a/tests/position-management.test.ts
++++ b/tests/position-management.test.ts
+@@ -238,7 +238,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Tighten tranche B stop.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_000,
+@@ -318,7 +318,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Refresh target after partial exit.",
+         decision_audit: audit("MOVE_TP"),
+         new_take_profit: 20_030,
+@@ -392,7 +392,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Ambiguous tranche.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_005,
+@@ -455,7 +455,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Raise stop to breakeven.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_000,
+@@ -518,7 +518,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Attempt to widen stop.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 19_980,
+@@ -583,7 +583,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Attempt marketable stop.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_000.25,
+@@ -646,7 +646,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Raise stop to breakeven.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_000,
+@@ -681,7 +681,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshotHash: "prior-snapshot",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "First tighten.",
+         decisionAudit: {
+           bullCase: "Bull.",
+@@ -757,7 +757,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Second tighten.",
+         decision_audit: audit("MOVE_STOP"),
+         new_stop_price: 20_000,
+@@ -829,7 +829,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Bank one contract.",
+         decision_audit: audit("EXIT"),
+         quantity: 1,
+@@ -911,7 +911,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Exit the second tranche only.",
+         decision_audit: audit("EXIT"),
+         quantity: 1,
+@@ -993,7 +993,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Exit the second tranche only with split venue rows.",
+         decision_audit: audit("EXIT"),
+         quantity: 1,
+@@ -1062,7 +1062,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Too large for tranche.",
+         decision_audit: audit("EXIT"),
+         quantity: 2,
+@@ -1092,7 +1092,7 @@ describe("position management coordinator", () => {
+         confidence: 0.6,
+         snapshotHash: "snapshot-hash",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Entry for rearm.",
+         decisionAudit: {
+           bullCase: "Bull.",
+@@ -1185,7 +1185,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshotHash: "snapshot-hash",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Exit pending.",
+         decisionAudit: {
+           bullCase: "Bull.",
+@@ -1404,7 +1404,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Flatten while entry is degraded by stale quote evidence.",
+         decision_audit: audit("EXIT"),
+       });
+@@ -1463,7 +1463,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Should reject.",
+         decision_audit: audit("EXIT"),
+       });
+@@ -1528,7 +1528,7 @@ describe("position management coordinator", () => {
+         confidence: 0.7,
+         snapshot_hash: packet.market.snapshot_hash,
+         model_version: "test",
+-        prompt_version: "glitch-topstep-v5",
++        prompt_version: "glitch-topstep-v9",
+         reason: "Flatten after amendments.",
+         decision_audit: audit("EXIT"),
+       });
+diff --git a/tests/projectx-order-ownership.test.ts b/tests/projectx-order-ownership.test.ts
+index 8ab3b0f..7f1f431 100644
+--- a/tests/projectx-order-ownership.test.ts
++++ b/tests/projectx-order-ownership.test.ts
+@@ -30,7 +30,7 @@ function intent(
+     confidence: 0.6,
+     snapshotHash: "snapshot-hash",
+     modelVersion: "test",
+-    promptVersion: "glitch-topstep-v5",
++    promptVersion: "glitch-topstep-v9",
+     reason: "Ownership fixture.",
+     decisionAudit: {
+       bullCase: "Bull.",
+@@ -480,7 +480,7 @@ describe("multi-tranche ownership reconstruction", () => {
+         confidence: 0.7,
+         snapshotHash: "snapshot-hash",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Exit second tranche.",
+         decisionAudit: {
+           bullCase: "Bull.",
+diff --git a/tests/receipt-reconciliation.test.ts b/tests/receipt-reconciliation.test.ts
+index 3cfa3b6..dcd57eb 100644
+--- a/tests/receipt-reconciliation.test.ts
++++ b/tests/receipt-reconciliation.test.ts
+@@ -21,7 +21,7 @@ describe("pending receipt reconciliation", () => {
+         confidence: 0.6,
+         snapshotHash: "snapshot",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Entry.",
+         decisionAudit: {
+           bullCase: "Bull.",
+@@ -131,7 +131,7 @@ describe("pending receipt reconciliation", () => {
+         confidence: 0.6,
+         snapshotHash: "snapshot",
+         modelVersion: "test",
+-        promptVersion: "glitch-topstep-v5",
++        promptVersion: "glitch-topstep-v9",
+         reason: "Entry.",
+         decisionAudit: {
+           bullCase: "Bull.",
+diff --git a/tests/recovery-flatten.test.ts b/tests/recovery-flatten.test.ts
+index e3fc6a9..ab9f797 100644
+--- a/tests/recovery-flatten.test.ts
++++ b/tests/recovery-flatten.test.ts
+@@ -88,7 +88,7 @@ describe("bounded recovery flatten", () => {
+       confidence: 0.6,
+       snapshotHash: "snapshot-hash",
+       modelVersion: "test",
+-      promptVersion: "glitch-topstep-v5",
++      promptVersion: "glitch-topstep-v9",
+       reason: "Test.",
+       decisionAudit: {
+         bullCase: "Bull.",
+@@ -155,7 +155,7 @@ describe("bounded recovery flatten", () => {
+       confidence: 0.6,
+       snapshotHash: "snapshot-hash",
+       modelVersion: "test",
+-      promptVersion: "glitch-topstep-v5",
++      promptVersion: "glitch-topstep-v9",
+       reason: "Test.",
+       decisionAudit: {
+         bullCase: "Bull.",
+diff --git a/tests/risk-engine.test.ts b/tests/risk-engine.test.ts
+index 008d5ad..bb23501 100644
+--- a/tests/risk-engine.test.ts
++++ b/tests/risk-engine.test.ts
+@@ -42,7 +42,7 @@ function intent(): TradeIntent {
+     confidence: 0.6,
+     snapshotHash: "hash",
+     modelVersion: "test",
+-    promptVersion: "glitch-topstep-v5",
++    promptVersion: "glitch-topstep-v9",
+     reason: "Test entry.",
+     decisionAudit: {
+       bullCase: "Bull.",
+diff --git a/tests/sqlite-execution-store.test.ts b/tests/sqlite-execution-store.test.ts
+index dd19942..4f96f06 100644
+--- a/tests/sqlite-execution-store.test.ts
++++ b/tests/sqlite-execution-store.test.ts
+@@ -46,7 +46,7 @@ function intent(id = "00000000-0000-4000-8000-000000000001"): TradeIntent {
+     confidence: 0.6,
+     snapshotHash: "snapshot-hash",
+     modelVersion: "test",
+-    promptVersion: "glitch-topstep-v5",
++    promptVersion: "glitch-topstep-v9",
+     reason: "Test.",
+     decisionAudit: {
+       bullCase: "Bull.",
+-- 
+2.43.0
+

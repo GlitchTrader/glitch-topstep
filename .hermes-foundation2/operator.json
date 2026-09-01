@@ -1,0 +1,93 @@
+{
+  "schema_version": "glitch.topstep.hermes.operator.v2",
+  "operator_profile": "glitch-topstep",
+  "description": "One adaptive AI trading operator equipped by the truthful Glitch Topstep gateway.",
+  "principles": {
+    "invariant": "Hermes decides. Glitch Topstep verifies factual execution safety, translates, reconciles, journals, and protects. ProjectX owns venue truth. Topstep owns final account-rule authority.",
+    "credentials": "Hermes never receives ProjectX credentials, JWTs, numeric account IDs, or numeric contract IDs.",
+    "cognition": "Data quality, capacity, policy, account state, and market observations are evidence for Hermes, not automatic deterministic trading decisions.",
+    "risk": "Hermes chooses quantity and geometry; the gateway independently recalculates hard contract capacity, fees, slippage reserve, tick geometry, and hard loss-floor survival.",
+    "objective": "Maximize long-run after-fee payouts, survival, and repeatable expectancy under current Topstep rules without fixed strategy, quota, or preferred regime.",
+    "learning": "Hermes may form and apply learning. Single outcomes remain episodes; repeated attributable evidence supports durable lessons, contradiction, promotion, revision, and rollback.",
+    "no_silent_model_downgrade": true
+  },
+  "loops": [
+    {
+      "id": "core_decision",
+      "cadence": "cron every minute for frame capture and positioned review; flat LLM decisions every 5 minutes (GLITCH_TOPSTEP_FLAT_DECISION_INTERVAL_MINUTES); operator directives may wake one cycle",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.intent.v2",
+      "execution_authority": false,
+      "cognition_authority": true
+    },
+    {
+      "id": "trade_debrief",
+      "cadence": "every 30 minutes when new canonical outcomes exist",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.topstep.trade_episode.v1",
+      "execution_authority": false
+    },
+    {
+      "id": "portfolio_supervision",
+      "cadence": "hourly when new episodes exist",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.topstep.hourly_review.v1",
+      "execution_authority": false
+    },
+    {
+      "id": "portfolio_planning",
+      "cadence": "every 360 minutes when new reviews exist",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.topstep.portfolio_plan.v1",
+      "execution_authority": false
+    },
+    {
+      "id": "daily_learning",
+      "cadence": "after the trading session when attributable evidence exists",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.topstep.daily_journal.v1",
+      "execution_authority": false
+    },
+    {
+      "id": "weekly_skill_proposal",
+      "cadence": "when seven daily journals exist",
+      "model": "gpt-5.6-luna",
+      "provider": "openai-codex",
+      "reasoning_effort": "medium",
+      "output_schema": "glitch.topstep.weekly_skill_proposal.v1",
+      "execution_authority": false
+    }
+  ],
+  "skills": {
+    "native_hermes_preserved": true,
+    "installed_overlay": [
+      "topstep-observe-market",
+      "topstep-assess-risk",
+      "topstep-form-thesis",
+      "topstep-build-intent",
+      "topstep-review-outcomes",
+      "topstep-self-learning",
+      "topstep-self-heal",
+      "topstep-supervisor-ledger",
+      "topstep-learning-loop",
+      "topstep-submit-intent",
+      "topstep-escalate-to-codex"
+    ]
+  },
+  "activation": {
+    "fresh_install": "paused",
+    "control": "Use /trade to enable scheduled cognition; the gateway independently controls disabled, shadow, or armed order mutation.",
+    "cognitive_overlay_default": "propose_only"
+  },
+  "venue_source": "authenticated_local_glitch_topstep_gateway"
+}
