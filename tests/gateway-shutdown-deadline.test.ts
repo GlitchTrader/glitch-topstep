@@ -18,7 +18,7 @@ describe("LocalGatewayServer shutdown deadline", () => {
         token: "token",
         shutdownDeadlineMs: 100,
       },
-      () => ({ status: "ok" }),
+      (_authenticated) => ({ status: "ok" }),
       () => ({
         account: { id: 1, name: "TEST", balance: 0, canTrade: true, isVisible: true, simulated: true },
         positions: [],

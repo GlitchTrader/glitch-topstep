@@ -55,7 +55,9 @@ export function validateScaleIn(
     return { allowed: false, reason: "position_side_conflict" };
   }
   const nonProtective = snapshot.openOrders.filter(
-    (order) => !isProtectiveCustomTag(order.customTag),
+    (order) => order.accountId === accountId
+      && order.contractId === contractId
+      && !isProtectiveCustomTag(order.customTag),
   );
   if (nonProtective.length > 0) {
     return { allowed: false, reason: "working_order_ownership_unresolved" };

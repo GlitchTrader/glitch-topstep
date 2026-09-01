@@ -539,6 +539,16 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
+    const attributableTranches = this.attributableTranches().filter(
+      (tranche) => tranche.remaining_qty > 0,
+    );
+    if (partialExit && attributableTranches.length > 1 && intent.targetIntentId === undefined) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: "target_intent_id_required",
+      });
+    }
     // ponytail: armed default admits partial EXIT via ProtectedReductionSaga (#109).
     // Emergency rollback: GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1 restores the old gate.
     if (partialExit && this.currentMode() === "armed" && partialExitFailClosedEnabled()) {

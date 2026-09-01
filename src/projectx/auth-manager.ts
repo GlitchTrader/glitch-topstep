@@ -189,7 +189,11 @@ export class ProjectXAuthManager {
         ? await this.client.validateSession()
         : await this.client.login();
       if (!hasToken) {
-        await this.client.validateSession();
+        try {
+          await this.client.validateSession();
+        } catch {
+          // ponytail: post-login validate is advisory; login token remains usable (IA-260901-GW-11).
+        }
       }
       this.lastRefreshUtc = new Date().toISOString();
       this.expiresAtUtc = new Date(

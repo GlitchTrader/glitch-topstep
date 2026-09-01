@@ -107,7 +107,7 @@ export function computeDailyEconomics(
   };
   const notes = [
     "mirrors are not Topstep dashboard authority",
-    "daily_economics is cognition evidence only; Glitch does not gate ENTER_* on PnL bands",
+    "daily_economics is cognition evidence only; when daily_capture.reached is true the gateway applies a frozen new-exposure lock (TS-AUTH-02) and omits ENTER_* from supported_actions",
   ];
 
   if (!outcomesLoaded) {

@@ -236,13 +236,25 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     throw new Error("armed_mode_requires_explicit_scaffold_acknowledgement");
   }
 
+  const startingBalance = numberValue(environment, "GLITCH_STARTING_BALANCE", 50_000, (value) => value > 0);
   const operatorProvidedLossFloorUsd = nullableNumberValue(
     environment,
     "GLITCH_HARD_LOSS_FLOOR_USD",
     Number.isFinite,
   );
-  if (lossModel === "operator_provided_floor" && operatorProvidedLossFloorUsd === null) {
-    throw new Error("GLITCH_HARD_LOSS_FLOOR_USD is required for operator_provided_floor");
+  if (lossModel === "operator_provided_floor") {
+    if (operatorProvidedLossFloorUsd === null) {
+      throw new Error("GLITCH_HARD_LOSS_FLOOR_USD is required for operator_provided_floor");
+    }
+    if (!Number.isFinite(operatorProvidedLossFloorUsd)) {
+      throw new Error("GLITCH_HARD_LOSS_FLOOR_USD must be finite");
+    }
+    if (operatorProvidedLossFloorUsd <= 0) {
+      throw new Error("GLITCH_HARD_LOSS_FLOOR_USD must be positive");
+    }
+    if (operatorProvidedLossFloorUsd >= startingBalance) {
+      throw new Error("GLITCH_HARD_LOSS_FLOOR_USD must be below GLITCH_STARTING_BALANCE");
+    }
   }
 
   const marketEventRetention = numberValue(
@@ -392,7 +404,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       lossModel,
       authority: policyAuthority,
       verifiedAtUtc: optionalUtc(environment, "GLITCH_POLICY_VERIFIED_AT_UTC"),
-      startingBalance: numberValue(environment, "GLITCH_STARTING_BALANCE", 50_000, (value) => value > 0),
+      startingBalance,
       initialMaximumLoss: numberValue(environment, "GLITCH_INITIAL_MAXIMUM_LOSS", 2_000, (value) => value > 0),
       highestEndOfDayBalance: numberValue(environment, "GLITCH_HIGHEST_EOD_BALANCE", 0, Number.isFinite),
       lossFloorLockedAtZero: booleanValue(environment, "GLITCH_LOSS_FLOOR_LOCKED_AT_ZERO", false),

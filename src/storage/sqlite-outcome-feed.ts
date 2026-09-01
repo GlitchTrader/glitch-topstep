@@ -36,6 +36,10 @@ export interface OutcomeFeedStatus {
 
 export class SqliteOutcomeFeed {
   private readonly database: DatabaseSync;
+  private integrityCache: OutcomeFeedStatus["integrity"] | null = null;
+  private integrityErrorCache: string | null = null;
+  private integrityCheckedAtMs = 0;
+  private static readonly INTEGRITY_CACHE_MS = 30_000;
 
   public constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -162,14 +166,30 @@ export class SqliteOutcomeFeed {
         COALESCE((SELECT MAX(sequence) FROM outcome_revisions), 0) AS high_water_sequence
     `).get() as { current_count: number; revision_count: number; high_water_sequence: number };
     try {
+      const nowMs = Date.now();
+      if (
+        this.integrityCache !== null
+        && nowMs - this.integrityCheckedAtMs < SqliteOutcomeFeed.INTEGRITY_CACHE_MS
+      ) {
+        return {
+          current_count: Number(counts.current_count),
+          revision_count: Number(counts.revision_count),
+          high_water_sequence: Number(counts.high_water_sequence),
+          integrity: this.integrityCache,
+          integrity_error: this.integrityErrorCache,
+        };
+      }
       const result = this.database.prepare("PRAGMA integrity_check").get() as { integrity_check?: string };
       const value = result.integrity_check ?? "failed";
+      this.integrityCache = value === "ok" ? "ok" : "failed";
+      this.integrityErrorCache = value === "ok" ? null : value;
+      this.integrityCheckedAtMs = nowMs;
       return {
         current_count: Number(counts.current_count),
         revision_count: Number(counts.revision_count),
         high_water_sequence: Number(counts.high_water_sequence),
-        integrity: value === "ok" ? "ok" : "failed",
-        integrity_error: value === "ok" ? null : value,
+        integrity: this.integrityCache,
+        integrity_error: this.integrityErrorCache,
       };
     } catch (error) {
       return {

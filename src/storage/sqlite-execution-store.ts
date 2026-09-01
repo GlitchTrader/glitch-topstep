@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { applySqliteMigration } from "./sqlite-migration.js";
+import { inSqliteTransaction } from "./sqlite-transaction.js";
 import type {
   ExecutionMutationState,
   ExecutionOperation,
@@ -978,18 +980,8 @@ export class SqliteExecutionStore {
   }
 
   private applyMigration(version: number, sql: string): void {
-    const applied = this.database.prepare(`
-      SELECT version FROM schema_migrations WHERE version = ?
-    `).get(version) as SqlRow | undefined;
-    if (applied) {
-      return;
-    }
     this.inTransaction(() => {
-      this.database.exec(sql);
-      this.database.prepare(`
-      INSERT INTO schema_migrations(version, applied_utc)
-      VALUES (?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-      `).run(version);
+      applySqliteMigration(this.database, "schema_migrations", version, sql);
     });
   }
 
@@ -1086,15 +1078,7 @@ export class SqliteExecutionStore {
   }
 
   private inTransaction<T>(action: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
-    try {
-      const result = action();
-      this.database.exec("COMMIT");
-      return result;
-    } catch (error) {
-      this.database.exec("ROLLBACK");
-      throw error;
-    }
+    return inSqliteTransaction(this.database, action);
   }
 
   private parseJson<T>(value: unknown, name: string): T {

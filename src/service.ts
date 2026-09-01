@@ -71,6 +71,8 @@ import { RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { HealthAlertTracker } from "./observability/health-alerts.js";
+import { buildHealthLiveness } from "./observability/health-liveness.js";
+import { formatLogError } from "./observability/log-sanitize.js";
 import {
   ProjectXAuthManager,
   projectXAuthBackoffDelayMs,
@@ -144,6 +146,7 @@ export class GlitchTopstepService {
   /** Bounded jittered backoff on repeated reconcile failures (TS-STREAM-RECOVERY-01 PR-G). */
   private reconcileConsecutiveFailures = 0;
   private nextReconcileAttemptAtMs = 0;
+  private lastAppliedOutboxPruneAtMs = 0;
   private readonly runtimeLock: RuntimeScopeLock;
   private stopping: Promise<void> | null = null;
   private starting: Promise<void> | null = null;
@@ -547,7 +550,10 @@ export class GlitchTopstepService {
     this.coordinator = coordinator;
     this.gateway = new LocalGatewayServer(
       this.config.localGateway,
-      () => {
+      (authenticated) => {
+        if (!authenticated) {
+          return buildHealthLiveness(GATEWAY_COMPATIBILITY);
+        }
         const healthBuildStartMs = performance.now();
         const recordedAt = new Date();
         const current = snapshot();
@@ -569,6 +575,7 @@ export class GlitchTopstepService {
         );
         const eventLedger = this.ledger.status();
         const outcomeFeed = this.tradeOutcomeStore.status();
+        this.maybePruneAppliedEvidenceOutbox(recordedAt.getTime());
         const protectedReduction = this.coordinator?.protectedReductionHealth(current) ?? {
           active_state: null,
           active_reduction_id: null,
@@ -1251,11 +1258,6 @@ export class GlitchTopstepService {
     return Date.now() - Date.parse(this.lastMetadataReconcileAt) >= RECONCILE_METADATA_INTERVAL_MS;
   }
 
-  /**
-   * Bytes on disk for each durable store, surfaced in /health so DB growth is an observed fact,
-   * not something only discovered by an operator running out of disk (TS-STREAM-RECOVERY-01 PR-H).
-   * Never throws: a missing/unreadable file reports null rather than degrading /health itself.
-   */
   private persistenceSizeBytes(): Record<string, number | null> {
     const files = {
       execution_store: "glitch-topstep.sqlite",
@@ -1271,6 +1273,19 @@ export class GlitchTopstepService {
       }
     }
     return sizes;
+  }
+
+  /** IA-260901-GW-06: compact applied identity outbox rows; never prune pending. */
+  private maybePruneAppliedEvidenceOutbox(nowMs: number): void {
+    if (nowMs - this.lastAppliedOutboxPruneAtMs < 3_600_000) {
+      return;
+    }
+    this.lastAppliedOutboxPruneAtMs = nowMs;
+    try {
+      this.providerEvidenceStore.pruneAppliedOutbox();
+    } catch (error) {
+      console.error("evidence_outbox_prune_failed", { error: formatLogError(error) });
+    }
   }
 
   /** ponytail: idempotent — coordinator no-ops when stop already at breakeven or protection unproven. */

@@ -57,7 +57,7 @@ export class LocalGatewayServer {
 
   public constructor(
     private readonly options: LocalGatewayOptions,
-    private readonly health: () => Record<string, unknown>,
+    private readonly health: (authenticated: boolean) => Record<string, unknown>,
     private readonly snapshot: () => AccountVenueSnapshot,
     private readonly packet: (request?: PacketRequest) => DirectDecisionPacket | Promise<DirectDecisionPacket>,
     private readonly evidence: (
@@ -140,7 +140,7 @@ export class LocalGatewayServer {
     try {
       const url = new URL(request.url ?? "/", `http://${this.options.host}:${this.options.port}`);
       if (request.method === "GET" && url.pathname === "/health") {
-        this.json(response, 200, this.health());
+        this.json(response, 200, this.health(this.authorized(request)));
         return;
       }
       if (request.method === "GET" && url.pathname === "/console") {

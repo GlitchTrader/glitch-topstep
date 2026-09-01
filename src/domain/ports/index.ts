@@ -38,3 +38,5 @@ export type { FlattenSagaPort } from "./flatten-saga-port.js";
 export type { EvidenceOutboxPort } from "./evidence-outbox-port.js";
 export type { OutcomeProjectionPort } from "./outcome-projection-port.js";
 export type { IntentDeliveryStatusPort } from "./intent-delivery-status-port.js";
+// IA-260901-GW-12: ports/composition is an intentional incremental scaffold — finish or remove in a
+// dedicated refactor, not alongside protection fixes.
