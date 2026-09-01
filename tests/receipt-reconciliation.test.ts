@@ -198,4 +198,207 @@ describe("pending receipt reconciliation", () => {
       store.close();
     }
   });
+
+  it("reconciles a confirmed partial EXIT when venue position matches the reduction record", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const entryIntentId = "00000000-0000-4000-8000-00000000c010";
+    const exitIntentId = "00000000-0000-4000-8000-00000000c011";
+    try {
+      store.registerIntent({
+        schemaVersion: "glitch.intent.v2",
+        intentId: exitIntentId,
+        createdUtc: "2026-07-21T12:00:00Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshotHash: "snapshot",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v17.1",
+        reason: "Partial exit.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "EXIT",
+        },
+        quantity: 1,
+        targetIntentId: entryIntentId,
+      }, "2026-07-21T12:00:01Z");
+      store.beginProtectedReduction({
+        reductionId: "00000000-0000-4000-8000-00000000c012",
+        exitIntentId,
+        targetIntentId: entryIntentId,
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        exitQuantity: 1,
+        positionSizeBefore: 3,
+        survivorStopOrderId: 9101,
+        survivorTargetOrderId: 9102,
+        nowUtc: "2026-07-21T12:00:02Z",
+      });
+      store.advanceProtectedReduction(
+        exitIntentId,
+        "reduction_submitting",
+        "prepared_to_submitting",
+        "2026-07-21T12:00:02Z",
+      );
+      store.advanceProtectedReduction(
+        exitIntentId,
+        "reduction_ambiguous",
+        "exit_submitted_pending_survivor_proof",
+        "2026-07-21T12:00:03Z",
+        { providerExitOrderId: 9201 },
+      );
+      store.recordReceipt({
+        schema_version: "glitch.direct.execution_receipt.v1",
+        receipt_id: "receipt-partial",
+        recorded_utc: "2026-07-21T12:00:10Z",
+        intent_id: exitIntentId,
+        mode: "armed",
+        status: "pending",
+        code: "partial_exit_submitted_pending_reconciliation",
+        order_id: 9201,
+      });
+      store.prepareMutation(
+        exitIntentId,
+        "place_order",
+        {
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          type: 2,
+          side: 1,
+          size: 1,
+        },
+        `glt-${exitIntentId}`,
+        "2026-07-21T12:00:04Z",
+      );
+      store.markMutationSubmitting(exitIntentId, "2026-07-21T12:00:05Z");
+      store.markMutationSubmitted(exitIntentId, 9201, "2026-07-21T12:00:06Z");
+
+      const result = reconcilePendingReceipts(
+        store,
+        [],
+        101,
+        "CON.F.US.MNQ.U26",
+        true,
+        "2026-07-21T12:00:11Z",
+        2,
+      );
+      const receipt = store.receiptForIntent<ExecutionReceipt>(exitIntentId);
+      assert.equal(result.reconciled, 1);
+      assert.equal(receipt?.status, "submitted");
+      assert.equal(receipt?.code, "partial_exit_reconciled_pending_protection");
+      assert.equal(store.hasExitMutationBlockingRearm(), false);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("keeps partial EXIT pending while the exit order is still working", () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const entryIntentId = "00000000-0000-4000-8000-00000000c020";
+    const exitIntentId = "00000000-0000-4000-8000-00000000c021";
+    try {
+      store.registerIntent({
+        schemaVersion: "glitch.intent.v2",
+        intentId: exitIntentId,
+        createdUtc: "2026-07-21T12:00:00Z",
+        instrument: "MNQ",
+        account: "TEST_ACCOUNT",
+        operatorProfile: "glitch-topstep",
+        action: "EXIT",
+        confidence: 0.7,
+        snapshotHash: "snapshot",
+        modelVersion: "test",
+        promptVersion: "glitch-topstep-v17.1",
+        reason: "Partial exit.",
+        decisionAudit: {
+          bullCase: "Bull.",
+          bearCase: "Bear.",
+          flatCase: "Flat.",
+          aggressiveCase: "Aggressive.",
+          conservativeCase: "Conservative.",
+          decisiveEvidence: "Evidence.",
+          disconfirmingEvidence: "Counter.",
+          changeCondition: "Change.",
+          finalChoice: "EXIT",
+        },
+        quantity: 1,
+        targetIntentId: entryIntentId,
+      }, "2026-07-21T12:00:01Z");
+      store.beginProtectedReduction({
+        reductionId: "00000000-0000-4000-8000-00000000c022",
+        exitIntentId,
+        targetIntentId: entryIntentId,
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        exitQuantity: 1,
+        positionSizeBefore: 3,
+        survivorStopOrderId: 9101,
+        survivorTargetOrderId: 9102,
+        nowUtc: "2026-07-21T12:00:02Z",
+      });
+      store.recordReceipt({
+        schema_version: "glitch.direct.execution_receipt.v1",
+        receipt_id: "receipt-partial-working",
+        recorded_utc: "2026-07-21T12:00:10Z",
+        intent_id: exitIntentId,
+        mode: "armed",
+        status: "pending",
+        code: "partial_exit_submitted_pending_reconciliation",
+        order_id: 9201,
+      });
+      store.prepareMutation(
+        exitIntentId,
+        "place_order",
+        {
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          type: 2,
+          side: 1,
+          size: 1,
+        },
+        `glt-${exitIntentId}`,
+        "2026-07-21T12:00:04Z",
+      );
+      store.markMutationSubmitting(exitIntentId, "2026-07-21T12:00:05Z");
+      store.markMutationSubmitted(exitIntentId, 9201, "2026-07-21T12:00:06Z");
+
+      const result = reconcilePendingReceipts(
+        store,
+        [{
+          id: 9201,
+          accountId: 101,
+          contractId: "CON.F.US.MNQ.U26",
+          creationTimestamp: "2026-07-21T12:00:08Z",
+          updateTimestamp: "2026-07-21T12:00:09Z",
+          status: 1,
+          type: 2,
+          side: 1,
+          size: 1,
+          limitPrice: null,
+          stopPrice: null,
+          customTag: `glt-${exitIntentId}`,
+        }],
+        101,
+        "CON.F.US.MNQ.U26",
+        true,
+        "2026-07-21T12:00:11Z",
+        2,
+      );
+      const receipt = store.receiptForIntent<ExecutionReceipt>(exitIntentId);
+      assert.equal(result.reconciled, 0);
+      assert.equal(receipt?.status, "pending");
+      assert.equal(store.hasExitMutationBlockingRearm(), true);
+    } finally {
+      store.close();
+    }
+  });
 });

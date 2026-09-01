@@ -20,7 +20,7 @@ import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js";
 import { HubRecoveryController } from "./projectx/hub-recovery-controller.js";
-import { resolveTopstepSession } from "./policy/session-calendar.js";
+import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -1273,6 +1273,27 @@ export class GlitchTopstepService {
     return sizes;
   }
 
+  /** ponytail: idempotent — coordinator no-ops when stop already at breakeven or protection unproven. */
+  private maybeRetightenStopsAfterCaptureLock(): void {
+    const resetLocalTime = this.config.session.tradingDayResetLocalTime ?? "17:00";
+    const tradingDayId = resolveTradingDayId(
+      new Date(),
+      this.config.session.timezone,
+      resetLocalTime,
+    );
+    if (!this.executionStore.isDailyCaptureLocked(tradingDayId)) {
+      return;
+    }
+    const snapshot = this.state.buildSnapshot(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    if (snapshot.instrumentOpenContracts <= 0) {
+      return;
+    }
+    void this.coordinator?.tightenOwnedStopsAfterCaptureLock();
+  }
+
   private async reconcile(options?: { includeMetadata?: boolean }): Promise<void> {
     if (this.reconciliationInFlight) {
       return;
@@ -1315,6 +1336,7 @@ export class GlitchTopstepService {
           this.packets?.invalidateAll();
         },
       }, { includeMetadata });
+      this.maybeRetightenStopsAfterCaptureLock();
       if (includeMetadata) {
         this.lastMetadataReconcileAt = new Date().toISOString();
       }

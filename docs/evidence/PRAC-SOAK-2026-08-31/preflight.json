@@ -1,0 +1,26 @@
+{
+  "schema_version": "glitch.topstep.prac_preflight.v1",
+  "session_id": "PRAC-SOAK-2026-08-31",
+  "recorded_utc": "2026-08-31T16:54:00Z",
+  "gateway_commit": "f2de2ec0291a29063efc88f48219f9c8984f6490",
+  "profile_commit": "a35e5b5339648a00d900beac1243e105e185b9b7",
+  "prompt_version": "glitch-topstep-v17.1",
+  "paired_contract_sha256": "306f284efdfb8c2f5affcbfd65fb7e8e37db488a30d8fe3d79006ea335690877",
+  "fault_matrix_proof_sha256": "4b736eb9aac3d0984c398db3048effad2f73b8b7091442e3885906373f33f8e3",
+  "automated_gates": {
+    "npm_run_check": "542/542 pass",
+    "npm_run_reaudit_fault_matrix": "pass",
+    "profile_unittest": "329/329 pass",
+    "preflight_pairing_py": "OK"
+  },
+  "checklist": {
+    "gateway_version_0.2.5": true,
+    "trading_mode_armed": true,
+    "lifecycle_ready": true,
+    "auth_not_degraded": true,
+    "state_complete": true,
+    "flat_start": true
+  },
+  "result": "6/6 PASS",
+  "evidence_ref": "docs/evidence/PRAC-SOAK-2026-08-31/gateway-health-preflight.json"
+}

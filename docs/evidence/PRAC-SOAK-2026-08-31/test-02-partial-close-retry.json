@@ -1,0 +1,34 @@
+{
+  "test_id": 2,
+  "title": "Partial close — retry after P0 fix",
+  "recorded_utc": "2026-08-31T17:34:23Z",
+  "fix_commit_note": "uncommitted local — partial EXIT receipt reconciliation + hasExitMutationBlockingRearm",
+  "operator_authorized": true,
+  "entry_intent_id": "65a4b5bc-e282-4828-b465-10add20dc670",
+  "entry_order_id": 3469700741,
+  "requested_quantity": 1,
+  "target_intent_id": "65a4b5bc-e282-4828-b465-10add20dc670",
+  "position_before": 3,
+  "exit_intent_id": "f9294ebc-68b0-43ea-8f82-d3095483b5d5",
+  "exit_order_id": 3469707621,
+  "expected": {
+    "position_after": 2,
+    "survivor_protection": "confirmed",
+    "receipt_terminal": true,
+    "saga_terminal": "reduced_protected or inactive",
+    "no_involuntary_new_exposure": true
+  },
+  "observed_at_160s": {
+    "position_after_gateway": 2,
+    "receipt_status": "submitted",
+    "receipt_code": "partial_exit_reconciled_pending_protection",
+    "intent_delivery_status": "terminal",
+    "protected_reduction_saga": null,
+    "unprotected_open_quantity": 0,
+    "protection_status": "confirmed",
+    "working_orders_gateway": 4
+  },
+  "result": "PASS",
+  "raw_evidence": "test-02-partial-close-retry-raw.json",
+  "prior_failure": "test-02-partial-close.json"
+}

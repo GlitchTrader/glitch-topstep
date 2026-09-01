@@ -1,0 +1,33 @@
+{
+  "test_id": 7,
+  "title": "Restart p\u00f3s-registro intent, pr\u00e9-receipt",
+  "started_utc": "2026-08-31T23:56:20.913650Z",
+  "kill_point": "after_intent_before_outbox",
+  "intent_id": "3c76ad70-b516-4dbd-aac6-6bdb6851b3d8",
+  "submit": {
+    "submitted_utc": "2026-08-31T23:58:01.737909Z",
+    "elapsed_ms": 27,
+    "http_status": null,
+    "receipt": null,
+    "transport_error": "[WinError 10054] An existing connection was forcibly closed by the remote host"
+  },
+  "kill_observed": true,
+  "gateway_down": true,
+  "intent_delivery": {
+    "http_status": 200,
+    "body": {
+      "schema_version": "glitch.topstep.intent_delivery_status.v1",
+      "intent_id": "3c76ad70-b516-4dbd-aac6-6bdb6851b3d8",
+      "status": "terminal",
+      "receipt_status": "rejected",
+      "mutation_state": null,
+      "retention_generation": 1
+    }
+  },
+  "pass_criteria": {
+    "intent_status_not_not_seen": true,
+    "intent_status_registered_or_better": true
+  },
+  "result": "PASS",
+  "finished_utc": "2026-09-01T00:00:16.884549Z"
+}

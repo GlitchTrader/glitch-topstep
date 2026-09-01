@@ -1069,4 +1069,88 @@ describe("daily capture lock (TS-CAP-02)", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("tightens long stops toward breakeven when raw entry price would be marketable", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "glitch-topstep-capture-tighten-long-"));
+    const store = new SqliteExecutionStore(":memory:");
+    try {
+      const appConfig = config(directory);
+      const now = new Date();
+      const current = snapshot();
+      current.capturedAt = now.toISOString();
+      current.quote = {
+        ...current.quote!,
+        timestamp: now.toISOString(),
+        bestBid: 29_210.75,
+        bestAsk: 29_211.25,
+        lastPrice: 29_211,
+      };
+      current.instrumentOpenContracts = 1;
+      current.totalOpenContracts = 1;
+      current.positions = [{
+        id: 1,
+        accountId: appConfig.scope.accountId,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        type: 1,
+        size: 1,
+        averagePrice: 29_211.25,
+      }];
+      current.openOrders = [{
+        id: 9201,
+        accountId: appConfig.scope.accountId,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        updateTimestamp: now.toISOString(),
+        status: 1,
+        type: 4,
+        side: 0,
+        size: 1,
+        limitPrice: null,
+        stopPrice: 29_191.25,
+        customTag: `glt-${trancheIntentId}-SL`,
+      }, {
+        id: 9202,
+        accountId: appConfig.scope.accountId,
+        contractId: appConfig.scope.contractId,
+        creationTimestamp: now.toISOString(),
+        updateTimestamp: now.toISOString(),
+        status: 1,
+        type: 1,
+        side: 0,
+        size: 1,
+        limitPrice: 29_241.25,
+        stopPrice: null,
+        customTag: `glt-${trancheIntentId}-TP`,
+      }];
+      const tranche = ownedTranche(now);
+      tranche.protection.stop.price = 29_191.25;
+      tranche.protection.target.price = 29_241.25;
+      const modified: ModifyOrderRequest[] = [];
+      const coordinator = new ExecutionCoordinator(
+        appConfig,
+        {
+          placeOrder: async () => 9003,
+          closePosition: async () => undefined,
+          modifyOrder: async (request: ModifyOrderRequest) => {
+            modified.push(request);
+          },
+        } as unknown as ProjectXApiClient,
+        new JsonlEventStore(directory),
+        store,
+        () => current,
+        () => null,
+        () => store.invalidateIssuedPackets(new Date().toISOString()),
+        () => [tranche],
+        () => ({ paused: false, mode: "armed" }),
+        () => true,
+      );
+
+      assert.equal(await coordinator.tightenOwnedStopsAfterCaptureLock(), 1);
+      assert.deepEqual(modified, [{ accountId: 101, orderId: 9201, stopPrice: 29_211 }]);
+    } finally {
+      store.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

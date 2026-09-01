@@ -23,6 +23,7 @@ Paired profile: `GlitchTrader/glitch-topstep-hermes-profile` (Python only — ne
 | State machines | `src/domain/state-machines.ts` |
 | Tests | `tests/` |
 | Operations | `docs/OPERATIONS.md`, `start.ps1` |
+| Gateway rebuild spec | `docs/GATEWAY-SPEC.md` |
 
 ## Forbidden
 

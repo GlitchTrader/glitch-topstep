@@ -10,6 +10,8 @@ import { receiptLifecycleFact } from "./lifecycle-facts.js";
 import { bindProtection } from "../ownership/protection.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 
+const WORKING_ORDER_STATUSES = new Set([0, 1, 6]);
+
 export interface ReceiptReconciliationResult {
   changed: boolean;
   reconciled: number;
@@ -23,6 +25,7 @@ export function reconcilePendingReceipts(
   contractId: string,
   positionOpen: boolean,
   nowUtc: string,
+  instrumentOpenContracts = 0,
 ): ReceiptReconciliationResult {
   let changed = false;
   let reconciled = 0;
@@ -35,7 +38,17 @@ export function reconcilePendingReceipts(
       continue;
     }
 
-    const next = reconcileReceipt(receipt, mutation, orders, accountId, contractId, positionOpen, nowUtc);
+    const next = reconcileReceipt(
+      store,
+      receipt,
+      mutation,
+      orders,
+      accountId,
+      contractId,
+      positionOpen,
+      instrumentOpenContracts,
+      nowUtc,
+    );
     if (!next) {
       continue;
     }
@@ -76,14 +89,33 @@ interface ReconcileReceiptOutcome {
 }
 
 function reconcileReceipt(
+  store: SqliteExecutionStore,
   receipt: ExecutionReceipt,
   mutation: StoredExecutionMutation,
   orders: OrderInfo[],
   accountId: number,
   contractId: string,
   positionOpen: boolean,
+  instrumentOpenContracts: number,
   nowUtc: string,
 ): ReconcileReceiptOutcome | null {
+  if (
+    receipt.code === "partial_exit_submitted_pending_reconciliation"
+    && mutation.operation === "place_order"
+    && receipt.intent_id
+  ) {
+    return reconcilePartialExitReceipt(
+      store,
+      receipt,
+      mutation,
+      orders,
+      accountId,
+      contractId,
+      positionOpen,
+      instrumentOpenContracts,
+    );
+  }
+
   if (
     (receipt.code === "entry_submitted_pending_reconciliation"
       || receipt.code === "entry_protection_verification_failed")
@@ -198,6 +230,60 @@ function reconcileReceipt(
     };
   }
   return null;
+}
+
+function reconcilePartialExitReceipt(
+  store: SqliteExecutionStore,
+  receipt: ExecutionReceipt,
+  mutation: StoredExecutionMutation,
+  orders: OrderInfo[],
+  accountId: number,
+  contractId: string,
+  positionOpen: boolean,
+  instrumentOpenContracts: number,
+): ReconcileReceiptOutcome | null {
+  const intentId = receipt.intent_id!;
+  const registered = store.registeredIntentPayload(intentId);
+  if (registered?.action !== "EXIT") {
+    return null;
+  }
+  const reduction = store.protectedReductionByExitIntent(intentId);
+  if (!reduction) {
+    return null;
+  }
+  if (
+    reduction.account_id !== accountId
+    || reduction.contract_id !== contractId
+  ) {
+    return null;
+  }
+  const expectedRemaining = reduction.position_size_before - reduction.exit_quantity;
+  if (!positionOpen || expectedRemaining <= 0 || instrumentOpenContracts !== expectedRemaining) {
+    return null;
+  }
+  const exitOrderId = mutation.providerOrderId ?? receipt.order_id ?? null;
+  if (exitOrderId === null) {
+    return null;
+  }
+  const scopedOrders = orders.filter(
+    (order) => order.accountId === accountId && order.contractId === contractId,
+  );
+  const exitOrder = scopedOrders.find((order) => order.id === exitOrderId);
+  if (exitOrder && WORKING_ORDER_STATUSES.has(exitOrder.status)) {
+    return null;
+  }
+  const requestedSize = nullableNumber(mutation.request.size);
+  if (requestedSize !== null && requestedSize !== reduction.exit_quantity) {
+    return null;
+  }
+  return {
+    receipt: {
+      status: "submitted",
+      code: "partial_exit_reconciled_pending_protection",
+      detail: `exit_quantity=${reduction.exit_quantity};remaining=${expectedRemaining};provider_order_id=${exitOrderId}`,
+    },
+    event: null,
+  };
 }
 
 function requiredNumber(value: unknown, name: string): number {
