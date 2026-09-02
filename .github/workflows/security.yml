@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: github/codeql-action/init@9ee088e13615f8d1eaef4766f9dde95d3356a8f6 # main pinned 2026-08-19
+      - uses: github/codeql-action/init@276e2ce25d959f0e04da2c6b73e26b3231395db1 # main pinned 2026-08-19
         with:
           languages: javascript-typescript
       - uses: github/codeql-action/analyze@9ee088e13615f8d1eaef4766f9dde95d3356a8f6 # main pinned 2026-08-19
