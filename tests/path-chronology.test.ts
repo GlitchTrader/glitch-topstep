@@ -299,6 +299,164 @@ describe("rebuildPathChronologyFromEvidence", () => {
     assert.ok(replay.gaps?.includes("partial_fill_observed"));
     assert.ok(replay.gaps?.includes("partial_exit_observed"));
   });
+
+  it("replays after simulated reconnect with identical chronology hash", () => {
+    const tracker = new PathChronologyTracker();
+    tracker.begin({
+      intentId: "intent-reconnect",
+      side: "long",
+      entryPrice: 28600,
+      breakevenPrice: 28600,
+      stopPrice: 28570,
+      targetPrice: 28620,
+      entryOrderId: 100,
+      filledQty: 1,
+      openedUtc: "2026-08-03T13:55:00.000Z",
+    });
+    tracker.observe({ markPrice: 28605, observedUtc: "2026-08-03T13:56:00.000Z" });
+    // ponytail: snapshot mid-trade simulates reconnect; replay rebuilds from journal
+    const midTrade = tracker.snapshot();
+    tracker.observe({ markPrice: 28615, observedUtc: "2026-08-03T13:57:00.000Z" });
+    const live = buildPathChronology({
+      mfe_usd: 15,
+      mae_usd: 3,
+      tracker: tracker.snapshot(),
+    });
+    assert.ok(midTrade);
+    const replay = rebuildPathChronologyFromEvidence({
+      side: "long",
+      entry_price: 28600,
+      breakeven_price: 28600,
+      initial_stop: 28570,
+      initial_target: 28620,
+      intent_id: "intent-reconnect",
+      entry_order_id: 100,
+      opened_utc: "2026-08-03T13:55:00.000Z",
+      events: [
+        { kind: "price", utc: "2026-08-03T13:56:00.000Z", price: 28605 },
+        { kind: "price", utc: "2026-08-03T13:57:00.000Z", price: 28615 },
+      ],
+      excursion: { mfe_usd: 15, mae_usd: 3 },
+    });
+    assert.equal(pathChronologyHashesMatch(live!, replay), true);
+    assert.equal(midTrade.firstPassage.entry.observed, true);
+  });
+
+  it("replays after simulated process restart with identical chronology hash", () => {
+    const events = [
+      { kind: "price" as const, utc: "2026-08-03T14:00:00.000Z", price: 28610 },
+      { kind: "amendment" as const, utc: "2026-08-03T14:01:00.000Z", stop_price: 28590, target_price: 28620, amendment_source: "HERMES_INTENT" },
+      { kind: "price" as const, utc: "2026-08-03T14:02:00.000Z", price: 28625, bar_low: 28600, bar_high: 28625 },
+    ];
+    const tracker = new PathChronologyTracker();
+    tracker.begin({
+      intentId: "intent-restart",
+      side: "long",
+      entryPrice: 28600,
+      breakevenPrice: 28600,
+      stopPrice: 28570,
+      targetPrice: 28620,
+      entryOrderId: 100,
+      filledQty: 1,
+      openedUtc: "2026-08-03T13:59:00.000Z",
+    });
+    for (const event of events) {
+      if (event.kind === "price") {
+        tracker.observe({
+          markPrice: event.price ?? null,
+          observedUtc: event.utc,
+          barLow: event.bar_low ?? null,
+          barHigh: event.bar_high ?? null,
+        });
+      } else {
+        tracker.observeAmendment(event.stop_price ?? null, event.target_price ?? null, event.amendment_source ?? null, event.utc);
+      }
+    }
+    const live = buildPathChronology({ mfe_usd: 25, mae_usd: 4, tracker: tracker.snapshot() });
+    const replay = rebuildPathChronologyFromEvidence({
+      side: "long",
+      entry_price: 28600,
+      breakeven_price: 28600,
+      initial_stop: 28570,
+      initial_target: 28620,
+      intent_id: "intent-restart",
+      entry_order_id: 100,
+      opened_utc: "2026-08-03T13:59:00.000Z",
+      events,
+      excursion: { mfe_usd: 25, mae_usd: 4 },
+    });
+    assert.equal(pathChronologyHashesMatch(live!, replay), true);
+    assert.equal(replay.target_before_stop, "target");
+  });
+
+  it("fails hash parity when replay evidence diverges from live journal", () => {
+    const tracker = new PathChronologyTracker();
+    tracker.begin({
+      intentId: "intent-diverge",
+      side: "long",
+      entryPrice: 28600,
+      breakevenPrice: 28600,
+      stopPrice: 28570,
+      targetPrice: 28620,
+      entryOrderId: 100,
+      filledQty: 1,
+      openedUtc: "2026-08-03T13:55:00.000Z",
+    });
+    tracker.observe({ markPrice: 28610, observedUtc: "2026-08-03T13:56:00.000Z" });
+    const live = buildPathChronology({
+      mfe_usd: 10,
+      mae_usd: 2,
+      mfe_price: 28610,
+      mfe_utc: "2026-08-03T13:56:00.000Z",
+      tracker: tracker.snapshot(),
+    });
+    const divergentReplay = rebuildPathChronologyFromEvidence({
+      side: "long",
+      entry_price: 28600,
+      breakeven_price: 28600,
+      initial_stop: 28570,
+      initial_target: 28620,
+      intent_id: "intent-diverge",
+      entry_order_id: 100,
+      opened_utc: "2026-08-03T13:55:00.000Z",
+      events: [
+        { kind: "price", utc: "2026-08-03T13:56:00.000Z", price: 28610 },
+      ],
+      excursion: {
+        mfe_usd: 11,
+        mae_usd: 2,
+        mfe_price: 28610,
+        mfe_utc: "2026-08-03T13:56:00.000Z",
+      },
+    });
+    assert.equal(pathChronologyHashesMatch(live!, divergentReplay), false);
+  });
+
+  it("does not infer target_before_stop from OHLC without authoritative touch evidence", () => {
+    const replay = rebuildPathChronologyFromEvidence({
+      side: "long",
+      entry_price: 28600,
+      breakeven_price: 28600,
+      initial_stop: 28570,
+      initial_target: 28620,
+      intent_id: "intent-missing-intrabar",
+      entry_order_id: 100,
+      opened_utc: "2026-08-03T13:55:00.000Z",
+      events: [
+        {
+          kind: "price",
+          utc: "2026-08-03T13:56:00.000Z",
+          price: 28600,
+          bar_low: 28560,
+          bar_high: 28625,
+        },
+      ],
+      excursion: { mfe_usd: 10, mae_usd: 5 },
+    });
+    assert.equal(replay.target_before_stop, "unresolved");
+    assert.equal(replay.evidence_quality, "unresolved");
+    assert.ok(replay.gaps?.includes("intra_bar_touch_ambiguous"));
+  });
 });
 
 describe("syncPathChronologyTracker", () => {
