@@ -14,11 +14,56 @@ export interface PathChronologyExtreme {
   ticks: number | null;
 }
 
+export interface PathChronologyPassage {
+  price: number | null;
+  utc: string | null;
+  observed: boolean;
+}
+
+export type PathChronologyFirstTouch =
+  | "stop"
+  | "target"
+  | "ambiguous"
+  | "none"
+  | "unresolved";
+
+export type PathChronologyTargetBeforeStop =
+  | "target"
+  | "stop"
+  | "unresolved";
+
+export interface PathChronologyAmendmentInterval {
+  interval_index: number;
+  effective_from_utc: string;
+  stop_price: number | null;
+  target_price: number | null;
+  amendment_source: string | null;
+  first_touch: PathChronologyFirstTouch;
+  first_touch_utc: string | null;
+}
+
+export interface PathChronologyTrancheIdentity {
+  intent_id: string;
+  entry_order_id: number | null;
+  partial_fill_events: number;
+  partial_exit_events: number;
+  final_filled_qty: number | null;
+}
+
 export interface PathChronologyV1 {
   schema_version: typeof PATH_CHRONOLOGY_SCHEMA;
   mfe: PathChronologyExtreme;
   mae: PathChronologyExtreme;
   evidence_quality: PathChronologyEvidenceQuality;
+  first_passage?: {
+    entry: PathChronologyPassage;
+    breakeven: PathChronologyPassage;
+  };
+  amendment_intervals?: PathChronologyAmendmentInterval[];
+  target_before_stop?: PathChronologyTargetBeforeStop | null;
+  tranche?: PathChronologyTrancheIdentity;
+  gaps?: string[];
+  chronology_hash?: string;
 }
 
 export type TradeOutcomeExitReason =
