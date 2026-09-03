@@ -8,3 +8,14 @@ coverage/
 *.log
 .DS_Store
 Thumbs.db
+
+# Local agent worktrees — never commit as gitlinks (breaks actions/checkout)
+.acceptance-foundation/
+.fix-pr129/
+.fix-pr130/
+.hermes-foundation/
+.implementation-work/
+.merge-hermes-work/
+.prod-05-evidence/
+.profile-foundation/
+.profile-implementation/
