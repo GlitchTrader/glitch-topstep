@@ -89,5 +89,12 @@ test("TradeExcursionTracker records MAE/MFE magnitudes", () => {
   tracker.observe(1, 5);
   tracker.observe(1, -3);
   tracker.observe(1, 2);
-  assert.deepEqual(tracker.excursionUsd(), { mfe_usd: 5, mae_usd: 3 });
+  assert.deepEqual(tracker.excursionUsd(), {
+    mfe_usd: 5,
+    mae_usd: 3,
+    mfe_price: null,
+    mfe_utc: null,
+    mae_price: null,
+    mae_utc: null,
+  });
 });

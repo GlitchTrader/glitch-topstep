@@ -42,6 +42,11 @@ import {
   type TradeOutcomeFlatTrigger,
 } from "./learning/trade-outcome-flat.js";
 import { TradeExcursionTracker } from "./learning/trade-excursion-tracker.js";
+import {
+  PathChronologyTracker,
+  markPriceFromSnapshot,
+  syncPathChronologyTracker,
+} from "./learning/path-chronology-tracker.js";
 import type { TrancheView } from "./ownership/tranches.js";
 import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
@@ -133,6 +138,8 @@ export class GlitchTopstepService {
   private lastReconciledOpenContracts = 0;
   private cachedOpenTranches: TrancheView[] = [];
   private readonly tradeExcursion = new TradeExcursionTracker();
+  private readonly pathChronologyTracker = new PathChronologyTracker();
+  private pathChronologyIntentId: string | null = null;
   private storesClosed = false;
   private controlPaused = false;
   private runtimeTradingMode: TradingMode;
@@ -1340,7 +1347,7 @@ export class GlitchTopstepService {
           this.cachedOpenTranches = [];
         },
         observeTradeExcursion: (openContracts, unrealizedPnl) => {
-          this.tradeExcursion.observe(openContracts, unrealizedPnl);
+          this.observeOpenTradePath(openContracts, unrealizedPnl);
         },
         retryIncompleteTradeOutcomes: (exitUtc) => this.retryIncompleteTradeOutcomes(exitUtc),
         reconcileEntrySubmissionLatch: (positions, orders, receivedUtc) => (
@@ -1397,11 +1404,11 @@ export class GlitchTopstepService {
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
-      this.tradeExcursion.observe(afterOpen, live.unrealizedPnl);
+      this.observeOpenTradePath(afterOpen, live.unrealizedPnl);
       return;
     }
     // Capture excursion against the last open unrealized before publishing.
-    this.tradeExcursion.observe(beforeOpen, snapshot.unrealizedPnl);
+    this.observeOpenTradePath(beforeOpen, snapshot.unrealizedPnl);
     const tranches = this.resolveClosedTranchesForFlat(beforeOpen);
     void this.publishTradeOutcomesOnFlat(tranches, receivedUtc, "stream").catch((error: unknown) => {
       console.error("Trade outcome publication failed after stream flat", error);
@@ -1496,6 +1503,33 @@ export class GlitchTopstepService {
     await this.publishTradeOutcomesOnFlat(incomplete, exitUtc, "reconcile");
   }
 
+  private observeOpenTradePath(openContracts: number, unrealizedPnl: number): void {
+    if (openContracts <= 0) {
+      return;
+    }
+    const snapshot = this.state.buildSnapshot(
+      this.config.scope.accountId,
+      this.config.scope.contractId,
+    );
+    const mark = markPriceFromSnapshot(snapshot);
+    this.tradeExcursion.observe(openContracts, unrealizedPnl, mark.price, mark.utc);
+    const activeTranche = this.ownershipService?.current(openContracts).tranches
+      .find((tranche) => tranche.remaining_qty > 0);
+    if (activeTranche) {
+      this.pathChronologyIntentId = syncPathChronologyTracker(
+        this.pathChronologyTracker,
+        activeTranche,
+        snapshot,
+        mark.utc,
+        this.pathChronologyIntentId,
+      );
+    }
+    this.pathChronologyTracker.observe({
+      markPrice: mark.price,
+      observedUtc: mark.utc,
+    });
+  }
+
   private async publishTradeOutcomesOnFlat(
     tranches: readonly TrancheView[],
     exitUtc: string,
@@ -1543,6 +1577,11 @@ export class GlitchTopstepService {
         tickValue: snapshot.contract.tickValue,
         maeUsd: excursion?.mae_usd ?? null,
         mfeUsd: excursion?.mfe_usd ?? null,
+        maePrice: excursion?.mae_price ?? null,
+        maeUtc: excursion?.mae_utc ?? null,
+        mfePrice: excursion?.mfe_price ?? null,
+        mfeUtc: excursion?.mfe_utc ?? null,
+        pathChronologyTracker: this.pathChronologyTracker.snapshot(),
         decisionLinks,
         hadExitIntentByTranche,
       });
@@ -1564,6 +1603,8 @@ export class GlitchTopstepService {
         this.cachedOpenTranches = [];
         this.lastReconciledOpenContracts = 0;
         this.tradeExcursion.reset();
+        this.pathChronologyTracker.reset();
+        this.pathChronologyIntentId = null;
       }
     } finally {
       this.tradeOutcomePublishInFlight = false;
