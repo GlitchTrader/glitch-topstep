@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { join } from "node:path";
 
-const ROOT = join(import.meta.dirname, "..");
+// dist/tests -> repo root (two levels up from compiled output)
+const ROOT = join(import.meta.dirname, "..", "..");
 
 describe("validate-agent-paths", () => {
   it("passes on the current repository tree", () => {
