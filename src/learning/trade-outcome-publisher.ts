@@ -11,7 +11,8 @@ import {
   ticksFromUsd,
   toOutcomeFills,
 } from "./trade-outcome-enrichment.js";
-import { buildPathChronologyFromExcursion } from "./path-chronology.js";
+import { buildPathChronology } from "./path-chronology.js";
+import type { PathChronologyTrackerSnapshot } from "./path-chronology-tracker.js";
 import type { TradeOutcomeFlatTrigger } from "./trade-outcome-flat.js";
 import {
   TRADE_OUTCOME_PUBLISHER_VERSION,
@@ -46,6 +47,7 @@ export interface PublishTradeOutcomeInput {
   maePrice?: number | null;
   maeUtc?: string | null;
   pathChronologySameEventGap?: boolean;
+  pathChronologyTracker?: PathChronologyTrackerSnapshot | null;
   hadExitIntentByTranche?: ReadonlyMap<string, boolean>;
   bufferImpactUsd?: number | null;
   decisionLinks?: ReadonlyMap<string, { packet_id: string | null; snapshot_hash: string | null }>;
@@ -192,7 +194,7 @@ export class TradeOutcomePublisher {
     const mfeUsd = input.mfeUsd ?? existing?.mfe_usd ?? null;
     const mfeTicks = ticksFromUsd(mfeUsd, quantity, tickValue);
     const maeTicks = ticksFromUsd(maeUsd, quantity, tickValue);
-    const pathChronology = buildPathChronologyFromExcursion({
+    const pathChronology = buildPathChronology({
       mfe_usd: mfeUsd,
       mae_usd: maeUsd,
       mfe_price: input.mfePrice ?? existing?.path_chronology?.mfe.price ?? null,
@@ -202,6 +204,7 @@ export class TradeOutcomePublisher {
       mfe_ticks: mfeTicks,
       mae_ticks: maeTicks,
       same_event_gap: input.pathChronologySameEventGap,
+      tracker: input.pathChronologyTracker ?? null,
     });
     const excursionComplete = maeUsd !== null && mfeUsd !== null;
     const protectionConfirmed = protectionStatus === "proven";
