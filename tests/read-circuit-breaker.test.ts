@@ -77,4 +77,26 @@ describe("ReadCircuitBreaker (TS-AUDIT31-PX-01: isolated per endpoint family)", 
     assert.equal(status.bars?.open, true);
     assert.equal(status.orders, undefined);
   });
+
+  it("models healthy → failure burst → open → recovery after cooldown", async () => {
+    const breaker = new ReadCircuitBreaker(3, 40);
+    assert.doesNotThrow(() => breaker.assertAllows("/api/History/retrieveBars"));
+    breaker.recordFailure("/api/History/retrieveBars");
+    breaker.recordFailure("/api/History/retrieveBars");
+    assert.doesNotThrow(() => breaker.assertAllows("/api/History/retrieveBars"));
+    breaker.recordFailure("/api/History/retrieveBars");
+    assert.throws(() => breaker.assertAllows("/api/History/retrieveBars"), ProjectXApiError);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.doesNotThrow(() => breaker.assertAllows("/api/History/retrieveBars"));
+  });
+
+  it("recordSuccess clears an open family's failure streak without waiting for cooldown", () => {
+    const breaker = new ReadCircuitBreaker(2, 30_000);
+    breaker.recordFailure("/api/History/retrieveBars");
+    breaker.recordFailure("/api/History/retrieveBars");
+    assert.throws(() => breaker.assertAllows("/api/History/retrieveBars"), ProjectXApiError);
+    breaker.recordSuccess("/api/History/retrieveBars");
+    assert.doesNotThrow(() => breaker.assertAllows("/api/History/retrieveBars"));
+    assert.equal(breaker.status().bars, undefined);
+  });
 });
