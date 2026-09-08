@@ -444,14 +444,51 @@ def run_stability_window(*, max_minutes: float = 8.0, required_samples: int = 5)
     }
 
 
-def wait_for_bar_complete(*, timeout_seconds: float = 300.0, poll_seconds: float = 5.0) -> dict[str, Any]:
+def wait_for_bar_complete(*, timeout_seconds: float = 300.0, poll_seconds: float = 0.25) -> dict[str, Any]:
+    _sync_profile_token_env()
+    profile_scripts = ROOT.parent / "glitch-topstep-hermes-profile" / "scripts"
+    if profile_scripts.is_dir():
+        sys.path.insert(0, str(profile_scripts))
+        try:
+            from operational_stability_gate import wait_for_bar_complete as profile_wait_for_bar_complete
+            from shadow_gateway_readonly import fetch_gateway_packet_readonly
+        except ImportError:
+            pass
+        else:
+
+            def _packet_fetcher() -> dict[str, Any]:
+                packet = fetch_gateway_packet_readonly()
+                if not isinstance(packet, dict):
+                    raise RuntimeError("packet_fetch_not_dict")
+                return packet
+
+            return profile_wait_for_bar_complete(
+                _packet_fetcher,
+                timeout_seconds=timeout_seconds,
+                poll_seconds=poll_seconds,
+            )
+
+    # ponytail: legacy poll when profile path unavailable — still wrong for always-partial feeds
     started = time.monotonic()
+    polls: list[dict[str, Any]] = []
     while time.monotonic() - started < timeout_seconds:
-        _, packet, _ = _http_get("/packet")
+        _, packet, err = _http_get("/packet")
+        polls.append({"partial": _bar_partial(packet), "error": err})
         if not _bar_partial(packet):
-            return {"ready": True, "waited_seconds": round(time.monotonic() - started, 2)}
-        time.sleep(poll_seconds)
-    return {"ready": False, "reason": "bar_still_partial", "waited_seconds": round(time.monotonic() - started, 2)}
+            return {
+                "ready": True,
+                "waited_seconds": round(time.monotonic() - started, 2),
+                "polls": polls,
+                "fallback": "legacy_partial_poll",
+            }
+        time.sleep(max(poll_seconds, 5.0))
+    return {
+        "ready": False,
+        "reason": "bar_still_partial",
+        "waited_seconds": round(time.monotonic() - started, 2),
+        "polls": polls,
+        "fallback": "legacy_partial_poll",
+    }
 
 
 def main() -> int:
