@@ -27,6 +27,8 @@ import {
   type ReconnectProofPhase,
 } from "./projectx/reconnect-proof.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
+import { boundedPacketObservationRefresh, type PacketObservationRefreshResult } from "./service/packet-observation-refresh.js";
+import { applyPacketObservationRefreshMetadata } from "./service/packet-refresh-metadata.js";
 import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
@@ -85,6 +87,7 @@ import {
 } from "./projectx/auth-manager.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
+import { observationAgeMs, PACKET_OBSERVATION_STALE_MS } from "./market/candidate-freshness.js";
 import { resolveActivePositionScope, type ActivePositionScope } from "./market/active-position-scope.js";
 import { buildScannerPacket, type ScannerPacket } from "./market/scanner-packet.js";
 import type { MarketObservationState } from "./domain/market-observation.js";
@@ -133,6 +136,7 @@ export class GlitchTopstepService {
   private marketObservationTimer: NodeJS.Timeout | null = null;
   private orderFlowTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
+  private lastPacketObservationRefresh: PacketObservationRefreshResult | null = null;
   private tradeOutcomePublishInFlight = false;
   private tradeOutcomePublication: Promise<void> | null = null;
   private lastReconciledOpenContracts = 0;
@@ -947,12 +951,22 @@ export class GlitchTopstepService {
   private async ensurePacketMarketObservationFresh(
     request?: { contractId?: string; instrument?: string },
   ): Promise<void> {
-    if (this.scannerMarketData) {
-      const scope = this.activePositionScope(request);
-      await this.scannerMarketData.refreshForPacket(new Date(), scope);
-      return;
-    }
-    await this.marketObservation.refresh();
+    const scope = this.activePositionScope(request);
+    const contractId = scope.packetTargetContractId;
+    const observation = this.marketObservationForContract(contractId);
+    const asOfMs = Date.now();
+    const age = observationAgeMs(observation, asOfMs);
+    const observationFresh = age !== null && age < PACKET_OBSERVATION_STALE_MS;
+    const refresh = () => (
+      this.scannerMarketData
+        ? this.scannerMarketData.refreshForPacket(new Date(asOfMs), scope)
+        : this.marketObservation.refresh()
+    );
+    this.lastPacketObservationRefresh = await boundedPacketObservationRefresh({
+      budgetMs: this.config.packetMarketObservationRefreshBudgetMs ?? 4_000,
+      observationFresh,
+      refresh,
+    });
   }
 
   private activePositionScope(request?: {
@@ -1011,12 +1025,20 @@ export class GlitchTopstepService {
     }
     const contractId = scope.packetTargetContractId;
     const snapshot = this.state.buildSnapshot(this.config.scope.accountId, contractId);
-    return this.packets.current({
+    const packet = this.packets.current({
       snapshot,
       instrument: scope.packetTargetInstrument,
       marketObservation: this.marketObservationForContract(contractId),
       orderFlow: this.orderFlowForContract(contractId),
     });
+    const refreshMeta = this.lastPacketObservationRefresh;
+    this.lastPacketObservationRefresh = null;
+    applyPacketObservationRefreshMetadata(
+      packet,
+      refreshMeta,
+      this.marketObservationForContract(contractId),
+    );
+    return packet;
   }
 
   private currentMarketObservation(): MarketObservationState {
