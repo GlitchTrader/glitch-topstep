@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
-import { open, readFile, unlink, type FileHandle } from "node:fs/promises";
+import { open, readFile, unlink, writeFile, type FileHandle } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 interface RuntimeLockPayload {
@@ -11,13 +11,21 @@ interface RuntimeLockPayload {
   process_boot_ms: number;
 }
 
+export type ResolveProcessBootMs = (pid: number) => Promise<number | null>;
+
+const defaultResolveProcessBootMs: ResolveProcessBootMs = async () => null;
+
 export class RuntimeScopeLock {
   private handle: FileHandle | null = null;
   private readonly path: string;
   private readonly invocationId = randomUUID();
   private readonly processBootMs = Math.floor(Date.now() - process.uptime() * 1000);
 
-  public constructor(dataDirectory: string, accountId: number) {
+  public constructor(
+    dataDirectory: string,
+    accountId: number,
+    private readonly resolveProcessBootMs: ResolveProcessBootMs = defaultResolveProcessBootMs,
+  ) {
     this.path = resolve(join(dataDirectory, `runtime-account-${accountId}.lock`));
   }
 
@@ -71,6 +79,19 @@ export class RuntimeScopeLock {
         }
         try {
           process.kill(parsed.pid, 0);
+          if (
+            typeof parsed.process_boot_ms === "number"
+            && Number.isFinite(parsed.process_boot_ms)
+          ) {
+            const liveBootMs = await this.resolveProcessBootMs(parsed.pid);
+            if (liveBootMs === null) {
+              return false;
+            }
+            if (liveBootMs !== parsed.process_boot_ms) {
+              await unlink(this.path);
+              return true;
+            }
+          }
           return false;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "EPERM") {
@@ -87,4 +108,22 @@ export class RuntimeScopeLock {
       return false;
     }
   }
+}
+
+/** Test helper: seed a lock file as if another process instance held it. */
+export async function writeRuntimeLockFixture(
+  dataDirectory: string,
+  accountId: number,
+  payload: Partial<RuntimeLockPayload> & Pick<RuntimeLockPayload, "pid">,
+): Promise<string> {
+  const path = resolve(join(dataDirectory, `runtime-account-${accountId}.lock`));
+  const body: RuntimeLockPayload = {
+    pid: payload.pid,
+    acquired_utc: payload.acquired_utc ?? new Date().toISOString(),
+    hostname: payload.hostname ?? hostname(),
+    invocation_id: payload.invocation_id ?? randomUUID(),
+    process_boot_ms: payload.process_boot_ms ?? Math.floor(Date.now() - process.uptime() * 1000),
+  };
+  await writeFile(path, JSON.stringify(body), { encoding: "utf8", flag: "wx" });
+  return path;
 }
