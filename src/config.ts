@@ -69,6 +69,8 @@ export interface AppConfig {
   outcomesExportPath?: string;
   reconcileIntervalMs: number;
   packetLeaseMs: number;
+  /** Max wait for retrieveBars refresh on /packet before serving cached observation. */
+  packetMarketObservationRefreshBudgetMs?: number;
   entrySubmissionLatchStaleMs: number;
   streamLivenessMs?: number;
 }
@@ -485,6 +487,12 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     outcomesExportPath: optional(environment, "GLITCH_TOPSTEP_OUTCOMES_EXPORT_PATH", "").trim() || undefined,
     reconcileIntervalMs: numberValue(environment, "GLITCH_RECONCILE_INTERVAL_MS", 3_000, (value) => Number.isInteger(value) && value >= 1_000),
     packetLeaseMs: numberValue(environment, "GLITCH_PACKET_LEASE_MS", 300_000, (value) => Number.isInteger(value) && value >= 1_000),
+    packetMarketObservationRefreshBudgetMs: numberValue(
+      environment,
+      "GLITCH_PACKET_MARKET_OBSERVATION_REFRESH_BUDGET_MS",
+      4_000,
+      (value) => Number.isInteger(value) && value >= 500 && value <= 30_000,
+    ),
     entrySubmissionLatchStaleMs: numberValue(
       environment,
       "GLITCH_ENTRY_SUBMISSION_LATCH_STALE_MS",
