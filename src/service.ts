@@ -136,7 +136,6 @@ export class GlitchTopstepService {
   private marketObservationTimer: NodeJS.Timeout | null = null;
   private orderFlowTimer: NodeJS.Timeout | null = null;
   private reconciliationInFlight = false;
-  private lastPacketObservationRefresh: PacketObservationRefreshResult | null = null;
   private tradeOutcomePublishInFlight = false;
   private tradeOutcomePublication: Promise<void> | null = null;
   private lastReconciledOpenContracts = 0;
@@ -693,8 +692,9 @@ export class GlitchTopstepService {
       },
       snapshot,
       async (request) => {
-        await this.ensurePacketMarketObservationFresh(request);
-        return this.buildDecisionPacketForScope(this.activePositionScope(request));
+        const scope = this.activePositionScope(request);
+        const refreshMeta = await this.ensurePacketMarketObservationFresh(scope);
+        return this.buildDecisionPacketForScope(scope, refreshMeta);
       },
       (limit, query) => {
         if (query?.source || query?.eventType) {
@@ -949,9 +949,8 @@ export class GlitchTopstepService {
 
   /** ponytail: token-bucket packet refresh; parallel per contract; background timer unchanged. */
   private async ensurePacketMarketObservationFresh(
-    request?: { contractId?: string; instrument?: string },
-  ): Promise<void> {
-    const scope = this.activePositionScope(request);
+    scope: ActivePositionScope,
+  ): Promise<PacketObservationRefreshResult> {
     const contractId = scope.packetTargetContractId;
     const observation = this.marketObservationForContract(contractId);
     const asOfMs = Date.now();
@@ -962,7 +961,7 @@ export class GlitchTopstepService {
         ? this.scannerMarketData.refreshForPacket(new Date(asOfMs), scope)
         : this.marketObservation.refresh()
     );
-    this.lastPacketObservationRefresh = await boundedPacketObservationRefresh({
+    return boundedPacketObservationRefresh({
       budgetMs: this.config.packetMarketObservationRefreshBudgetMs ?? 4_000,
       observationFresh,
       refresh,
@@ -1019,24 +1018,26 @@ export class GlitchTopstepService {
       };
   }
 
-  private buildDecisionPacketForScope(scope: ActivePositionScope) {
+  private buildDecisionPacketForScope(
+    scope: ActivePositionScope,
+    refreshMeta: PacketObservationRefreshResult | null,
+  ) {
     if (!this.packets) {
       throw new Error("packet_service_unavailable");
     }
     const contractId = scope.packetTargetContractId;
     const snapshot = this.state.buildSnapshot(this.config.scope.accountId, contractId);
+    const marketObservation = this.marketObservationForContract(contractId);
     const packet = this.packets.current({
       snapshot,
       instrument: scope.packetTargetInstrument,
-      marketObservation: this.marketObservationForContract(contractId),
+      marketObservation,
       orderFlow: this.orderFlowForContract(contractId),
     });
-    const refreshMeta = this.lastPacketObservationRefresh;
-    this.lastPacketObservationRefresh = null;
     applyPacketObservationRefreshMetadata(
       packet,
       refreshMeta,
-      this.marketObservationForContract(contractId),
+      marketObservation,
     );
     return packet;
   }
