@@ -148,6 +148,11 @@ export async function runReconciliationCycle(
 
   if (includeMetadata) {
     runtime.state.replaceAccounts(accounts, receivedAt);
+  } else {
+    // ponytail: periodic reconcile refreshes positions/orders but capturedAt also
+    // includes account.receivedAt; without this bump account_state_stale persists
+    // while reconciliation reports succeeded (v3 post-close diagnosis).
+    runtime.state.applyAccount(account, receivedAt);
   }
   runtime.state.replacePositions(positions, receivedAt);
   runtime.state.replaceOrders(orders, receivedAt);
