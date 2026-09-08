@@ -20,6 +20,7 @@ import {
 } from "./rate-aware-scheduler.js";
 import type { ActivePositionScope } from "./active-position-scope.js";
 import { summarizeScannerObservation, type ScannerObservationQuality } from "./scanner-quality.js";
+import { UniverseRefreshQueue } from "./universe-refresh-queue.js";
 
 export interface MultiInstrumentMarketPacket {
   schema_version: "glitch.topstep.market_universe.v1";
@@ -45,7 +46,11 @@ export interface MultiInstrumentMarketPacket {
 export class MultiInstrumentMarketDataPlane {
   private readonly scheduler: RateAwareScheduler;
   private readonly observations: Map<string, ProjectXMarketObservationService>;
-  private refreshChain: Promise<unknown> = Promise.resolve();
+  private readonly refreshQueue = new UniverseRefreshQueue({
+    onLog: (entry) => {
+      console.info("universe_refresh", entry);
+    },
+  });
   private scheduleMinHeadroom = PROJECTX_HISTORY_MIN_HEADROOM;
 
   public constructor(
@@ -83,11 +88,15 @@ export class MultiInstrumentMarketDataPlane {
   }
 
   public refreshAll(): Promise<MultiInstrumentMarketPacket> {
-    return this.enqueueUniverseRefresh(async () => {
-      await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
-        this.refreshContractsParallel(this.universe.contracts.map((contract) => contract.contract_id))
-      ));
-      return this.current();
+    return this.refreshQueue.enqueue({
+      coalesceKey: "__all__",
+      targetContract: "__all__",
+      refresh: async () => {
+        await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
+          this.refreshContractsParallel(this.universe.contracts.map((contract) => contract.contract_id))
+        ));
+      },
+      buildResult: () => this.current(),
     });
   }
 
@@ -96,31 +105,40 @@ export class MultiInstrumentMarketDataPlane {
     now: Date = new Date(),
     scope?: Pick<ActivePositionScope, "packetTargetContractId" | "executionModeFor">,
   ): Promise<MultiInstrumentMarketPacket> {
-    return this.enqueueUniverseRefresh(async () => {
-      const contractIds = this.contractIdsForPacketRefresh(now, scope?.packetTargetContractId);
-      const requestCount = contractIds.length * TIMEFRAMES_PER_INSTRUMENT;
-      const minHeadroom = this.scheduler.canSchedule(requestCount, PROJECTX_HISTORY_MIN_HEADROOM)
-        ? PROJECTX_HISTORY_MIN_HEADROOM
-        : 0;
-      if (
-        minHeadroom === 0
-        && !this.scheduler.canSchedule(requestCount, 0)
-      ) {
-        contractIds.splice(0, contractIds.length, scope?.packetTargetContractId ?? this.selectedContractId);
-      }
-      await this.withScheduleMinHeadroom(minHeadroom, () => (
-        this.refreshContractsParallel(contractIds)
-      ));
-      return this.current(now, scope);
+    const targetContract = scope?.packetTargetContractId ?? this.selectedContractId;
+    return this.refreshQueue.enqueue({
+      coalesceKey: targetContract,
+      targetContract,
+      refresh: async () => {
+        const contractIds = this.contractIdsForPacketRefresh(now, scope?.packetTargetContractId);
+        const requestCount = contractIds.length * TIMEFRAMES_PER_INSTRUMENT;
+        const minHeadroom = this.scheduler.canSchedule(requestCount, PROJECTX_HISTORY_MIN_HEADROOM)
+          ? PROJECTX_HISTORY_MIN_HEADROOM
+          : 0;
+        if (
+          minHeadroom === 0
+          && !this.scheduler.canSchedule(requestCount, 0)
+        ) {
+          contractIds.splice(0, contractIds.length, targetContract);
+        }
+        await this.withScheduleMinHeadroom(minHeadroom, () => (
+          this.refreshContractsParallel(contractIds)
+        ));
+      },
+      buildResult: () => this.current(now, scope),
     });
   }
 
   public refreshSelected(contractId: string): Promise<MarketObservationState> {
-    return this.enqueueUniverseRefresh(async () => {
-      await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
-        this.refreshContractsParallel([contractId])
-      ));
-      return this.observations.get(contractId)!.current();
+    return this.refreshQueue.enqueue({
+      coalesceKey: contractId,
+      targetContract: contractId,
+      refresh: async () => {
+        await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
+          this.refreshContractsParallel([contractId])
+        ));
+      },
+      buildResult: () => this.observations.get(contractId)!.current(),
     });
   }
 
@@ -167,6 +185,7 @@ export class MultiInstrumentMarketDataPlane {
   }
 
   public async waitForIdle(): Promise<void> {
+    await this.refreshQueue.waitForIdle();
     await Promise.all([...this.observations.values()].map((service) => service.waitForIdle()));
     await this.scheduler.waitForIdle();
   }
@@ -196,12 +215,4 @@ export class MultiInstrumentMarketDataPlane {
     });
   }
 
-  private enqueueUniverseRefresh<T>(run: () => Promise<T>): Promise<T> {
-    const next = this.refreshChain.then(run, run);
-    this.refreshChain = next.then(
-      () => undefined,
-      () => undefined,
-    );
-    return next;
-  }
 }
