@@ -28,6 +28,7 @@ import {
 } from "./projectx/reconnect-proof.js";
 import { LocalGatewayServer } from "./server/local-gateway.js";
 import { boundedPacketObservationRefresh, type PacketObservationRefreshResult } from "./service/packet-observation-refresh.js";
+import { applyPacketObservationRefreshMetadata } from "./service/packet-refresh-metadata.js";
 import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
@@ -1032,13 +1033,11 @@ export class GlitchTopstepService {
     });
     const refreshMeta = this.lastPacketObservationRefresh;
     this.lastPacketObservationRefresh = null;
-    if (refreshMeta?.timed_out) {
-      const issues = packet.data_quality.optional_issues ?? [];
-      if (!issues.includes("market_observation_refresh_timeout")) {
-        issues.push("market_observation_refresh_timeout");
-      }
-      packet.data_quality.optional_issues = issues;
-    }
+    applyPacketObservationRefreshMetadata(
+      packet,
+      refreshMeta,
+      this.marketObservationForContract(contractId),
+    );
     return packet;
   }
 
