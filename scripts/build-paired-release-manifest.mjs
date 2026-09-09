@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
+import { assertPairedContractsByteIdentical, pairedContractSha256 } from "./paired-contract-bytes.mjs";
 
 function sha256Hex(input) {
   return createHash("sha256").update(input).digest("hex");
@@ -33,16 +34,26 @@ const promptVersion = profileRoot
 if (!profileVersion || !promptVersion) throw new Error("profile_metadata_missing");
 const gatewayPairedContractPath = new URL("../release/paired-contract.json", import.meta.url);
 const gatewayPairedContractBytes = readFileSync(gatewayPairedContractPath);
-const profilePairedContractBytes = profileRoot
-  ? readFileSync(`${profileRoot}/paired-contract.json`)
+const profilePairedContractPath = profileRoot ? `${profileRoot}/paired-contract.json` : null;
+const profilePairedContractBytes = profilePairedContractPath
+  ? readFileSync(profilePairedContractPath)
   : null;
+const profilePairedContractSha256 = profilePairedContractBytes
+  ? pairedContractSha256(profilePairedContractBytes)
+  : argument("profile-paired-contract-sha256");
+const gatewayPairedContractSha256 = pairedContractSha256(gatewayPairedContractBytes);
+if (profilePairedContractPath) {
+  assertPairedContractsByteIdentical(gatewayPairedContractPath, profilePairedContractPath);
+} else if (profilePairedContractSha256 !== gatewayPairedContractSha256) {
+  throw new Error(
+    `paired_contract_byte_mismatch gateway=${gatewayPairedContractSha256} profile=${profilePairedContractSha256}`,
+  );
+}
 const pairDigest = canonicalJsonSha256({
   gateway_commit: argument("gateway-commit"),
   profile_commit: profileCommit,
-  gateway_paired_contract_sha256: sha256Hex(gatewayPairedContractBytes),
-  profile_paired_contract_sha256: profilePairedContractBytes
-    ? sha256Hex(profilePairedContractBytes)
-    : argument("profile-paired-contract-sha256"),
+  gateway_paired_contract_sha256: gatewayPairedContractSha256,
+  profile_paired_contract_sha256: profilePairedContractSha256,
 });
 const manifest = {
   schema_version: "glitch.topstep.paired_release.v1",
@@ -66,7 +77,9 @@ const manifest = {
   validation: {
     prac_or_shadow_evidence_ref: argument("evidence-ref"),
     partial_exit_provider_acceptance: "proven_prac_short_long_with_saga",
-    gateway_paired_contract_sha256: sha256Hex(gatewayPairedContractBytes),
+    gateway_paired_contract_sha256: gatewayPairedContractSha256,
+    profile_paired_contract_sha256: profilePairedContractSha256,
+    paired_contract_byte_identical: true,
   },
 };
 writeFileSync(argument("output"), `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8" });
