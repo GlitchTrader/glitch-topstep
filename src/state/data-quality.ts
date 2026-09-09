@@ -39,8 +39,12 @@ const LAST_INVALID_TELEMETRY_TTL_MS = 120_000;
 
 interface RetainedQuoteGeometryTelemetry {
   telemetry: QuoteGeometryTelemetry;
+  /** First time this invalid episode was observed (stable across refreshes). */
+  firstObservedAtUtc: string;
   observedAtUtc: string;
   expiresAtUtc: string;
+  /** How many invalid observations refreshed this episode within TTL. */
+  observationCount: number;
 }
 
 let retainedLastInvalidQuoteGeometry: RetainedQuoteGeometryTelemetry | null = null;
@@ -179,11 +183,31 @@ export function resetQuoteGeometryTelemetryRetentionForTest(): void {
 }
 
 function retainLastInvalidQuoteGeometry(telemetry: QuoteGeometryTelemetry, now: Date): void {
+  const nowIso = now.toISOString();
+  const current = currentRetainedLastInvalidQuoteGeometry(now);
+  const sameEpisode =
+    current !== null
+    && current.telemetry.best_bid === telemetry.best_bid
+    && current.telemetry.best_ask === telemetry.best_ask
+    && current.telemetry.contract_id === telemetry.contract_id
+    && sameReasonCodes(current.telemetry.reason_codes, telemetry.reason_codes);
+
   retainedLastInvalidQuoteGeometry = {
     telemetry: { ...telemetry, reason_codes: [...telemetry.reason_codes] },
-    observedAtUtc: now.toISOString(),
+    firstObservedAtUtc: sameEpisode ? current.firstObservedAtUtc : nowIso,
+    observedAtUtc: nowIso,
     expiresAtUtc: new Date(now.getTime() + LAST_INVALID_TELEMETRY_TTL_MS).toISOString(),
+    observationCount: sameEpisode ? current.observationCount + 1 : 1,
   };
+}
+
+function sameReasonCodes(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.every((value, index) => value === b[index]);
 }
 
 function currentRetainedLastInvalidQuoteGeometry(
@@ -201,8 +225,10 @@ function currentRetainedLastInvalidQuoteGeometry(
       ...retainedLastInvalidQuoteGeometry.telemetry,
       reason_codes: [...retainedLastInvalidQuoteGeometry.telemetry.reason_codes],
     },
+    firstObservedAtUtc: retainedLastInvalidQuoteGeometry.firstObservedAtUtc,
     observedAtUtc: retainedLastInvalidQuoteGeometry.observedAtUtc,
     expiresAtUtc: retainedLastInvalidQuoteGeometry.expiresAtUtc,
+    observationCount: retainedLastInvalidQuoteGeometry.observationCount,
   };
 }
 

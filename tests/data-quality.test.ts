@@ -216,8 +216,10 @@ describe("snapshot data quality", () => {
     const fields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:00:06Z")) as {
       quote_geometry_last_invalid?: {
         telemetry: { reason_codes: string[]; quote_source: string };
+        firstObservedAtUtc: string;
         observedAtUtc: string;
         expiresAtUtc: string;
+        observationCount: number;
       };
     };
 
@@ -225,8 +227,34 @@ describe("snapshot data quality", () => {
     assert.equal(healthy.quoteGeometryTelemetry, null);
     assert.deepEqual(fields.quote_geometry_last_invalid?.telemetry.reason_codes, ["locked_bbo"]);
     assert.equal(fields.quote_geometry_last_invalid?.telemetry.quote_source, "projectx_quote_stream");
+    assert.equal(fields.quote_geometry_last_invalid?.firstObservedAtUtc, "2026-07-21T12:00:05.000Z");
     assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:05.000Z");
     assert.equal(fields.quote_geometry_last_invalid?.expiresAtUtc, "2026-07-21T12:02:05.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observationCount, 1);
+  });
+
+  it("accumulates observationCount for the same locked BBO episode", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:20Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    const stillInvalid = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:35Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    const fields = dataQualityHealthFields(stillInvalid, new Date("2026-07-21T12:00:35Z")) as {
+      quote_geometry_last_invalid?: {
+        firstObservedAtUtc: string;
+        observedAtUtc: string;
+        observationCount: number;
+      };
+    };
+    assert.equal(fields.quote_geometry_last_invalid?.firstObservedAtUtc, "2026-07-21T12:00:05.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:35.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observationCount, 3);
   });
 
   it("expires retained telemetry after the bounded ttl and cleans it up", () => {
