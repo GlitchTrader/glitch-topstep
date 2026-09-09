@@ -144,6 +144,12 @@ export interface DirectDecisionPacket {
     optional_issues: string[];
     quote_age_ms: number | null;
     state_age_ms: number | null;
+    /** Explicit quote geometry: normal | locked | invalid. */
+    quote_state: "normal" | "locked" | "invalid";
+    /** Non-geometry venue/stream completeness (locked is not incompleteness). */
+    data_completeness: boolean;
+    /** Whether ProjectX mutations may proceed. */
+    execution_eligibility: "eligible" | "blocked_locked" | "blocked_invalid" | "blocked_incomplete";
     generation: number;
     user_stream_state: string;
     market_stream_state: string;
@@ -447,6 +453,9 @@ export function canonicalDecisionState(
     dataQuality: {
       stateComplete: quality.stateComplete,
       issues: quality.issues,
+      quoteState: quality.quoteState,
+      dataCompleteness: quality.dataCompleteness,
+      executionEligibility: quality.executionEligibility,
     },
     marketObservation,
     orderFlow,
@@ -794,6 +803,9 @@ export function buildDecisionPacket(
       optional_issues: optionalIssues,
       quote_age_ms: quality.quoteAgeMs,
       state_age_ms: quality.stateAgeMs,
+      quote_state: quality.quoteState,
+      data_completeness: quality.dataCompleteness,
+      execution_eligibility: quality.executionEligibility,
       generation: snapshot.operational.generation,
       user_stream_state: snapshot.operational.userStream.state,
       market_stream_state: snapshot.operational.marketStream.state,

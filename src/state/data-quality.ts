@@ -1,4 +1,12 @@
 import type { AccountVenueSnapshot, RiskSettings } from "../domain/models.js";
+import {
+  buildQuoteClassification,
+  classifyQuoteState,
+  issueCodeForQuoteState,
+  type ExecutionEligibility,
+  type QuoteClassification,
+  type QuoteState,
+} from "./quote-state.js";
 
 /** Sanitized quote geometry diagnostics — never includes credentials or raw provider payloads. */
 export interface QuoteGeometryTelemetry {
@@ -17,11 +25,16 @@ export interface QuoteGeometryTelemetry {
 
 export interface SnapshotDataQuality {
   stateComplete: boolean;
-  /** Execution-blocking completeness / freshness failures. */
+  /** Execution-blocking completeness / freshness / quote-state failures. */
   issues: string[];
   quoteAgeMs: number | null;
   stateAgeMs: number | null;
-  /** Present only when `quote_geometry_invalid` is raised; advisory telemetry. */
+  /** Explicit axes — do not collapse locked into "incomplete data". */
+  quoteState: QuoteState;
+  dataCompleteness: boolean;
+  executionEligibility: ExecutionEligibility;
+  quoteClassification: QuoteClassification;
+  /** Present when quote_state is locked or invalid; advisory telemetry. */
   quoteGeometryTelemetry?: QuoteGeometryTelemetry | null;
 }
 
@@ -65,6 +78,8 @@ export function evaluateSnapshotDataQuality(
     : null;
   const stateAgeMs = ageMilliseconds(snapshot.capturedAt, now);
   let quoteGeometryTelemetry: QuoteGeometryTelemetry | null = null;
+  let quoteState: QuoteState = "invalid";
+  let reasonCodes: string[] = ["missing_bbo"];
 
   if (snapshot.quote) {
     if (quoteAgeMs === null) {
@@ -79,13 +94,21 @@ export function evaluateSnapshotDataQuality(
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
     }
-    const geometryReasons = quoteGeometryReasonCodes(snapshot.quote.bestBid, snapshot.quote.bestAsk);
-    if (geometryReasons.length > 0) {
-      issues.add("quote_geometry_invalid");
-      quoteGeometryTelemetry = buildQuoteGeometryTelemetry(snapshot, observation, geometryReasons);
+    const classified = classifyQuoteState(snapshot.quote.bestBid, snapshot.quote.bestAsk);
+    quoteState = classified.quote_state;
+    reasonCodes = classified.reason_codes;
+    const geometryIssue = issueCodeForQuoteState(classified.quote_state);
+    if (geometryIssue) {
+      issues.add(geometryIssue);
+      quoteGeometryTelemetry = buildQuoteGeometryTelemetry(snapshot, observation, reasonCodes);
       retainLastInvalidQuoteGeometry(quoteGeometryTelemetry, now);
-      logQuoteGeometryInvalid(quoteGeometryTelemetry);
+      logQuoteGeometryEvent(classified.quote_state, quoteGeometryTelemetry);
     }
+  } else {
+    issues.add("quote_missing");
+    quoteGeometryTelemetry = buildQuoteGeometryTelemetry(snapshot, observation, reasonCodes);
+    retainLastInvalidQuoteGeometry(quoteGeometryTelemetry, now);
+    logQuoteGeometryEvent("invalid", quoteGeometryTelemetry);
   }
 
   if (stateAgeMs === null) {
@@ -96,35 +119,29 @@ export function evaluateSnapshotDataQuality(
     issues.add("account_state_stale");
   }
 
+  const issueList = [...issues];
+  const classification = buildQuoteClassification(snapshot, issueList);
+  // state_complete remains the execution gate (unchanged meaning): no blocking issues.
+  // Locked/invalid appear as issues AND as quote_state / execution_eligibility axes.
+  const stateComplete = issueList.length === 0;
+
   return {
-    // Safety decision unchanged: any issue keeps state incomplete.
-    stateComplete: issues.size === 0,
-    issues: [...issues],
+    stateComplete,
+    issues: issueList,
     quoteAgeMs,
     stateAgeMs,
+    quoteState: classification.quote_state,
+    dataCompleteness: classification.data_completeness,
+    executionEligibility: classification.execution_eligibility,
+    quoteClassification: classification,
     quoteGeometryTelemetry,
   };
 }
 
+/** @deprecated Prefer classifyQuoteState — kept for telemetry compatibility. */
 export function quoteGeometryReasonCodes(bestBid: number, bestAsk: number): string[] {
-  const reasons: string[] = [];
-  if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) {
-    reasons.push("nonfinite_bbo");
-  }
-  if (!(bestBid > 0) || !(bestAsk > 0)) {
-    reasons.push("nonpositive_bbo");
-  }
-  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid === bestAsk) {
-    reasons.push("locked_bbo");
-  }
-  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid > bestAsk) {
-    reasons.push("crossed_bbo");
-  }
-  // Mirror gate: bestBid >= bestAsk (locked or crossed) already covered; keep explicit for telemetry.
-  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid >= bestAsk && bestBid !== bestAsk) {
-    // crossed already added
-  }
-  return reasons;
+  const classified = classifyQuoteState(bestBid, bestAsk);
+  return classified.quote_state === "normal" ? [] : classified.reason_codes;
 }
 
 export function buildQuoteGeometryTelemetry(
@@ -150,15 +167,41 @@ export function buildQuoteGeometryTelemetry(
 
 /** Sanitized one-line JSON to stderr — never logs tokens, .env, or raw hub payloads. */
 export function logQuoteGeometryInvalid(telemetry: QuoteGeometryTelemetry): void {
+  logQuoteGeometryEvent("invalid", telemetry);
+}
+
+export function logQuoteGeometryEvent(
+  quoteState: QuoteState,
+  telemetry: QuoteGeometryTelemetry,
+): void {
+  const event = quoteState === "locked" ? "quote_locked" : "quote_geometry_invalid";
   console.warn(
-    `quote_geometry_invalid ${JSON.stringify({
-      event: "quote_geometry_invalid",
+    `${event} ${JSON.stringify({
+      event,
+      quote_state: quoteState,
       ...telemetry,
     })}`,
   );
 }
 
-/** Spread onto health `data_quality` without changing completeness semantics. */
+/** Rejection code when quote/execution axes forbid ProjectX mutation; null when eligible. */
+export function mutationBlockCode(quality: SnapshotDataQuality): string | null {
+  if (quality.executionEligibility === "eligible") {
+    return null;
+  }
+  if (quality.executionEligibility === "blocked_locked" || quality.issues.includes("quote_locked")) {
+    return "quote_locked";
+  }
+  if (quality.executionEligibility === "blocked_invalid" || quality.issues.includes("quote_geometry_invalid")) {
+    return "quote_geometry_invalid";
+  }
+  if (quality.issues.includes("quote_missing")) {
+    return "quote_missing";
+  }
+  return "venue_state_incomplete";
+}
+
+/** Spread onto health `data_quality` — axes are additive; state_complete still gates execution. */
 export function dataQualityHealthFields(
   quality: SnapshotDataQuality,
   now: Date = new Date(),
@@ -169,6 +212,9 @@ export function dataQualityHealthFields(
     issues: quality.issues,
     quote_age_ms: quality.quoteAgeMs,
     state_age_ms: quality.stateAgeMs,
+    quote_state: quality.quoteState,
+    data_completeness: quality.dataCompleteness,
+    execution_eligibility: quality.executionEligibility,
     ...(quality.quoteGeometryTelemetry
       ? { quote_geometry: quality.quoteGeometryTelemetry }
       : {}),

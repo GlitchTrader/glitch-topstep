@@ -22,6 +22,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
 import { validateProtectiveAmendment, buildOriginalRiskEnvelope, type PositionSide } from "./amendment-safety.js";
 import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
@@ -140,6 +141,25 @@ export class ExecutionCoordinator {
 
   private packetContractId(issuedPacket: DirectDecisionPacket): string {
     return issuedPacket.contract.id;
+  }
+
+  /**
+   * Locked/invalid quotes never authorize ProjectX mutations (entry, exit, amend, rearm).
+   * Stale/incomplete freshness still allows risk-reduction exits via existing gates.
+   */
+  private quoteMutationBlock(snapshot: AccountVenueSnapshot): string | null {
+    const quality = evaluateSnapshotDataQuality(snapshot, this.config.risk);
+    if (quality.executionEligibility === "blocked_locked" || quality.issues.includes("quote_locked")) {
+      return "quote_locked";
+    }
+    if (
+      quality.executionEligibility === "blocked_invalid"
+      || quality.issues.includes("quote_geometry_invalid")
+      || quality.issues.includes("quote_missing")
+    ) {
+      return quality.issues.includes("quote_missing") ? "quote_missing" : "quote_geometry_invalid";
+    }
+    return null;
   }
 
   private currentMode(): TradingMode {
@@ -425,6 +445,14 @@ export class ExecutionCoordinator {
   ): Promise<ExecutionReceipt> {
     const contractId = this.packetContractId(issuedPacket);
     const snapshot = this.packetSnapshot(issuedPacket);
+    const quoteBlock = this.quoteMutationBlock(snapshot);
+    if (quoteBlock) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: quoteBlock,
+      });
+    }
     if (intent.account !== this.config.scope.accountName) {
       return this.record({
         intentId: intent.intentId,
@@ -706,6 +734,14 @@ export class ExecutionCoordinator {
   ): Promise<ExecutionReceipt> {
     const contractId = this.packetContractId(issuedPacket);
     const snapshot = this.packetSnapshot(issuedPacket);
+    const quoteBlock = this.quoteMutationBlock(snapshot);
+    if (quoteBlock) {
+      return this.record({
+        intentId: intent.intentId,
+        status: "rejected",
+        code: quoteBlock,
+      });
+    }
     const validation = await this.validateAmendmentIntent(intent, issuedPacket, snapshot);
     if (validation) {
       return validation;
@@ -1284,6 +1320,9 @@ export class ExecutionCoordinator {
 
   private async tightenOwnedStopsAfterCaptureLockSerial(): Promise<number> {
     const snapshot = this.snapshot();
+    if (this.quoteMutationBlock(snapshot)) {
+      return 0;
+    }
     if (this.currentMode() !== "armed" || snapshot.instrumentOpenContracts === 0) {
       return 0;
     }
