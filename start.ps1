@@ -9,6 +9,37 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+function Assert-GatewayRepoIdentity {
+    # Refuse starts from nested/orphan worktrees or non-canonical checkouts.
+    $root = (Resolve-Path $PSScriptRoot).Path
+    $leaf = Split-Path $root -Leaf
+    if ($root -match '(?i)[\\/]\.wt-[^\\/]+([\\/]|$)' -or $leaf -match '(?i)^\.wt-') {
+        throw "Refusing start from worktree path '$root'. Use the canonical glitch-topstep checkout (not .wt-*)."
+    }
+    $pkgPath = Join-Path $root "package.json"
+    $contractPath = Join-Path $root "release\paired-contract.json"
+    if (-not (Test-Path -LiteralPath $pkgPath) -or -not (Test-Path -LiteralPath $contractPath)) {
+        throw "Refusing start: missing package.json or release/paired-contract.json under '$root'."
+    }
+    try {
+        $pkg = Get-Content -LiteralPath $pkgPath -Raw | ConvertFrom-Json
+    } catch {
+        throw "Refusing start: unreadable package.json under '$root'."
+    }
+    if ([string]$pkg.name -ne "glitch-topstep") {
+        throw "Refusing start: package.json name='$($pkg.name)' (expected glitch-topstep)."
+    }
+    $remote = (& git -C $root remote get-url origin 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($remote)) {
+        throw "Refusing start: git remote 'origin' missing under '$root'."
+    }
+    if ($remote -notmatch '(?i)glitchtrader/glitch-topstep(\.git)?\s*$') {
+        throw "Refusing start: origin remote '$remote' is not GlitchTrader/glitch-topstep."
+    }
+}
+
+Assert-GatewayRepoIdentity
+
 if (-not (Test-Path ".env")) {
     Write-Error "Copie .env.example para .env e configure credenciais."
 }
