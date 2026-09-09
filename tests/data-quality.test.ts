@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import type { RiskSettings } from "../src/domain/models.js";
-import { evaluateSnapshotDataQuality } from "../src/state/data-quality.js";
+import {
+  dataQualityHealthFields,
+  evaluateSnapshotDataQuality,
+  resetQuoteGeometryTelemetryRetentionForTest,
+} from "../src/state/data-quality.js";
 import { snapshot } from "./fixtures.js";
 
 const settings: RiskSettings = {
@@ -11,6 +15,10 @@ const settings: RiskSettings = {
   maxStateAgeMs: 5_000,
   maxIntentAgeMs: 300_000,
 };
+
+afterEach(() => {
+  resetQuoteGeometryTelemetryRetentionForTest();
+});
 
 describe("snapshot data quality", () => {
   it("reports one factual freshness result for healthy state", () => {
@@ -193,6 +201,72 @@ describe("snapshot data quality", () => {
     assert.equal(ok.stateComplete, true);
     assert.equal(ok.quoteGeometryTelemetry, null);
     assert.deepEqual(ok.issues, []);
+  });
+
+  it("retains the last invalid quote telemetry across a healthy follow-up poll", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"), {
+      quoteSource: "projectx_quote_stream",
+      observationSucceededUtc: "2026-07-21T12:00:04Z",
+    });
+
+    current.quote = { ...current.quote!, bestBid: 19999.75, bestAsk: 20000.25, lastPrice: 20000 };
+    const healthy = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:06Z"));
+    const fields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:00:06Z")) as {
+      quote_geometry_last_invalid?: {
+        telemetry: { reason_codes: string[]; quote_source: string };
+        observedAtUtc: string;
+        expiresAtUtc: string;
+      };
+    };
+
+    assert.equal(healthy.stateComplete, true);
+    assert.equal(healthy.quoteGeometryTelemetry, null);
+    assert.deepEqual(fields.quote_geometry_last_invalid?.telemetry.reason_codes, ["locked_bbo"]);
+    assert.equal(fields.quote_geometry_last_invalid?.telemetry.quote_source, "projectx_quote_stream");
+    assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:05.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.expiresAtUtc, "2026-07-21T12:02:05.000Z");
+  });
+
+  it("expires retained telemetry after the bounded ttl and cleans it up", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"));
+
+    current.quote = { ...current.quote!, bestBid: 19999.75, bestAsk: 20000.25 };
+    const healthy = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:02:06Z"));
+    const expiredFields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:02:06Z")) as {
+      quote_geometry_last_invalid?: unknown;
+    };
+    assert.equal(expiredFields.quote_geometry_last_invalid, undefined);
+
+    const cleanedFields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:02:07Z")) as {
+      quote_geometry_last_invalid?: unknown;
+    };
+    assert.equal(cleanedFields.quote_geometry_last_invalid, undefined);
+  });
+
+  it("replaces the retained telemetry with the newest invalid quote", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"));
+
+    current.quote = { ...current.quote!, bestBid: 20001, bestAsk: 0, lastPrice: 20001 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:10Z"));
+
+    current.quote = { ...current.quote!, bestBid: 19999.75, bestAsk: 20000.25, lastPrice: 20000 };
+    const healthy = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:11Z"));
+    const fields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:00:11Z")) as {
+      quote_geometry_last_invalid?: {
+        telemetry: { best_ask: number | null; reason_codes: string[] };
+        observedAtUtc: string;
+      };
+    };
+
+    assert.equal(fields.quote_geometry_last_invalid?.telemetry.best_ask, 0);
+    assert.ok(fields.quote_geometry_last_invalid?.telemetry.reason_codes.includes("nonpositive_bbo"));
+    assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:10.000Z");
   });
 });
 
