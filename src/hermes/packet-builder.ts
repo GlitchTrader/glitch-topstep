@@ -148,8 +148,10 @@ export interface DirectDecisionPacket {
     quote_state: "normal" | "locked" | "invalid";
     /** Non-geometry venue/stream completeness (locked is not incompleteness). */
     data_completeness: boolean;
-    /** Whether ProjectX mutations may proceed. */
+    /** Whether ProjectX **new exposure** mutations may proceed (not risk reduction). */
     execution_eligibility: "eligible" | "blocked_locked" | "blocked_invalid" | "blocked_incomplete";
+    /** Always eligible for quote geometry/stale — exit/flatten/protection/recovery stay open. */
+    risk_reduction_eligibility: "eligible";
     generation: number;
     user_stream_state: string;
     market_stream_state: string;
@@ -456,6 +458,7 @@ export function canonicalDecisionState(
       quoteState: quality.quoteState,
       dataCompleteness: quality.dataCompleteness,
       executionEligibility: quality.executionEligibility,
+      riskReductionEligibility: quality.riskReductionEligibility,
     },
     marketObservation,
     orderFlow,
@@ -806,6 +809,7 @@ export function buildDecisionPacket(
       quote_state: quality.quoteState,
       data_completeness: quality.dataCompleteness,
       execution_eligibility: quality.executionEligibility,
+      risk_reduction_eligibility: quality.riskReductionEligibility,
       generation: snapshot.operational.generation,
       user_stream_state: snapshot.operational.userStream.state,
       market_stream_state: snapshot.operational.marketStream.state,

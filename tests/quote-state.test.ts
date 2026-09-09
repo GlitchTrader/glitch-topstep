@@ -153,6 +153,7 @@ describe("quote_state transitions and health/packet parity", () => {
     assert.equal(health.execution_eligibility, "blocked_locked");
     assert.equal(packet.data_quality.quote_state, "locked");
     assert.equal(packet.data_quality.execution_eligibility, "blocked_locked");
+    assert.equal(packet.data_quality.risk_reduction_eligibility, "eligible");
     assert.equal(packet.data_quality.data_completeness, true);
     assert.equal(packet.data_quality.state_complete, false);
     assert.ok(packet.data_quality.issues.includes("quote_locked"));
@@ -182,8 +183,9 @@ describe("locked_bbo episode offline replay", () => {
       );
       assert.equal(quality.quoteState, "locked");
       assert.equal(quality.executionEligibility, "blocked_locked");
-      assert.equal(mutationBlockCode(quality), "quote_locked");
-      assert.equal(quality.stateComplete, false);
+    assert.equal(mutationBlockCode(quality), "quote_locked");
+    assert.equal(quality.riskReductionEligibility, "eligible");
+    assert.equal(quality.stateComplete, false);
     }
   });
 });

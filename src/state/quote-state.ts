@@ -3,12 +3,19 @@ import type { AccountVenueSnapshot } from "../domain/models.js";
 /** Explicit Topstep quote geometry classification — not a silent rewrite of provider data. */
 export type QuoteState = "normal" | "locked" | "invalid";
 
-/** Whether ProjectX mutations (place/modify/close) may proceed from quote geometry alone. */
+/**
+ * Whether **new exposure / risk-increasing** mutations may proceed.
+ * Never interpret data_completeness alone as authorization — use this axis.
+ * Risk reduction, flatten, protection, and recovery are NOT gated by this field.
+ */
 export type ExecutionEligibility =
   | "eligible"
   | "blocked_locked"
   | "blocked_invalid"
   | "blocked_incomplete";
+
+/** Risk reduction / flatten / protection / recovery — never blocked by quote geometry or stale alone. */
+export type RiskReductionEligibility = "eligible";
 
 export type QuoteStateReason =
   | "normal"
@@ -18,15 +25,27 @@ export type QuoteStateReason =
   | "nonpositive_bbo"
   | "missing_bbo";
 
+export type QuoteActionKind =
+  | "new_exposure"
+  | "risk_increasing_amendment"
+  | "exit_reduction"
+  | "flatten"
+  | "protective_action"
+  | "recovery";
+
 export interface QuoteClassification {
   quote_state: QuoteState;
   reason_codes: QuoteStateReason[];
   /**
    * True when non-geometry venue/state issues are empty.
    * Locked/invalid geometry is tracked via quote_state, not as "incomplete data".
+   * MUST NOT be treated as execution authorization by any consumer.
    */
   data_completeness: boolean;
+  /** New-exposure / risk-increase gate only. */
   execution_eligibility: ExecutionEligibility;
+  /** Always eligible for quote_state/stale — reduction paths must stay open. */
+  risk_reduction_eligibility: RiskReductionEligibility;
   best_bid: number | null;
   best_ask: number | null;
   last: number | null;
@@ -94,6 +113,31 @@ export function deriveExecutionEligibility(
   return "eligible";
 }
 
+/**
+ * Matrix: quote_state × action → allowed?
+ * - new exposure / risk-increasing amend: only when execution_eligibility === eligible
+ * - exit / flatten / protective / recovery: never blocked by locked/invalid/stale
+ */
+export function actionAllowedForQuote(
+  action: QuoteActionKind,
+  executionEligibility: ExecutionEligibility,
+): boolean {
+  switch (action) {
+    case "new_exposure":
+    case "risk_increasing_amendment":
+      return executionEligibility === "eligible";
+    case "exit_reduction":
+    case "flatten":
+    case "protective_action":
+    case "recovery":
+      return true;
+    default: {
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
+  }
+}
+
 export function buildQuoteClassification(
   snapshot: AccountVenueSnapshot,
   nonGeometryIssues: Iterable<string>,
@@ -112,6 +156,7 @@ export function buildQuoteClassification(
     reason_codes: classified.reason_codes,
     data_completeness,
     execution_eligibility: deriveExecutionEligibility(classified.quote_state, data_completeness),
+    risk_reduction_eligibility: "eligible",
     best_bid: quote && Number.isFinite(quote.bestBid) ? quote.bestBid : null,
     best_ask: quote && Number.isFinite(quote.bestAsk) ? quote.bestAsk : null,
     last: quote && Number.isFinite(quote.lastPrice) ? quote.lastPrice : null,

@@ -50,11 +50,13 @@ test("buildStreamHealthPacket mirrors quote age, tape, and reconnect state", () 
       quoteState: "normal",
       dataCompleteness: true,
       executionEligibility: "eligible",
+      riskReductionEligibility: "eligible",
       quoteClassification: {
         quote_state: "normal",
         reason_codes: ["normal"],
         data_completeness: true,
         execution_eligibility: "eligible",
+        risk_reduction_eligibility: "eligible",
         best_bid: 100,
         best_ask: 101,
         last: 100.5,

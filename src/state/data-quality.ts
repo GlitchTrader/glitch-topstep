@@ -31,8 +31,12 @@ export interface SnapshotDataQuality {
   stateAgeMs: number | null;
   /** Explicit axes — do not collapse locked into "incomplete data". */
   quoteState: QuoteState;
+  /** Advisory completeness only — NEVER treat as execution authorization. */
   dataCompleteness: boolean;
+  /** New-exposure / risk-increase gate (source of truth for increasing mutations). */
   executionEligibility: ExecutionEligibility;
+  /** Always eligible for quote geometry/stale — exit/flatten/protection/recovery stay open. */
+  riskReductionEligibility: "eligible";
   quoteClassification: QuoteClassification;
   /** Present when quote_state is locked or invalid; advisory telemetry. */
   quoteGeometryTelemetry?: QuoteGeometryTelemetry | null;
@@ -133,6 +137,7 @@ export function evaluateSnapshotDataQuality(
     quoteState: classification.quote_state,
     dataCompleteness: classification.data_completeness,
     executionEligibility: classification.execution_eligibility,
+    riskReductionEligibility: classification.risk_reduction_eligibility,
     quoteClassification: classification,
     quoteGeometryTelemetry,
   };
@@ -184,8 +189,11 @@ export function logQuoteGeometryEvent(
   );
 }
 
-/** Rejection code when quote/execution axes forbid ProjectX mutation; null when eligible. */
-export function mutationBlockCode(quality: SnapshotDataQuality): string | null {
+/**
+ * Rejection code when quote axes forbid **new exposure / risk-increasing** mutations.
+ * Exit, flatten, protection, and recovery must NOT use this — they stay open on locked/invalid/stale.
+ */
+export function newExposureBlockCode(quality: SnapshotDataQuality): string | null {
   if (quality.executionEligibility === "eligible") {
     return null;
   }
@@ -201,7 +209,12 @@ export function mutationBlockCode(quality: SnapshotDataQuality): string | null {
   return "venue_state_incomplete";
 }
 
-/** Spread onto health `data_quality` — axes are additive; state_complete still gates execution. */
+/** @deprecated Prefer newExposureBlockCode — name clarified after risk-reduction matrix fix. */
+export function mutationBlockCode(quality: SnapshotDataQuality): string | null {
+  return newExposureBlockCode(quality);
+}
+
+/** Spread onto health `data_quality` — axes are additive; state_complete still gates new exposure. */
 export function dataQualityHealthFields(
   quality: SnapshotDataQuality,
   now: Date = new Date(),
@@ -215,6 +228,7 @@ export function dataQualityHealthFields(
     quote_state: quality.quoteState,
     data_completeness: quality.dataCompleteness,
     execution_eligibility: quality.executionEligibility,
+    risk_reduction_eligibility: quality.riskReductionEligibility,
     ...(quality.quoteGeometryTelemetry
       ? { quote_geometry: quality.quoteGeometryTelemetry }
       : {}),
