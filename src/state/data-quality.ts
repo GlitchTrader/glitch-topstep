@@ -35,6 +35,15 @@ export interface DataQualityObservationContext {
 const FUTURE_TOLERANCE_MS = 5_000;
 /** Reconciliation cycles can block on ProjectX REST for several seconds. */
 const RECONCILIATION_STALE_GRACE_MS = 30_000;
+const LAST_INVALID_TELEMETRY_TTL_MS = 120_000;
+
+interface RetainedQuoteGeometryTelemetry {
+  telemetry: QuoteGeometryTelemetry;
+  observedAtUtc: string;
+  expiresAtUtc: string;
+}
+
+let retainedLastInvalidQuoteGeometry: RetainedQuoteGeometryTelemetry | null = null;
 
 export function evaluateSnapshotDataQuality(
   snapshot: AccountVenueSnapshot,
@@ -70,6 +79,7 @@ export function evaluateSnapshotDataQuality(
     if (geometryReasons.length > 0) {
       issues.add("quote_geometry_invalid");
       quoteGeometryTelemetry = buildQuoteGeometryTelemetry(snapshot, observation, geometryReasons);
+      retainLastInvalidQuoteGeometry(quoteGeometryTelemetry, now);
       logQuoteGeometryInvalid(quoteGeometryTelemetry);
     }
   }
@@ -145,7 +155,11 @@ export function logQuoteGeometryInvalid(telemetry: QuoteGeometryTelemetry): void
 }
 
 /** Spread onto health `data_quality` without changing completeness semantics. */
-export function dataQualityHealthFields(quality: SnapshotDataQuality): Record<string, unknown> {
+export function dataQualityHealthFields(
+  quality: SnapshotDataQuality,
+  now: Date = new Date(),
+): Record<string, unknown> {
+  const retained = currentRetainedLastInvalidQuoteGeometry(now);
   return {
     state_complete: quality.stateComplete,
     issues: quality.issues,
@@ -154,6 +168,41 @@ export function dataQualityHealthFields(quality: SnapshotDataQuality): Record<st
     ...(quality.quoteGeometryTelemetry
       ? { quote_geometry: quality.quoteGeometryTelemetry }
       : {}),
+    ...(retained
+      ? { quote_geometry_last_invalid: retained }
+      : {}),
+  };
+}
+
+export function resetQuoteGeometryTelemetryRetentionForTest(): void {
+  retainedLastInvalidQuoteGeometry = null;
+}
+
+function retainLastInvalidQuoteGeometry(telemetry: QuoteGeometryTelemetry, now: Date): void {
+  retainedLastInvalidQuoteGeometry = {
+    telemetry: { ...telemetry, reason_codes: [...telemetry.reason_codes] },
+    observedAtUtc: now.toISOString(),
+    expiresAtUtc: new Date(now.getTime() + LAST_INVALID_TELEMETRY_TTL_MS).toISOString(),
+  };
+}
+
+function currentRetainedLastInvalidQuoteGeometry(
+  now: Date,
+): RetainedQuoteGeometryTelemetry | null {
+  if (!retainedLastInvalidQuoteGeometry) {
+    return null;
+  }
+  if (Date.parse(retainedLastInvalidQuoteGeometry.expiresAtUtc) <= now.getTime()) {
+    retainedLastInvalidQuoteGeometry = null;
+    return null;
+  }
+  return {
+    telemetry: {
+      ...retainedLastInvalidQuoteGeometry.telemetry,
+      reason_codes: [...retainedLastInvalidQuoteGeometry.telemetry.reason_codes],
+    },
+    observedAtUtc: retainedLastInvalidQuoteGeometry.observedAtUtc,
+    expiresAtUtc: retainedLastInvalidQuoteGeometry.expiresAtUtc,
   };
 }
 
