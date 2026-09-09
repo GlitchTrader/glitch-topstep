@@ -200,15 +200,14 @@ export function parseQuote(contractId: string, input: unknown): QuoteInfo {
   const bestBid = nullableNumber(input, "bestBid");
   const bestAsk = nullableNumber(input, "bestAsk");
   const lastPrice = nullableNumber(input, "lastPrice");
-  const resolvedLast = lastPrice
-    ?? (bestBid !== null && bestAsk !== null ? (bestBid + bestAsk) / 2 : null)
-    ?? bestBid
-    ?? bestAsk;
-  if (resolvedLast === null) {
+  // Never fabricate BBO from last — missing sides stay incomplete (rejected), not locked/normal.
+  if (bestBid === null || bestAsk === null) {
+    throw new Error("quote_bbo_incomplete");
+  }
+  const resolvedLast = lastPrice ?? (bestBid + bestAsk) / 2;
+  if (resolvedLast === null || !Number.isFinite(resolvedLast)) {
     throw new Error("quote_price_missing");
   }
-  const resolvedBid = bestBid ?? resolvedLast;
-  const resolvedAsk = bestAsk ?? resolvedLast;
   const open = nullableNumber(input, "open") ?? resolvedLast;
   const high = nullableNumber(input, "high") ?? resolvedLast;
   const low = nullableNumber(input, "low") ?? resolvedLast;
@@ -221,8 +220,8 @@ export function parseQuote(contractId: string, input: unknown): QuoteInfo {
     symbol: requiredString(input, "symbol"),
     ...(typeof input.symbolName === "string" ? { symbolName: input.symbolName } : {}),
     lastPrice: resolvedLast,
-    bestBid: resolvedBid,
-    bestAsk: resolvedAsk,
+    bestBid,
+    bestAsk,
     open,
     high,
     low,

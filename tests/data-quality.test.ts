@@ -137,7 +137,26 @@ describe("snapshot data quality", () => {
     assert.equal(result.issues.length, 0);
   });
 
-  it("reports crossed BBO as quote_geometry_invalid", () => {
+  it("reports locked BBO (bid==ask) as quote_locked with distinct axes", () => {
+    const locked = snapshot();
+    locked.quote = { ...locked.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    const result = evaluateSnapshotDataQuality(locked, settings, new Date("2026-07-21T12:00:05Z"), {
+      quoteSource: "projectx_quote_stream",
+      observationSucceededUtc: "2026-07-21T12:00:04Z",
+    });
+    assert.ok(result.issues.includes("quote_locked"));
+    assert.ok(!result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.quoteState, "locked");
+    assert.equal(result.dataCompleteness, true);
+    assert.equal(result.executionEligibility, "blocked_locked");
+    assert.equal(result.stateComplete, false);
+    assert.deepEqual(result.quoteGeometryTelemetry?.reason_codes, ["locked_bbo"]);
+    assert.equal(result.quoteGeometryTelemetry?.quote_source, "projectx_quote_stream");
+    assert.equal(result.quoteGeometryTelemetry?.reconnect_generation, 1);
+    assert.equal(result.quoteGeometryTelemetry?.last, 20000);
+  });
+
+  it("reports crossed BBO as quote_geometry_invalid with execution blocked_invalid", () => {
     const crossed = snapshot();
     crossed.quote = {
       ...crossed.quote!,
@@ -150,26 +169,13 @@ describe("snapshot data quality", () => {
       new Date("2026-07-21T12:00:05Z"),
     );
     assert.ok(result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.quoteState, "invalid");
+    assert.equal(result.executionEligibility, "blocked_invalid");
     assert.equal(result.stateComplete, false);
     assert.ok(result.quoteGeometryTelemetry);
     assert.equal(result.quoteGeometryTelemetry!.best_bid, 29500);
     assert.equal(result.quoteGeometryTelemetry!.best_ask, 29419.5);
     assert.ok(result.quoteGeometryTelemetry!.reason_codes.includes("crossed_bbo"));
-  });
-
-  it("reports locked BBO (bid==ask) as quote_geometry_invalid with telemetry", () => {
-    const locked = snapshot();
-    locked.quote = { ...locked.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
-    const result = evaluateSnapshotDataQuality(locked, settings, new Date("2026-07-21T12:00:05Z"), {
-      quoteSource: "projectx_quote_stream",
-      observationSucceededUtc: "2026-07-21T12:00:04Z",
-    });
-    assert.ok(result.issues.includes("quote_geometry_invalid"));
-    assert.equal(result.stateComplete, false);
-    assert.deepEqual(result.quoteGeometryTelemetry?.reason_codes, ["locked_bbo"]);
-    assert.equal(result.quoteGeometryTelemetry?.quote_source, "projectx_quote_stream");
-    assert.equal(result.quoteGeometryTelemetry?.reconnect_generation, 1);
-    assert.equal(result.quoteGeometryTelemetry?.last, 20000);
   });
 
   it("reports one-sided nonpositive ask as quote_geometry_invalid", () => {
@@ -216,8 +222,10 @@ describe("snapshot data quality", () => {
     const fields = dataQualityHealthFields(healthy, new Date("2026-07-21T12:00:06Z")) as {
       quote_geometry_last_invalid?: {
         telemetry: { reason_codes: string[]; quote_source: string };
+        firstObservedAtUtc: string;
         observedAtUtc: string;
         expiresAtUtc: string;
+        observationCount: number;
       };
     };
 
@@ -225,8 +233,34 @@ describe("snapshot data quality", () => {
     assert.equal(healthy.quoteGeometryTelemetry, null);
     assert.deepEqual(fields.quote_geometry_last_invalid?.telemetry.reason_codes, ["locked_bbo"]);
     assert.equal(fields.quote_geometry_last_invalid?.telemetry.quote_source, "projectx_quote_stream");
+    assert.equal(fields.quote_geometry_last_invalid?.firstObservedAtUtc, "2026-07-21T12:00:05.000Z");
     assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:05.000Z");
     assert.equal(fields.quote_geometry_last_invalid?.expiresAtUtc, "2026-07-21T12:02:05.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observationCount, 1);
+  });
+
+  it("accumulates observationCount for the same locked BBO episode", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:20Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    const stillInvalid = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:35Z"), {
+      quoteSource: "venue_snapshot_quote",
+    });
+    const fields = dataQualityHealthFields(stillInvalid, new Date("2026-07-21T12:00:35Z")) as {
+      quote_geometry_last_invalid?: {
+        firstObservedAtUtc: string;
+        observedAtUtc: string;
+        observationCount: number;
+      };
+    };
+    assert.equal(fields.quote_geometry_last_invalid?.firstObservedAtUtc, "2026-07-21T12:00:05.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observedAtUtc, "2026-07-21T12:00:35.000Z");
+    assert.equal(fields.quote_geometry_last_invalid?.observationCount, 3);
   });
 
   it("expires retained telemetry after the bounded ttl and cleans it up", () => {

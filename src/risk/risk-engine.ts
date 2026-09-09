@@ -61,6 +61,15 @@ export function validateEntryRisk(
 
   const quality = evaluateSnapshotDataQuality(snapshot, settings, now);
   if (!quality.stateComplete) {
+    if (quality.issues.includes("quote_locked") || quality.executionEligibility === "blocked_locked") {
+      throw new RiskRejectedError("quote_locked", quality.quoteClassification.reason_codes.join(","));
+    }
+    if (quality.issues.includes("quote_geometry_invalid") || quality.executionEligibility === "blocked_invalid") {
+      throw new RiskRejectedError("quote_geometry_invalid", quality.quoteClassification.reason_codes.join(","));
+    }
+    if (quality.issues.includes("quote_missing")) {
+      throw new RiskRejectedError("quote_missing");
+    }
     if (quality.issues.includes("quote_stale")) {
       throw new RiskRejectedError("quote_stale", String(quality.quoteAgeMs));
     }
