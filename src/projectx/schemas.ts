@@ -201,6 +201,7 @@ export function parseQuote(contractId: string, input: unknown): QuoteInfo {
   const bestAsk = nullableNumber(input, "bestAsk");
   const lastPrice = nullableNumber(input, "lastPrice");
   // Never fabricate BBO from last — missing sides stay incomplete (rejected), not locked/normal.
+  // Callers must treat this as payload quality (quote invalid/incomplete), not a stream-gap generation bump.
   if (bestBid === null || bestAsk === null) {
     throw new Error("quote_bbo_incomplete");
   }

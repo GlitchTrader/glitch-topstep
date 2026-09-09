@@ -134,6 +134,9 @@ export class VenueStateStore {
     lastSucceededAt: null,
     lastError: null,
   };
+  private quoteBboIncompleteTotal = 0;
+  private quoteBboIncompleteLastAt: string | null = null;
+  private quoteBboIncompleteLastError: string | null = null;
 
   public registerContracts(contracts: ContractInfo[]): void {
     for (const contract of contracts) {
@@ -250,8 +253,35 @@ export class VenueStateStore {
     stream.lastError = null;
   }
 
+  /**
+   * Payload quality / apply fault — visible as stream `degraded` for gating, but MUST NOT bump
+   * `operational.generation`. Only real reconnect/close/stream-gap paths invalidate generation.
+   */
   public markPayloadFault(kind: VenueStreamKind, error: unknown, at = nowUtc()): void {
-    this.setStream(kind, "degraded", error, at, true);
+    this.setStream(kind, "degraded", error, at, false);
+  }
+
+  /**
+   * Incomplete BBO (missing bestBid/bestAsk): drop quote evidence so quote_state/eligibility
+   * block new exposure without faking a SignalR gap or invalidating reconciliation proof.
+   */
+  public markQuoteBboIncomplete(contractId: string, error?: unknown, at = nowUtc()): void {
+    this.quotes.delete(contractId);
+    this.quoteBboIncompleteTotal += 1;
+    this.quoteBboIncompleteLastAt = at;
+    this.quoteBboIncompleteLastError = this.errorText(error ?? "quote_bbo_incomplete");
+  }
+
+  public quoteBboIncompleteTelemetry(): {
+    total: number;
+    lastAt: string | null;
+    lastError: string | null;
+  } {
+    return {
+      total: this.quoteBboIncompleteTotal,
+      lastAt: this.quoteBboIncompleteLastAt,
+      lastError: this.quoteBboIncompleteLastError,
+    };
   }
 
   /**

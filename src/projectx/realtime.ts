@@ -29,6 +29,11 @@ import {
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
 import {
+  contractIdFromQuoteRawPayload,
+  isQuoteBboIncompleteError,
+  RateLimitedQuoteBboIncompleteLog,
+} from "./quote-bbo-fault.js";
+import {
   DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES,
   DEFAULT_HUB_START_TIMEOUT_MS,
   DEFAULT_STREAM_LIVENESS_MS,
@@ -108,6 +113,7 @@ export class ProjectXRealtimeClient {
     user: 0,
     market: 0,
   };
+  private readonly quoteBboIncompleteLog = new RateLimitedQuoteBboIncompleteLog();
 
   public constructor(
     private readonly options: ProjectXRealtimeOptions,
@@ -557,6 +563,13 @@ export class ProjectXRealtimeClient {
         this.marketLivenessStaleChecks = 0;
       }
     } catch (error) {
+      if (kind === "market" && eventType === "quote" && isQuoteBboIncompleteError(error)) {
+        const contractId =
+          contractIdFromQuoteRawPayload(rawPayload) ?? this.options.contractId;
+        this.state.markQuoteBboIncomplete(contractId, error);
+        this.quoteBboIncompleteLog.record(error);
+        return;
+      }
       this.payloadFault(kind, error, kind === "user" ? { eventType, rawPayload } : undefined);
     }
   }
@@ -595,6 +608,8 @@ export class ProjectXRealtimeClient {
     error: unknown,
     context?: { eventType: string; rawPayload: unknown },
   ): void {
+    // Quote BBO incompleteness is handled in recordAndApply (no generation bump).
+    // Other payload faults may degrade the stream for visibility without stream-gap invalidation.
     this.state.markPayloadFault(kind, error);
     console.error("Rejected ProjectX realtime event", error);
     if (kind === "user" && context) {
