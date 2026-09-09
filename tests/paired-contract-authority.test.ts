@@ -1,16 +1,32 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import packageJson from "../package.json" with { type: "json" };
 import { GATEWAY_COMPATIBILITY, PAIRED_CONTRACT } from "../src/release/compatibility.js";
 
+// Compiled tests live under dist/tests → repo root is ../..
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PROFILE_ROOT = process.env.GLITCH_HERMES_PROFILE_ROOT
   ?? path.resolve(ROOT, "..", "glitch-topstep-hermes-profile");
+
+function pairedContractSha256(bytes: Buffer): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function assertPairedContractsByteIdentical(gatewayPath: string, profilePath: string): void {
+  const gatewayBytes = readFileSync(gatewayPath);
+  const profileBytes = readFileSync(profilePath);
+  if (Buffer.compare(gatewayBytes, profileBytes) !== 0) {
+    throw new Error(
+      `paired_contract_byte_mismatch gateway=${pairedContractSha256(gatewayBytes)} profile=${pairedContractSha256(profileBytes)}`,
+    );
+  }
+}
 
 test("TS-AUDIT-10 paired-contract.json drives gateway compatibility", () => {
   assert.equal(GATEWAY_COMPATIBILITY.protocol_revision, PAIRED_CONTRACT.protocol_revision);
@@ -36,11 +52,46 @@ test("TS-AUDIT-10 profile paired-contract.json matches gateway byte-for-byte", a
     }
     throw error;
   }
-  const canonicalHash = (raw: Buffer) =>
-    createHash("sha256")
-      .update(JSON.stringify(JSON.parse(raw.toString("utf8"))))
-      .digest("hex");
-  assert.equal(canonicalHash(gatewayBytes), canonicalHash(profileBytes));
+  assert.equal(
+    Buffer.compare(gatewayBytes, profileBytes),
+    0,
+    `paired_contract_byte_mismatch gateway=${pairedContractSha256(gatewayBytes)} profile=${pairedContractSha256(profileBytes)}`,
+  );
+});
+
+test("paired-contract helper detects content divergence", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "paired-contract-"));
+  try {
+    const a = path.join(dir, "a.json");
+    const b = path.join(dir, "b.json");
+    await writeFile(a, '{"x":1}\n');
+    await writeFile(b, '{"x":2}\n');
+    assert.throws(
+      () => assertPairedContractsByteIdentical(a, b),
+      /paired_contract_byte_mismatch/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("paired-contract helper detects newline divergence", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "paired-contract-nl-"));
+  try {
+    const a = path.join(dir, "a.json");
+    const b = path.join(dir, "b.json");
+    await writeFile(a, '{"x":1}\n');
+    await writeFile(b, '{"x":1}\r\n');
+    assert.throws(
+      () => assertPairedContractsByteIdentical(a, b),
+      /paired_contract_byte_mismatch/,
+    );
+    const hashA = createHash("sha256").update(await readFile(a)).digest("hex");
+    const hashB = createHash("sha256").update(await readFile(b)).digest("hex");
+    assert.notEqual(hashA, hashB);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("TS-AUDIT-10 update-glitch-hermes.ps1 has no personal paths", () => {
