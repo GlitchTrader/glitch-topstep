@@ -32,7 +32,7 @@ import { applyPacketObservationRefreshMetadata } from "./service/packet-refresh-
 import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
 import { resolveGatewayMode } from "./execution/gateway-mode.js";
-import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
+import { dataQualityHealthFields, evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { TradeOutcomePublisher, isIncompleteOutcome, outcomeSharesForeignClosingFill } from "./learning/trade-outcome-publisher.js";
 import {
@@ -567,10 +567,13 @@ export class GlitchTopstepService {
         const healthBuildStartMs = performance.now();
         const recordedAt = new Date();
         const current = snapshot();
-        const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
+        const marketObservation = this.currentMarketObservation();
+        const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt, {
+          quoteSource: "projectx_quote_stream",
+          observationSucceededUtc: marketObservation?.last_succeeded_utc ?? null,
+        });
         const executionRecovery = this.executionStore.recoveryStatus();
         const providerHistory = this.historySync.currentStatus();
-        const marketObservation = this.currentMarketObservation();
         const orderFlow = this.orderFlow?.current() ?? {
           last_attempt_utc: null,
           last_succeeded_utc: null,
@@ -655,10 +658,7 @@ export class GlitchTopstepService {
           gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
           recorded_utc: recordedAt.toISOString(),
           data_quality: {
-            state_complete: quality.stateComplete,
-            issues: quality.issues,
-            quote_age_ms: quality.quoteAgeMs,
-            state_age_ms: quality.stateAgeMs,
+            ...dataQualityHealthFields(quality),
             operational: current.operational,
           },
           execution_recovery: executionRecovery,

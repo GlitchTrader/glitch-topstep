@@ -143,6 +143,56 @@ describe("snapshot data quality", () => {
     );
     assert.ok(result.issues.includes("quote_geometry_invalid"));
     assert.equal(result.stateComplete, false);
+    assert.ok(result.quoteGeometryTelemetry);
+    assert.equal(result.quoteGeometryTelemetry!.best_bid, 29500);
+    assert.equal(result.quoteGeometryTelemetry!.best_ask, 29419.5);
+    assert.ok(result.quoteGeometryTelemetry!.reason_codes.includes("crossed_bbo"));
+  });
+
+  it("reports locked BBO (bid==ask) as quote_geometry_invalid with telemetry", () => {
+    const locked = snapshot();
+    locked.quote = { ...locked.quote!, bestBid: 20000, bestAsk: 20000, lastPrice: 20000 };
+    const result = evaluateSnapshotDataQuality(locked, settings, new Date("2026-07-21T12:00:05Z"), {
+      quoteSource: "projectx_quote_stream",
+      observationSucceededUtc: "2026-07-21T12:00:04Z",
+    });
+    assert.ok(result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.stateComplete, false);
+    assert.deepEqual(result.quoteGeometryTelemetry?.reason_codes, ["locked_bbo"]);
+    assert.equal(result.quoteGeometryTelemetry?.quote_source, "projectx_quote_stream");
+    assert.equal(result.quoteGeometryTelemetry?.reconnect_generation, 1);
+    assert.equal(result.quoteGeometryTelemetry?.last, 20000);
+  });
+
+  it("reports one-sided nonpositive ask as quote_geometry_invalid", () => {
+    const oneSided = snapshot();
+    oneSided.quote = { ...oneSided.quote!, bestBid: 20000, bestAsk: 0 };
+    const result = evaluateSnapshotDataQuality(oneSided, settings, new Date("2026-07-21T12:00:05Z"));
+    assert.ok(result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.stateComplete, false);
+    assert.ok(result.quoteGeometryTelemetry?.reason_codes.includes("nonpositive_bbo"));
+  });
+
+  it("reports nonfinite BBO as quote_geometry_invalid", () => {
+    const bad = snapshot();
+    bad.quote = { ...bad.quote!, bestBid: Number.NaN, bestAsk: 20000 };
+    const result = evaluateSnapshotDataQuality(bad, settings, new Date("2026-07-21T12:00:05Z"));
+    assert.ok(result.issues.includes("quote_geometry_invalid"));
+    assert.equal(result.stateComplete, false);
+    assert.equal(result.quoteGeometryTelemetry?.best_bid, null);
+    assert.ok(result.quoteGeometryTelemetry?.reason_codes.includes("nonfinite_bbo"));
+  });
+
+  it("recovers to state_complete when geometry becomes valid again", () => {
+    const current = snapshot();
+    current.quote = { ...current.quote!, bestBid: 20000, bestAsk: 20000 };
+    const bad = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"));
+    assert.equal(bad.stateComplete, false);
+    current.quote = { ...current.quote!, bestBid: 19999.75, bestAsk: 20000.25 };
+    const ok = evaluateSnapshotDataQuality(current, settings, new Date("2026-07-21T12:00:05Z"));
+    assert.equal(ok.stateComplete, true);
+    assert.equal(ok.quoteGeometryTelemetry, null);
+    assert.deepEqual(ok.issues, []);
   });
 });
 
