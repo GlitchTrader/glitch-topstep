@@ -1,11 +1,35 @@
 import type { AccountVenueSnapshot, RiskSettings } from "../domain/models.js";
 
+/** Sanitized quote geometry diagnostics — never includes credentials or raw provider payloads. */
+export interface QuoteGeometryTelemetry {
+  best_bid: number | null;
+  best_ask: number | null;
+  last: number | null;
+  quote_timestamp: string | null;
+  snapshot_captured_at: string | null;
+  instrument: string | null;
+  contract_id: string | null;
+  quote_source: string;
+  reconnect_generation: number | null;
+  observation_succeeded_utc: string | null;
+  reason_codes: string[];
+}
+
 export interface SnapshotDataQuality {
   stateComplete: boolean;
   /** Execution-blocking completeness / freshness failures. */
   issues: string[];
   quoteAgeMs: number | null;
   stateAgeMs: number | null;
+  /** Present only when `quote_geometry_invalid` is raised; advisory telemetry. */
+  quoteGeometryTelemetry?: QuoteGeometryTelemetry | null;
+}
+
+export interface DataQualityObservationContext {
+  /** Provenance label for the quote (e.g. projectx_quote_stream). */
+  quoteSource?: string;
+  /** Market observation last success — packet/observation timing, not a secret. */
+  observationSucceededUtc?: string | null;
 }
 
 const FUTURE_TOLERANCE_MS = 5_000;
@@ -16,6 +40,7 @@ export function evaluateSnapshotDataQuality(
   snapshot: AccountVenueSnapshot,
   settings: RiskSettings,
   now: Date = new Date(),
+  observation: DataQualityObservationContext = {},
 ): SnapshotDataQuality {
   const issues = new Set(snapshot.stateIssues);
   if (!snapshot.stateComplete && issues.size === 0) {
@@ -26,6 +51,7 @@ export function evaluateSnapshotDataQuality(
     ? ageMilliseconds(snapshot.quote.timestamp, now)
     : null;
   const stateAgeMs = ageMilliseconds(snapshot.capturedAt, now);
+  let quoteGeometryTelemetry: QuoteGeometryTelemetry | null = null;
 
   if (snapshot.quote) {
     if (quoteAgeMs === null) {
@@ -40,14 +66,11 @@ export function evaluateSnapshotDataQuality(
     } else if (quoteAgeMs > settings.maxQuoteAgeMs) {
       issues.add("quote_stale");
     }
-    if (
-      !Number.isFinite(snapshot.quote.bestBid)
-      || !Number.isFinite(snapshot.quote.bestAsk)
-      || snapshot.quote.bestBid <= 0
-      || snapshot.quote.bestAsk <= 0
-      || snapshot.quote.bestBid >= snapshot.quote.bestAsk
-    ) {
+    const geometryReasons = quoteGeometryReasonCodes(snapshot.quote.bestBid, snapshot.quote.bestAsk);
+    if (geometryReasons.length > 0) {
       issues.add("quote_geometry_invalid");
+      quoteGeometryTelemetry = buildQuoteGeometryTelemetry(snapshot, observation, geometryReasons);
+      logQuoteGeometryInvalid(quoteGeometryTelemetry);
     }
   }
 
@@ -60,10 +83,77 @@ export function evaluateSnapshotDataQuality(
   }
 
   return {
+    // Safety decision unchanged: any issue keeps state incomplete.
     stateComplete: issues.size === 0,
     issues: [...issues],
     quoteAgeMs,
     stateAgeMs,
+    quoteGeometryTelemetry,
+  };
+}
+
+export function quoteGeometryReasonCodes(bestBid: number, bestAsk: number): string[] {
+  const reasons: string[] = [];
+  if (!Number.isFinite(bestBid) || !Number.isFinite(bestAsk)) {
+    reasons.push("nonfinite_bbo");
+  }
+  if (!(bestBid > 0) || !(bestAsk > 0)) {
+    reasons.push("nonpositive_bbo");
+  }
+  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid === bestAsk) {
+    reasons.push("locked_bbo");
+  }
+  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid > bestAsk) {
+    reasons.push("crossed_bbo");
+  }
+  // Mirror gate: bestBid >= bestAsk (locked or crossed) already covered; keep explicit for telemetry.
+  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid >= bestAsk && bestBid !== bestAsk) {
+    // crossed already added
+  }
+  return reasons;
+}
+
+export function buildQuoteGeometryTelemetry(
+  snapshot: AccountVenueSnapshot,
+  observation: DataQualityObservationContext,
+  reasonCodes: string[],
+): QuoteGeometryTelemetry {
+  const quote = snapshot.quote;
+  return {
+    best_bid: quote && Number.isFinite(quote.bestBid) ? quote.bestBid : null,
+    best_ask: quote && Number.isFinite(quote.bestAsk) ? quote.bestAsk : null,
+    last: quote && Number.isFinite(quote.lastPrice) ? quote.lastPrice : null,
+    quote_timestamp: quote?.timestamp ?? null,
+    snapshot_captured_at: snapshot.capturedAt ?? null,
+    instrument: snapshot.contract?.symbolId ?? quote?.symbol ?? null,
+    contract_id: snapshot.contract?.id ?? quote?.contractId ?? null,
+    quote_source: observation.quoteSource ?? "venue_snapshot_quote",
+    reconnect_generation: snapshot.operational?.generation ?? null,
+    observation_succeeded_utc: observation.observationSucceededUtc ?? null,
+    reason_codes: [...reasonCodes],
+  };
+}
+
+/** Sanitized one-line JSON to stderr — never logs tokens, .env, or raw hub payloads. */
+export function logQuoteGeometryInvalid(telemetry: QuoteGeometryTelemetry): void {
+  console.warn(
+    `quote_geometry_invalid ${JSON.stringify({
+      event: "quote_geometry_invalid",
+      ...telemetry,
+    })}`,
+  );
+}
+
+/** Spread onto health `data_quality` without changing completeness semantics. */
+export function dataQualityHealthFields(quality: SnapshotDataQuality): Record<string, unknown> {
+  return {
+    state_complete: quality.stateComplete,
+    issues: quality.issues,
+    quote_age_ms: quality.quoteAgeMs,
+    state_age_ms: quality.stateAgeMs,
+    ...(quality.quoteGeometryTelemetry
+      ? { quote_geometry: quality.quoteGeometryTelemetry }
+      : {}),
   };
 }
 
@@ -91,4 +181,3 @@ function reconciliationGrace(snapshot: AccountVenueSnapshot, now: Date): boolean
   const ageMs = ageMilliseconds(timestamp, now);
   return ageMs !== null && ageMs >= 0 && ageMs <= RECONCILIATION_STALE_GRACE_MS;
 }
-

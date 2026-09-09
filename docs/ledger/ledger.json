@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-08-27T19:55:00Z",
+  "updated": "2026-09-09T15:09:58Z",
   "release_target": "beta",
   "reconciliation": {
     "date": "2026-08-24",
@@ -207,7 +207,7 @@
       },
       "residual_acceptance": "Execute PRAC soak scenarios on credentialed account; run reaudit:fault-matrix in release pipeline; full auth facade on all REST consumers; signed pair manifest (TS-REAUDIT-12)"
     },
-    "stream_validation": "P0 items 1-5 merged (#223 gateway, #177 profile 2026-08-21). Audit wave A/B/C merged (#234 gateway 2026-08-24). #236/#195 paired fault-matrix gate merged 2026-08-24. Armed promotion checklist executed 2026-08-24: PRAC soak + fault-matrix + rollback rehearsal green; paired-release-candidate run 32797244666 success (artifact paired-release-5813d83…).",
+    "stream_validation": "P0 items 1-5 merged (#223 gateway, #177 profile 2026-08-21). Audit wave A/B/C merged (#234 gateway 2026-08-24). #236/#195 paired fault-matrix gate merged 2026-08-24. Armed promotion checklist executed 2026-08-24: PRAC soak + fault-matrix + rollback rehearsal green; paired-release-candidate run 32797244666 success (artifact paired-release-5813d83\u2026).",
     "audit_wave_abc_2026_08_24": {
       "gateway_pr": 234,
       "gateway_commit": "b5f7cfc",
@@ -322,12 +322,17 @@
       "plan": "docs/plans/2026-08-27-stream-recovery-implementation-plan.md",
       "ledger_item": "TS-STREAM-RECOVERY-01",
       "status": "in_progress",
-      "summary": "PR-A–E implemented 2026-08-27 (hub liveness, recovery controller, transport retry, serial reconnect, watchdog progress). 72h PRAC soak pending.",
+      "summary": "PR-A\u2013E implemented 2026-08-27 (hub liveness, recovery controller, transport retry, serial reconnect, watchdog progress). 72h PRAC soak pending.",
       "gateway_baseline": "13ffbf7",
       "evidence": [
         "data/projectx-evidence.sqlite",
         "data/gateway-watchdog.log"
       ]
+    },
+    "quote_geometry_telemetry_2026_09_09": {
+      "status": "implemented_local",
+      "summary": "Sanitized quote_geometry_invalid telemetry + tests; no BBO decision change; parseQuote unchanged.",
+      "date": "2026-09-09"
     }
   },
   "authority": {
@@ -478,7 +483,7 @@
       "code_state": "implemented",
       "evidence": [
         "2026-08-03: operator approval on #49 (PRAC flat, v0.1.2 @ 0e86c7a, bracket-protected 1 MNQ).",
-        "2026-08-03: scripts/acceptance-r1-04-kill-matrix.mjs live PRAC session — six GLITCH_KILL_POINT hooks + intent_body_conflict; proof_passed=true.",
+        "2026-08-03: scripts/acceptance-r1-04-kill-matrix.mjs live PRAC session \u2014 six GLITCH_KILL_POINT hooks + intent_body_conflict; proof_passed=true.",
         "2026-08-03: tests/fixtures/projectx/live/r1_04_kill_matrix_proof.json + validateR1_04KillProof offline validator green."
       ],
       "sources": [
@@ -506,7 +511,7 @@
       "code_state": "implemented",
       "evidence": [
         "2026-08-03: src/projectx/fixture-corpus.ts validateHistoricalSearchFixtures + tests/fixture-corpus.test.ts (TS-R2-06).",
-        "2026-08-03: npm run capture:fixtures on armed PRAC gateway — historical_orders_24h.json (90 glt-* tags) and historical_trades_24h.json (orderId linkage); 72h window (PRAC idle >24h between sessions)."
+        "2026-08-03: npm run capture:fixtures on armed PRAC gateway \u2014 historical_orders_24h.json (90 glt-* tags) and historical_trades_24h.json (orderId linkage); 72h window (PRAC idle >24h between sessions)."
       ],
       "sources": [
         "src/projectx/fixture-corpus.ts",
@@ -531,7 +536,7 @@
       "code_state": "implemented",
       "evidence": [
         "2026-08-03: src/projectx/event-rates-proof.ts + tests/event-rates-proof.test.ts validate bounded 30-minute quote/print/depth rates and retention policy.",
-        "2026-08-03: npm run capture:event-rates on armed Windows PRAC gateway — event_rates_proof.json (30m window 2026-08-03T01:07–01:37Z; ~13.3 quote/s, ~4.4 print/s, ~13.3 depth/s; evidence DB within 509999 retention cap).",
+        "2026-08-03: npm run capture:event-rates on armed Windows PRAC gateway \u2014 event_rates_proof.json (30m window 2026-08-03T01:07\u201301:37Z; ~13.3 quote/s, ~4.4 print/s, ~13.3 depth/s; evidence DB within 509999 retention cap).",
         "2026-08-03: 60s disk sample recorded +1798144 bytes across live event ingestion (~bytes_per_event in fixture)."
       ],
       "sources": [
@@ -563,7 +568,7 @@
       ],
       "stop_line": "No claim of beta readiness before the cross-repository profile acceptance and operator-approved real mutation evidence are attached.",
       "evidence": [
-        "2026-08-05: operator shortcut promotion — gateway 0.1.4@abf7a02 + profile 0.1.17@efb8c22 on PRAC-V2-645601-47191819/MNQ.",
+        "2026-08-05: operator shortcut promotion \u2014 gateway 0.1.4@abf7a02 + profile 0.1.17@efb8c22 on PRAC-V2-645601-47191819/MNQ.",
         "docs/evidence/TS-BETA-01-immutable-baseline-2026-08-04.md (roll-forward + signed promotion block).",
         "PROFILE-BETA-01 (2026-08-03) + post-0.1.3 TS-R3-03 Phase C outcome + 2026-08-04/05 Hermes EXIT/HOLD ledger accepted in lieu of fresh bounded session.",
         "/health spot-check 2026-08-05T19:12Z: compatible, state_complete, streams connected."
@@ -628,7 +633,7 @@
         "src/config.ts",
         "src/hermes/packet-builder.ts"
       ],
-      "stop_line": "Remaining acceptance: docs/PARITY.md session row and operator-configured GLITCH_SESSION_* live reconciliation — not packet schema work."
+      "stop_line": "Remaining acceptance: docs/PARITY.md session row and operator-configured GLITCH_SESSION_* live reconciliation \u2014 not packet schema work."
     },
     {
       "id": "TS-R4-06",
@@ -646,7 +651,7 @@
         "Stable rejection codes and regression tests in tests/position-management.test.ts or tests/amendment-safety.test.ts.",
         "Optional phase B: entry drift tick bound documented and enforced pre-submit when configured."
       ],
-      "stop_line": "Factual execution geometry only — no session/news/strategy gates.",
+      "stop_line": "Factual execution geometry only \u2014 no session/news/strategy gates.",
       "evidence": [
         "src/execution/amendment-safety.ts enforces stop_would_widen / target_would_widen.",
         "tests/amendment-safety.test.ts and tests/position-management.test.ts regression coverage.",
@@ -682,12 +687,12 @@
       "stop_line": "Do not mark TS-R3-01 production-complete for learning until live PRAC flat publishes at least one canonical outcome and Hermes debriefs it.",
       "evidence": [
         "2026-08-03: parity gap documented vs Glitch NT reconcile-hermes-outcomes.",
-        "2026-08-04: Phase A stream-flat + reconcile fallback — src/service.ts, tests/trade-outcome-flat.test.ts.",
+        "2026-08-04: Phase A stream-flat + reconcile fallback \u2014 src/service.ts, tests/trade-outcome-flat.test.ts.",
         "2026-08-04: Phase B live PRAC outcome published; Hermes debrief wrote trade-episodes.jsonl.",
-        "2026-08-04: Phase C enrichment — MAE/MFE, exit_reason, fills, R-multiple; tests/trade-outcome-enrichment.test.ts; publisher_version 0.1.3-r3-03c.",
-        "2026-08-05: Phase C live evidenced — intent 3deeab7f-311b-5641-9f09-bcd0a321f78c stream flat; fills=2; mae_usd=42.5; mfe_usd=0; mae_ticks=85; publisher 0.1.3-r3-03c; Hermes outcomes.jsonl mirrored. learning_eligible=false because protection_status=pending (exit ~33s before brackets proven).",
+        "2026-08-04: Phase C enrichment \u2014 MAE/MFE, exit_reason, fills, R-multiple; tests/trade-outcome-enrichment.test.ts; publisher_version 0.1.3-r3-03c.",
+        "2026-08-05: Phase C live evidenced \u2014 intent 3deeab7f-311b-5641-9f09-bcd0a321f78c stream flat; fills=2; mae_usd=42.5; mfe_usd=0; mae_ticks=85; publisher 0.1.3-r3-03c; Hermes outcomes.jsonl mirrored. learning_eligible=false because protection_status=pending (exit ~33s before brackets proven).",
         "2026-08-05: Phases A/B/C software merged (PR #72/#73); remaining gate is learning_eligible=true with proven protection + debrief episode. Phase D backfill deferred.",
-        "2026-08-05: PRAC acceptance closed — intents b09b7c1a and d75015ae learning_eligible=true with protection proven; Hermes trade-episodes.jsonl debrief at 17:05:43Z; learning worker canonical_outcomes=2 episodes=3.",
+        "2026-08-05: PRAC acceptance closed \u2014 intents b09b7c1a and d75015ae learning_eligible=true with protection proven; Hermes trade-episodes.jsonl debrief at 17:05:43Z; learning worker canonical_outcomes=2 episodes=3.",
         "docs/specs/TS-R3-03.md"
       ],
       "sources": [
@@ -726,7 +731,7 @@
         "tests/packet-daily-economics.test.ts green.",
         "docs/AUTHORITY.md invariant preserved: no ENTER_* rejection on PnL band."
       ],
-      "stop_line": "Evidence only — no profit lock, guardian auto-flatten, or daily PnL execution gates.",
+      "stop_line": "Evidence only \u2014 no profit lock, guardian auto-flatten, or daily PnL execution gates.",
       "sources": [
         "docs/specs/TS-R3-04.md",
         "src/hermes/packet-builder.ts",
@@ -856,7 +861,7 @@
         "docs/evidence/MULTI-01-02-03-proof-2026-08-20.md",
         "https://github.com/GlitchTrader/glitch-topstep/issues/69"
       ],
-      "implementation_note": "Simulated armed/shadow sessions per MNQ/MES/MCL→MCLE in multi-contract-session.test.ts; PARITY row updated. Live MCL armed trade outcome remains unknown (residual in PARITY.md).",
+      "implementation_note": "Simulated armed/shadow sessions per MNQ/MES/MCL\u2192MCLE in multi-contract-session.test.ts; PARITY row updated. Live MCL armed trade outcome remains unknown (residual in PARITY.md).",
       "last_verified_utc": "2026-08-20T22:40:00Z"
     },
     {
@@ -875,7 +880,7 @@
         "Regression tests; docs/PARITY.md row; docs/specs/TS-R4-07.md.",
         "No ENTER_* rejection on phase or stream_health alone."
       ],
-      "stop_line": "Evidence only — no strategy gates or auto-flatten on maintenance.",
+      "stop_line": "Evidence only \u2014 no strategy gates or auto-flatten on maintenance.",
       "evidence": [
         "src/policy/session-calendar.ts publishes session.phase (regular|maintenance|asia|null) with phase_authority.",
         "src/policy/stream-health.ts buildStreamHealthPacket mirrors quote_age_ms, last_trade_age_ms, trade_count_60s, reconnect_pending.",
@@ -908,10 +913,10 @@
         "Failed protection auditable; operator retry path documented.",
         "docs/specs/TS-R4-08.md and regression tests."
       ],
-      "stop_line": "Factual protection verification only — no hidden strategy on pending state.",
+      "stop_line": "Factual protection verification only \u2014 no hidden strategy on pending state.",
       "evidence": [
-        "src/execution/bracket-verification.ts — 30s timeout, packet protection_status mapping.",
-        "src/execution/receipt-reconciliation.ts — fill_observed_utc, bracket_verification_* events.",
+        "src/execution/bracket-verification.ts \u2014 30s timeout, packet protection_status mapping.",
+        "src/execution/receipt-reconciliation.ts \u2014 fill_observed_utc, bracket_verification_* events.",
         "tests/bracket-verification.test.ts and tests/receipt-reconciliation.test.ts regression coverage.",
         "docs/OPERATIONS.md operator retry on protection_status failed."
       ],
@@ -938,7 +943,7 @@
         "Fields are evidence-only; no ENTER_* rejection on structural or delta alignment alone.",
         "Regression tests and paired profile GTHP-031 consumption."
       ],
-      "stop_line": "Evidence only — no strategy gates on structural alignment or price/delta conflict.",
+      "stop_line": "Evidence only \u2014 no strategy gates on structural alignment or price/delta conflict.",
       "evidence": [
         "src/market/structural-levels.ts",
         "src/market/price-delta-relationship.ts",
@@ -1605,7 +1610,7 @@
         "Depth publishes raw_available and integrity_valid; unavailable depth remains optional_issues only and never blocks state_complete.",
         "Session levels separate available from reliable; session_high/low null with session_levels_reliable true is impossible.",
         "Hermes prompt states lag reduces timing confidence only; flat NOTHING solely for bar lag is forbidden; symmetric scanner ranking uses evidence common to all candidates.",
-        "Flat NOTHING rate and gateway ENTER rejection rate do not regress beyond agreed thresholds after Phase A–C (see spec success metrics)."
+        "Flat NOTHING rate and gateway ENTER rejection rate do not regress beyond agreed thresholds after Phase A\u2013C (see spec success metrics)."
       ],
       "stop_line": "Do not add bar_lag, depth_integrity, or session_levels gaps to execution gates; do not force flat NOTHING or block packets when alignment is imperfect.",
       "implementation_phases": {
@@ -1660,7 +1665,7 @@
             "glitch-topstep",
             "glitch-topstep-hermes-profile"
           ],
-          "gate": "Do not start until Phase A–C stable for five or more sessions"
+          "gate": "Do not start until Phase A\u2013C stable for five or more sessions"
         }
       },
       "success_metrics": {
@@ -1683,7 +1688,7 @@
         "glitch-topstep-hermes-profile:scripts/run-topstep-cycle.py",
         "https://github.com/GlitchTrader/glitch-topstep/issues/171"
       ],
-      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule. 2026-08-24 ops: PACKET_OBSERVATION_STALE_MS aligned to RANKING_FRESHNESS_MAX_SKEW_MS (30s) to close overnight 30–45s skew band; evidence outbox startup await drain to stop listen hang. 2026-08-24 audit: decision_audit per-field max removed (NT parity; body still 64KB); profile no longer truncates audit strings before POST. 2026-08-24 prompt v12: NT-parity compact audit (one evidence-dense sentence per case field; INSTRUMENT_COMPARISON_V1 under 8000 / TRIGGER_REVIEW under 6000).",
+      "implementation_note": "Phases A-C merged (#176, #177, profile #135). Phase D gated by src/market/data-alignment-phase-d-gate.ts and GLITCH_DATA_PHASE_D_STABLE_AFTER_UTC; default off. Session levels P0 paired v11 (#151 profile, #202 gateway). Freshness follow-up merged (#215): token-bucket scheduler, refreshForPacket, candidate_alignment, universe_freshness on scanner packets; profile #169 ranking prompt rule. 2026-08-24 ops: PACKET_OBSERVATION_STALE_MS aligned to RANKING_FRESHNESS_MAX_SKEW_MS (30s) to close overnight 30\u201345s skew band; evidence outbox startup await drain to stop listen hang. 2026-08-24 audit: decision_audit per-field max removed (NT parity; body still 64KB); profile no longer truncates audit strings before POST. 2026-08-24 prompt v12: NT-parity compact audit (one evidence-dense sentence per case field; INSTRUMENT_COMPARISON_V1 under 8000 / TRIGGER_REVIEW under 6000).",
       "last_verified_utc": "2026-08-24T14:30:00Z"
     },
     {
@@ -1722,8 +1727,8 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/184"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100× concurrent refresh test.",
-      "audit_2026_08_31_note": "Re-verified 2026-08-31: single authoritative facade is confirmed done. grep across src/ shows the only `new ProjectXApiClient(` call site is auth-manager.ts:67; src/service.ts:146 consumes exclusively via `authManager.authenticatedClient()`; the 12h timer at src/service.ts:662-666 now calls `authManager.ensureAuthenticated()` (no separate raw client/validation timer remains). Proactive refresh margin (PROJECTX_REFRESH_MARGIN_MS=5min, auth-manager.ts:15,146) and single-flight refresh (auth-manager.ts:80-96, proven by tests/projectx-auth-manager.test.ts:76-88 100x concurrent test) are done. Safe-read retry-once-on-401/403 (withAuthenticatedRead) and no-blind-replay-on-mutation (withAuthenticatedMutation) are done. Auth-degraded new-exposure block is wired and authoritative (src/execution/gateway-mode.ts:143-144 newExposureGate fails closed on auth.degraded, not just safety-supervisor observe-only). Remaining scoped gap: auth-manager.ts refreshSession() has no bounded jittered backoff between refresh attempts (a single failed login/validateSession sets degraded=true and returns immediately; the next ensureAuthenticated() call retries with no delay/jitter) — the resolution list explicitly asked for 'bounded jittered backoff' and it is not present. Keeping open, scoped narrowly to adding backoff/jitter to auth-manager.ts refreshSession's retry path; everything else in the original finding and resolution list is resolved.",
+      "implementation_note": "Wave 1 (#210): AppService uses ProjectXAuthManager.apiClient(); startup ensureAuthenticated(). Residual: expiry margin, new-exposure auth gate, 401/403 integration proof, 100\u00d7 concurrent refresh test.",
+      "audit_2026_08_31_note": "Re-verified 2026-08-31: single authoritative facade is confirmed done. grep across src/ shows the only `new ProjectXApiClient(` call site is auth-manager.ts:67; src/service.ts:146 consumes exclusively via `authManager.authenticatedClient()`; the 12h timer at src/service.ts:662-666 now calls `authManager.ensureAuthenticated()` (no separate raw client/validation timer remains). Proactive refresh margin (PROJECTX_REFRESH_MARGIN_MS=5min, auth-manager.ts:15,146) and single-flight refresh (auth-manager.ts:80-96, proven by tests/projectx-auth-manager.test.ts:76-88 100x concurrent test) are done. Safe-read retry-once-on-401/403 (withAuthenticatedRead) and no-blind-replay-on-mutation (withAuthenticatedMutation) are done. Auth-degraded new-exposure block is wired and authoritative (src/execution/gateway-mode.ts:143-144 newExposureGate fails closed on auth.degraded, not just safety-supervisor observe-only). Remaining scoped gap: auth-manager.ts refreshSession() has no bounded jittered backoff between refresh attempts (a single failed login/validateSession sets degraded=true and returns immediately; the next ensureAuthenticated() call retries with no delay/jitter) \u2014 the resolution list explicitly asked for 'bounded jittered backoff' and it is not present. Keeping open, scoped narrowly to adding backoff/jitter to auth-manager.ts refreshSession's retry path; everything else in the original finding and resolution list is resolved.",
       "closure_note": "Fixed 2026-08-31 (plano-completo Fase 2.7.3). The one remaining gap from the earlier re-verification (facade consolidation was already done) is closed: refreshSession() in src/projectx/auth-manager.ts now waits a bounded, jittered backoff (projectXAuthBackoffDelayMs: 1s base, doubling per consecutive failure, capped at 30s, +0-25% jitter) before retrying after a failed login/validate, so a persistent auth outage cannot turn every caller's ensureAuthenticated() into a tight retry loop against ProjectX's auth endpoint. Single-flight coalescing (refreshInFlight) is unchanged; no mutation retry is added; the lifetime refreshFailureCount surfaced in invariant_metrics.auth_refresh_failures is preserved across recovery (a separate consecutive-failure counter drives backoff staging, deliberately not conflated with the diagnostic lifetime count). Tests: tests/projectx-auth-manager.test.ts, backoff bounds/monotonicity and lifetime-count preservation through a real HTTP server. npm run check green, 516/516."
     },
     {
@@ -1808,7 +1813,7 @@
         "https://github.com/GlitchTrader/glitch-topstep/issues/186"
       ],
       "pull_request": 210,
-      "implementation_note": "Wave 1 (#210): flattenControlPhaseAfterReceipt requires ownWorkingOrders===0 on fallback branch; table-driven receipt tests. Residual: restart fixtures, full receipt×venue matrix, phase deadline persistence.",
+      "implementation_note": "Wave 1 (#210): flattenControlPhaseAfterReceipt requires ownWorkingOrders===0 on fallback branch; table-driven receipt tests. Residual: restart fixtures, full receipt\u00d7venue matrix, phase deadline persistence.",
       "closure_note": "audit_2026_08_31: Re-verified the exact reproduced scenario (closed/flat/one residual owned order). src/control/flatten-control-saga.ts:36-40 (the fallback branch reached by any receiptStatus outside the special-cased sets, e.g. closed/ignored/unknown) now requires venue.ownWorkingOrders===0 in addition to instrumentOpenContracts===0 and stateComplete before returning 'completed' -- symmetric with the early-return branch at lines 22-28. Wired into production (not a dangling extraction): src/service.ts:837,1063,1114 call resolveFlattenAfterReceipt/resolveFlattenAfterRestart/shouldCompletePendingFlatten from src/service/flatten-workflow.ts, which delegate to flattenControlPhaseAfterReceipt. Directly regression-tested: tests/flatten-saga.test.ts:56-64 ('does not complete on closed receipt with residual owned working orders (TS-REAUDIT-03)') asserts phase stays 'waiting_for_flat' for receiptStatus='closed' with ownWorkingOrders=1, plus a table-driven terminality test at lines 66-86 covering submitted/accepted/open_protected/closed -> completed and rejected/shadowed/ambiguous -> manual_intervention_required. npm run check green (492/492) on 2026-08-31 audit pass. Residual acceptance items not required for this specific finding (restart fixtures beyond flatten-workflow.test.ts, full receipt x venue cross-product, phase-deadline persistence) remain legitimate but are scope creep beyond the reproduced bug; if wanted, open as a new low-priority follow-up rather than reopening this P0 finding."
     },
     {
@@ -1924,7 +1929,7 @@
       ],
       "pull_request": 210,
       "implementation_note": "Wave 1 (#210): unprotected_since_utc persisted in execution store; invariant metrics prefer truthful duration. Residual: supervisor authority promotion, gate parity soak, per-invariant owners.",
-      "audit_2026_08_31_note": "Re-verified 2026-08-31. Resolution item 1 (persist unprotected_since_utc) is genuinely wired end to end: SqliteExecutionStore.updateUnprotectedSince/unprotectedSinceUtc (src/storage/sqlite-execution-store.ts:1041-1053) is called every /health cycle from src/service.ts:542-545 and fed into buildInvariantMetrics (src/service.ts:570), which prefers the persisted since-time over ambiguous_age_ms (src/observability/invariant-metrics.ts:47-57). Resolution item 3 (compare reason-level supervisor vs execution-gate decisions and alert on divergence) is also done: evaluateSafetySupervisor computes gate_divergence_detail (src/safety/safety-supervisor.ts:95-102), it flows into invariant_metrics.supervisor_gate_divergence (src/service.ts:572, src/observability/invariant-metrics.ts:71), and buildHealthAlerts fires a warning-severity supervisor_gate_divergence alert on it (src/observability/health-alerts.ts:39-45). Resolution items 2 (authoritative owner/gate contract per invariant) and 4 (promote invariants individually) are NOT done: the invariants array (src/safety/safety-supervisor.ts:67-85) carries no owner/contract metadata, and evaluateSafetySupervisor unconditionally returns mode: 'observe' (src/safety/safety-supervisor.ts:21-22 comment, 104-105 return) with no code path that ever promotes it — the supervisor never blocks anything on its own today, only computes what it would do and reports agreement/divergence. Doc-vs-code check: GATEWAY-SPEC.md:220 claims /health exposes 'safety_supervisor (aligned with execution gates)' — this is accurate as a field-content description (it does expose agrees_with_execution_gates/gate_divergence_detail) and is not a factual contradiction, but the doc nowhere states the supervisor is advisory-only/observe-mode, which the code comment (safety-supervisor.ts:21) is explicit about. Readers of GATEWAY-SPEC.md alone could reasonably believe the supervisor is authoritative; recommend a one-line addition to GATEWAY-SPEC.md's /health section noting observe-only status, out of scope for this pass. Remaining scoped work to close TS-REAUDIT-06: (a) per-invariant owner + gate-contract table, (b) a shadow soak measuring supervisor/execution-gate divergence rate over time, (c) an actual promotion mechanism so mode can move beyond 'observe' for individually-proven invariants. Staying open/P1 — this is a replan, not a close."
+      "audit_2026_08_31_note": "Re-verified 2026-08-31. Resolution item 1 (persist unprotected_since_utc) is genuinely wired end to end: SqliteExecutionStore.updateUnprotectedSince/unprotectedSinceUtc (src/storage/sqlite-execution-store.ts:1041-1053) is called every /health cycle from src/service.ts:542-545 and fed into buildInvariantMetrics (src/service.ts:570), which prefers the persisted since-time over ambiguous_age_ms (src/observability/invariant-metrics.ts:47-57). Resolution item 3 (compare reason-level supervisor vs execution-gate decisions and alert on divergence) is also done: evaluateSafetySupervisor computes gate_divergence_detail (src/safety/safety-supervisor.ts:95-102), it flows into invariant_metrics.supervisor_gate_divergence (src/service.ts:572, src/observability/invariant-metrics.ts:71), and buildHealthAlerts fires a warning-severity supervisor_gate_divergence alert on it (src/observability/health-alerts.ts:39-45). Resolution items 2 (authoritative owner/gate contract per invariant) and 4 (promote invariants individually) are NOT done: the invariants array (src/safety/safety-supervisor.ts:67-85) carries no owner/contract metadata, and evaluateSafetySupervisor unconditionally returns mode: 'observe' (src/safety/safety-supervisor.ts:21-22 comment, 104-105 return) with no code path that ever promotes it \u2014 the supervisor never blocks anything on its own today, only computes what it would do and reports agreement/divergence. Doc-vs-code check: GATEWAY-SPEC.md:220 claims /health exposes 'safety_supervisor (aligned with execution gates)' \u2014 this is accurate as a field-content description (it does expose agrees_with_execution_gates/gate_divergence_detail) and is not a factual contradiction, but the doc nowhere states the supervisor is advisory-only/observe-mode, which the code comment (safety-supervisor.ts:21) is explicit about. Readers of GATEWAY-SPEC.md alone could reasonably believe the supervisor is authoritative; recommend a one-line addition to GATEWAY-SPEC.md's /health section noting observe-only status, out of scope for this pass. Remaining scoped work to close TS-REAUDIT-06: (a) per-invariant owner + gate-contract table, (b) a shadow soak measuring supervisor/execution-gate divergence rate over time, (c) an actual promotion mechanism so mode can move beyond 'observe' for individually-proven invariants. Staying open/P1 \u2014 this is a replan, not a close."
     },
     {
       "id": "TS-REAUDIT-07",
@@ -2179,7 +2184,7 @@
     },
     {
       "id": "TS-STREAM-RECOVERY-01",
-      "title": "ProjectX stream recovery — hub liveness vs execution quality",
+      "title": "ProjectX stream recovery \u2014 hub liveness vs execution quality",
       "status": "in_progress",
       "priority": "P0",
       "owner_role": "projectx_integration",
@@ -2190,14 +2195,14 @@
       "resolution": [
         "Separate hub_liveness (any market event + SignalR state) from execution_quality (quote freshness, geometry, contract match).",
         "Debounce liveness restarts; recovery_generation; HubRecoveryController per hub (market first).",
-        "Serial reconnect pipeline: resubscribe → reconcile → observation → history.",
+        "Serial reconnect pipeline: resubscribe \u2192 reconcile \u2192 observation \u2192 history.",
         "Transport-error retry with global deadline for idempotent reads; reconcile cheap cycle (positions/orders).",
         "Health recovery progress fields; watchdog kills only on stale progress past deadline.",
         "Scheduler and persistence optimization in follow-up PRs after 72h PRAC soak."
       ],
       "acceptance": [
         "market_liveness_restart drops >80% in stable RTH over 24h after PR-A/B.",
-        "market_restart_failed ≈0 when any_market_event_recent.",
+        "market_restart_failed \u22480 when any_market_event_recent.",
         "Watchdog restarts <1/hour RTH outside maintenance; causes tagged in log.",
         "/health p95 <500ms when status=ok.",
         "ENTER gates unchanged: quote_stale and state_complete still block new exposure.",
@@ -2217,8 +2222,8 @@
         "data/gateway-watchdog.log",
         "https://gateway.docs.projectx.com/docs/realtime/"
       ],
-      "implementation_note": "Plan authored 2026-08-27 from operational flap 2026-08-26 EDT + code audit. PR order: A hub/debounce → B recovery controller → C retry → D serial reconnect → E watchdog progress → soak 72h → F–H scheduler/persistence. Do not use GLITCH_STREAM_LIVENESS_MS=60000 in armed without controlled experiment. PR-A–E implemented 2026-08-27 locally; pending 72h PRAC soak for acceptance.",
-      "audit_2026_08_31_note": "Confirmed 2026-08-31: no docs/evidence/PRAC-SOAK-2026-08-27* or later file exists (docs/evidence/ only has PRAC-SOAK-2026-08-21-single-active-position.md and PRAC-SOAK-2026-08-25-post-audit-wave.md) -- the 72h PRAC soak this item's own acceptance criteria requires was never run. A fresh flapping recurrence occurred 2026-08-31 (61 restarts). This recurrence is evidence the soak gate was correctly withheld: PR-A-E were 'implemented, not proven,' and shipping them to continuous unattended autostart before the soak completed would not have caught this regression either. Do not close this item and do not treat PR-A-E as sufficient. PR-F (scheduler unification replacing the 4 independent timers) was never started: src/projectx/rest-concurrency.ts:1 still carries the exact comment 'ponytail: global REST gate — upgrade path is priority scheduler (PR-F)' and RestConcurrencyGate (rest-concurrency.ts:2-19) remains a simple counting semaphore with a FIFO waiter queue, not a priority scheduler; no other file in src/ references PR-F. The 4 timers PR-F is meant to unify are confirmed still independent and uncoordinated in src/service.ts: reconcile every this.config.reconcileIntervalMs (default 3000ms via GLITCH_RECONCILE_INTERVAL_MS, src/config.ts:474), set up at src/service.ts:457-462; history sync every this.historySyncIntervalMs (default 60_000ms, src/service.ts:83/189, src/config.ts:293), set up at src/service.ts:467-472; market observation every MARKET_OBSERVATION_REFRESH_MS=60_000 (src/service.ts:85), set up at src/service.ts:480-483; order flow every ORDER_FLOW_REFRESH_MS=10_000 (src/service.ts:88), set up at src/service.ts:488-491. Each is its own unref'd setInterval with no shared scheduler, no priority ordering, and no coordination with the others or with REST concurrency pressure. PR-G (adaptive reconcile) and PR-H (persistence/health tuning for DB ~500MB+) were also never started -- no references anywhere in src/. Status stays in_progress; remaining work is unchanged in scope (72h PRAC soak, then PR-F/G/H) but now has direct 2026-08-31 evidence that skipping the soak gate would have been the wrong call.",
+      "implementation_note": "Plan authored 2026-08-27 from operational flap 2026-08-26 EDT + code audit. PR order: A hub/debounce \u2192 B recovery controller \u2192 C retry \u2192 D serial reconnect \u2192 E watchdog progress \u2192 soak 72h \u2192 F\u2013H scheduler/persistence. Do not use GLITCH_STREAM_LIVENESS_MS=60000 in armed without controlled experiment. PR-A\u2013E implemented 2026-08-27 locally; pending 72h PRAC soak for acceptance.",
+      "audit_2026_08_31_note": "Confirmed 2026-08-31: no docs/evidence/PRAC-SOAK-2026-08-27* or later file exists (docs/evidence/ only has PRAC-SOAK-2026-08-21-single-active-position.md and PRAC-SOAK-2026-08-25-post-audit-wave.md) -- the 72h PRAC soak this item's own acceptance criteria requires was never run. A fresh flapping recurrence occurred 2026-08-31 (61 restarts). This recurrence is evidence the soak gate was correctly withheld: PR-A-E were 'implemented, not proven,' and shipping them to continuous unattended autostart before the soak completed would not have caught this regression either. Do not close this item and do not treat PR-A-E as sufficient. PR-F (scheduler unification replacing the 4 independent timers) was never started: src/projectx/rest-concurrency.ts:1 still carries the exact comment 'ponytail: global REST gate \u2014 upgrade path is priority scheduler (PR-F)' and RestConcurrencyGate (rest-concurrency.ts:2-19) remains a simple counting semaphore with a FIFO waiter queue, not a priority scheduler; no other file in src/ references PR-F. The 4 timers PR-F is meant to unify are confirmed still independent and uncoordinated in src/service.ts: reconcile every this.config.reconcileIntervalMs (default 3000ms via GLITCH_RECONCILE_INTERVAL_MS, src/config.ts:474), set up at src/service.ts:457-462; history sync every this.historySyncIntervalMs (default 60_000ms, src/service.ts:83/189, src/config.ts:293), set up at src/service.ts:467-472; market observation every MARKET_OBSERVATION_REFRESH_MS=60_000 (src/service.ts:85), set up at src/service.ts:480-483; order flow every ORDER_FLOW_REFRESH_MS=10_000 (src/service.ts:88), set up at src/service.ts:488-491. Each is its own unref'd setInterval with no shared scheduler, no priority ordering, and no coordination with the others or with REST concurrency pressure. PR-G (adaptive reconcile) and PR-H (persistence/health tuning for DB ~500MB+) were also never started -- no references anywhere in src/. Status stays in_progress; remaining work is unchanged in scope (72h PRAC soak, then PR-F/G/H) but now has direct 2026-08-31 evidence that skipping the soak gate would have been the wrong call.",
       "audit_2026_08_31_pr_fgh_note": "PR-F/G/H implemented 2026-08-31 (plano-completo Fase 3, at the user's explicit request despite the size/risk, since the 72h soak can't be run by this session either way -- STILL UNSOAKED, do not treat as trusted for continuous armed operation). PR-F: src/service/task-scheduler.ts (new, 7 unit tests) -- a TaskScheduler coordinates the four previously fully-independent setInterval callbacks (reconcile, market observation, order flow, history sync). Each timer keeps its exact original cadence; the scheduler only bounds concurrency (maxConcurrent=2), enforces priority order (critical_reconcile > market_recovery > market_observation > order_flow > history_sync), coalesces duplicate pending requests by id, and has a starvation guard (a task past its own deadline is promoted ahead of nominally higher-priority newcomers). Wired into AppService via a persistent instance; counts exposed at /health task_scheduler; hooked into shutdown's waitForIdle drain. Does not touch quote_stale/state_complete entry gates. PR-G: investigation found the 'cheap vs full reconcile cycle' ask was already implemented (shouldReconcileMetadata/RECONCILE_METADATA_INTERVAL_MS predate this session). Added the one genuine gap: bounded jittered backoff on repeated reconcile failures (reuses the already-tested projectXAuthBackoffDelayMs from TS-REAUDIT-01 -- generic despite the name), so a persistent ProjectX outage can't turn the reconcile timer into a tight failure loop. NOT implemented: 'higher frequency during recovery' -- judged too invasive to the core reconcile timing to add safely in this pass; left for a dedicated change. PR-H: added persistence_bytes (per-store SQLite file size via fs.statSync, never throws), heap_used_bytes (process.memoryUsage().heapUsed), and health_build_ms (wall-clock time to build the /health response) to the /health payload. Did NOT instrument SQLite-internal latency/busy-lock/fsync timing -- that needs wrapping every prepare()/run() call across many files, a materially larger and more invasive change than this pass's risk budget allowed. Testability note: TaskScheduler is fully unit-tested in isolation (pure class, injectable clock). The reconcile-backoff wiring and persistenceSizeBytes() are NOT independently unit-tested -- AppService has no test harness anywhere in this repo (nothing constructs it directly; it wires SignalR/SQLite/HTTP), so this specific glue code relies on the full npm run check suite (532/532 green) plus manual code review, not a dedicated test. 72h PRAC soak remains the sole path to trusting any of this under continuous armed operation -- unchanged from the ticket's existing acceptance criteria.",
       "post_review_note": "2026-08-31, same session: an external post-implementation review correctly found that the first PR-F commit only routed the four periodic setInterval timers through TaskScheduler -- handleHubReconnected (the post-reconnect recovery pipeline, the EXACT scenario PR-F exists to fix) still called reconcile/refreshMarketObservations/orderFlow.refresh/historySync.sync directly, fully bypassing the scheduler. Fixed: TaskScheduler.enqueue() now returns the task's own result as a promise (was void/fire-and-forget), so handleHubReconnected awaits each step through the scheduler at 'market_recovery' priority using the SAME task ids as the periodic timers -- a concurrent periodic tick and a recovery run wanting the same work now coalesce into one REST call. Coalescing also upgrades a queued task to the best priority any waiting caller asked for. 6 new tests cover this. Also fixed a related bug the API change surfaced: two fire-and-forget periodic call sites needed an explicit .catch() to avoid an unhandled promise rejection once enqueue() started returning a promise. See commit faae372.",
       "post_review_note_2": "Second review round, 2026-08-31 same session. Terminology correction: PR-F is precisely a COORDINATED DISPATCH LAYER, not a replacement of the timer trigger sources. The four setInterval calls (and the reconnect event) still independently decide WHEN to request work; TaskScheduler decides the ORDER and CONCURRENCY of the resulting REST-bound execution. If a fully centralized trigger source (a single scheduler owning cadence too, not just dispatch) is later judged necessary, that is materially more invasive and explicitly out of scope for this pass. Coalescing-vs-running-task behavior is now an explicit, tested, documented decision (queued-only coalescing; a same-id request during an in-flight run gets a fresh sequential run, never a stale shared result) -- see TaskScheduler's class doc and tests/task-scheduler.test.ts. Added one real disk fault case (SQLite busy/lock contention, tests/sqlite-busy-fault.test.ts) confirming contention is a catchable, recoverable condition against the real driver and pragmas -- ENOSPC and corruption remain unattempted. Still genuinely missing, unchanged: an AppService-level integration test exercising the real timer objects + handleHubReconnected + TaskScheduler together (periodic tick, reconnect, coalescing across both, task failure, a second recovery generation, shutdown mid-task) -- AppService has no test harness in this repo and building one is a separate, larger undertaking than this session's remaining scope. PR-H runtime instrumentation (SQLite internal write/fsync latency, not just the fault-injection proof added here) also remains unimplemented, as previously noted."
@@ -2229,10 +2234,10 @@
       "status": "done",
       "priority": "P0",
       "owner_role": "execution_safety",
-      "finding": "resolveProtectiveLeg/bindProtection (src/ownership/protection.ts:98-128,177-240) and evaluateProtectionHealth (src/execution/protection-supervisor.ts:33-38) check only providerOrderId!==null and order.type, never order.status or price-nullness. ProjectX's undocumented status:8 (suspended bracket child, awaiting entry fill, no price yet) therefore satisfies 'proven'/'stopCovered' with price:null. receipt-reconciliation.ts:97-127 can mark protection_status:'confirmed' off this. Reachable in production via the scale-in path (src/ownership/scale-in.ts + coordinator.ts:348-357: a new bracketed MARKET entry while already positioned creates a fresh status-8 window). Currently masked only because entries are MARKET-only (~8ms observed window, coordinator.ts:351 hardcodes type:2) — see also TS-AUDIT31-EX-02, same root cause.",
+      "finding": "resolveProtectiveLeg/bindProtection (src/ownership/protection.ts:98-128,177-240) and evaluateProtectionHealth (src/execution/protection-supervisor.ts:33-38) check only providerOrderId!==null and order.type, never order.status or price-nullness. ProjectX's undocumented status:8 (suspended bracket child, awaiting entry fill, no price yet) therefore satisfies 'proven'/'stopCovered' with price:null. receipt-reconciliation.ts:97-127 can mark protection_status:'confirmed' off this. Reachable in production via the scale-in path (src/ownership/scale-in.ts + coordinator.ts:348-357: a new bracketed MARKET entry while already positioned creates a fresh status-8 window). Currently masked only because entries are MARKET-only (~8ms observed window, coordinator.ts:351 hardcodes type:2) \u2014 see also TS-AUDIT31-EX-02, same root cause.",
       "resolution": [
         "Capture order.status alongside providerOrderId/type in protective-leg matching.",
-        "Treat status:8 as 'allocated, not yet priced' — a distinct state from proven/stopCovered, not a match failure and not a proof.",
+        "Treat status:8 as 'allocated, not yet priced' \u2014 a distinct state from proven/stopCovered, not a match failure and not a proof.",
         "Add a regression test: status:8 child present, price:null, must not be reported as proven protection."
       ],
       "acceptance": [
@@ -2247,7 +2252,7 @@
         "src/execution/coordinator.ts",
         "docs/PROJECTX-API-REFERENCE.md (section 4, D2)"
       ],
-      "implementation_note": "Found during 2026-08-31 full-repo audit (docs/plans -> see docs/AUDIT-2026-08-31.md). Confirmed a real, structurally-wrong check (not a false positive) by direct code read; currently masked by MARKET-only entries, not proof it can't fire — scale-in already exercises the adjacent code path with a position already open.",
+      "implementation_note": "Found during 2026-08-31 full-repo audit (docs/plans -> see docs/AUDIT-2026-08-31.md). Confirmed a real, structurally-wrong check (not a false positive) by direct code read; currently masked by MARKET-only entries, not proof it can't fire \u2014 scale-in already exercises the adjacent code path with a position already open.",
       "closure_note": "Fixed 2026-08-31 (plano-completo Fase 1.6.1). bindProtection (src/ownership/protection.ts) now flags a leg with providerOrderId+correct type but price:null as 'stop_leg_unpriced'/'target_leg_unpriced' -> status stays 'pending', never 'proven'. evaluateProtectionHealth (src/execution/protection-supervisor.ts) requires price!==null for stopCovered, so unprotected_open_quantity correctly counts a suspended (status:8) leg as unprotected. All downstream consumers (receipt-reconciliation.ts, coordinator.ts, lifecycle-facts.ts, trade-outcome-flat.ts) read protection.status and are fixed automatically. Tests: tests/protection.test.ts (unpriced leg not proven, distinguishable reason, confirms once priced), tests/protection-supervisor.test.ts (unprotected_open_quantity=1 for suspended leg). npm run check green, 495/495."
     },
     {
@@ -2256,7 +2261,7 @@
       "status": "done",
       "priority": "P1",
       "owner_role": "execution_safety",
-      "finding": "openOrdersEvidence (src/ownership/projectx-order-ownership.ts:330-349) builds its authoritative order set purely from REST open_orders_snapshot (Order/searchOpen) history, which ProjectX never populates with status:8 (suspended bracket child) rows (confirmed: docs/PROJECTX-API-REFERENCE.md section 5.3, zero occurrences across the recorded dataset). Between order placement and entry fill, a freshly-allocated bracket is real (has orderId, parentOrderId, tick distance) but invisible to REST reconciliation — only the SignalR stream sees it in that window. A process restart or stream loss during that window makes protection state genuinely unknowable via REST alone. Currently bounded to ~8ms because entries are MARKET-only (coordinator.ts:351 hardcodes type:2); would become a real multi-second/minute exposure window immediately on any move to LIMIT/STOP entries.",
+      "finding": "openOrdersEvidence (src/ownership/projectx-order-ownership.ts:330-349) builds its authoritative order set purely from REST open_orders_snapshot (Order/searchOpen) history, which ProjectX never populates with status:8 (suspended bracket child) rows (confirmed: docs/PROJECTX-API-REFERENCE.md section 5.3, zero occurrences across the recorded dataset). Between order placement and entry fill, a freshly-allocated bracket is real (has orderId, parentOrderId, tick distance) but invisible to REST reconciliation \u2014 only the SignalR stream sees it in that window. A process restart or stream loss during that window makes protection state genuinely unknowable via REST alone. Currently bounded to ~8ms because entries are MARKET-only (coordinator.ts:351 hardcodes type:2); would become a real multi-second/minute exposure window immediately on any move to LIMIT/STOP entries.",
       "resolution": [
         "Document the ~8ms MARKET-only bound explicitly as a load-bearing safety assumption, not an implementation detail.",
         "Gate any future LIMIT/STOP entry support behind closing this blind spot (e.g. treat the place-to-fill window as an explicit non-reconcilable interval requiring stream health, not REST, as the sole truth source).",
@@ -2296,7 +2301,7 @@
         "src/projectx/client.ts",
         "docs/plans/2026-08-27-stream-recovery-implementation-plan.md"
       ],
-      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Design question flagged for discussion, not applied — touches live reconnect/reconciliation control flow.",
+      "implementation_note": "Found during 2026-08-31 full-repo audit (see docs/AUDIT-2026-08-31.md). Design question flagged for discussion, not applied \u2014 touches live reconnect/reconciliation control flow.",
       "closure_note": "Fixed 2026-08-31 (plano-completo Fase 2.7.2). src/projectx/read-circuit-breaker.ts now keys failure/cooldown state per endpoint family (readEndpointFamily: bars, positions, orders, trades, accounts, contracts, auth, other) instead of one process-wide counter. A failure burst on retrieveBars (tight 50req/30s budget, most likely to fail under reconnect-storm load per the 2026-08-27/31 flapping investigation) can no longer trip the breaker for reconciliation-critical positions/orders/accounts reads. Added status() for per-family cooldown observability (not yet wired into /health -- small, low-risk follow-up). Tests: tests/read-circuit-breaker.test.ts, 7 cases covering isolation, per-family threshold/cooldown, mutation exclusion, and status observability. npm run check green."
     }
   ],
