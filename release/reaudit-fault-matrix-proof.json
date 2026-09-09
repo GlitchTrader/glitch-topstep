@@ -1,7 +1,7 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-09-09T18:36:37.976Z",
-  "gateway_commit": "3b75119f66f29b0d866ac32cd7a15e33346ac268",
+  "recorded_utc": "2026-09-09T20:39:17.075Z",
+  "gateway_commit": "d4ac84a3a19cad82a34b25d8c15309cc1f41f04f",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
@@ -84,7 +84,7 @@
       "sha256": "42f9b7d77b6ccba659606573794e97d31aea1cbc0c4205ba78d96f1b28ce9be4"
     }
   ],
-  "profile_commit": "2588ea964fdf4c2a2e78eb4c8b72cdaf8851376f",
+  "profile_commit": "a7e4526e56e81ddd60ebb0d2955d592f327c349f",
   "profile_proofs": [
     {
       "file": "tests/test_fault_injection.py",
