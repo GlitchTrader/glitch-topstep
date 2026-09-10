@@ -3,6 +3,8 @@
  * Must not bump operational.generation or fake market_stream reconnect invalidation.
  */
 
+import type { SanitizedQuoteEventDiagnostic } from "./quote-reject-diagnostics.js";
+
 export const QUOTE_BBO_INCOMPLETE = "quote_bbo_incomplete";
 
 export function isQuoteBboIncompleteError(error: unknown): boolean {
@@ -20,6 +22,17 @@ export function contractIdFromQuoteRawPayload(rawPayload: unknown): string | nul
   return typeof contractId === "string" && contractId.length > 0 ? contractId : null;
 }
 
+export function diagnosticFromQuoteError(error: unknown): SanitizedQuoteEventDiagnostic | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const diagnostic = (error as { diagnostic?: unknown }).diagnostic;
+  if (!diagnostic || typeof diagnostic !== "object") {
+    return null;
+  }
+  return diagnostic as SanitizedQuoteEventDiagnostic;
+}
+
 /** Bounded stderr telemetry — one line per window, with suppressed count. */
 export class RateLimitedQuoteBboIncompleteLog {
   private lastLogMs = 0;
@@ -34,14 +47,28 @@ export class RateLimitedQuoteBboIncompleteLog {
     },
   ) {}
 
-  record(error: unknown): { emitted: boolean; total: number; suppressed: number } {
+  record(
+    error: unknown,
+    diagnostic?: SanitizedQuoteEventDiagnostic | null,
+  ): { emitted: boolean; total: number; suppressed: number } {
     this.total += 1;
     const now = this.now();
     const due = this.lastLogMs === 0 || now - this.lastLogMs >= this.windowMs;
     if (due) {
+      const diag = diagnostic ?? diagnosticFromQuoteError(error);
+      const diagPart = diag
+        ? ` kind=${diag.snapshot_or_partial}`
+          + ` bid=${diag.bid_presence} ask=${diag.ask_presence} last=${diag.last_presence}`
+          + ` contract=${diag.contract_id ?? "null"}`
+          + ` gen=${diag.reconnect_generation}`
+          + ` hash=${diag.structural_hash}`
+          + ` ts=${diag.last_updated ?? diag.timestamp ?? "null"}`
+          + ` seq=${diag.sequence_or_update_id ?? "none"}`
+        : "";
       const line =
         `Rejected ProjectX realtime quote (${QUOTE_BBO_INCOMPLETE}) `
-        + `total=${this.total} suppressed_since_last_log=${this.suppressed}`;
+        + `total=${this.total} suppressed_since_last_log=${this.suppressed}`
+        + diagPart;
       this.write(line, error);
       this.lastLogMs = now;
       this.suppressed = 0;

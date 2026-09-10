@@ -22,7 +22,6 @@ import {
   parseMarketTrade,
   parseOrder,
   parsePosition,
-  parseQuote,
   parseTrade,
   unwrapMarketStreamArgs,
   unwrapUserStreamPayload,
@@ -30,9 +29,12 @@ import {
 } from "./schemas.js";
 import {
   contractIdFromQuoteRawPayload,
+  diagnosticFromQuoteError,
   isQuoteBboIncompleteError,
+  QUOTE_BBO_INCOMPLETE,
   RateLimitedQuoteBboIncompleteLog,
 } from "./quote-bbo-fault.js";
+import { QuoteBboAssembler } from "./quote-bbo-assembler.js";
 import {
   DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES,
   DEFAULT_HUB_START_TIMEOUT_MS,
@@ -114,6 +116,7 @@ export class ProjectXRealtimeClient {
     market: 0,
   };
   private readonly quoteBboIncompleteLog = new RateLimitedQuoteBboIncompleteLog();
+  private readonly quoteBboAssembler = new QuoteBboAssembler();
 
   public constructor(
     private readonly options: ProjectXRealtimeOptions,
@@ -257,7 +260,29 @@ export class ProjectXRealtimeClient {
         "market",
         "quote",
         { contractId, payload: input },
-        () => parseQuote(contractId, input),
+        () => {
+          const generation = this.state.operationalStatus().generation;
+          const receivedMs = this.options.now?.() ?? Date.now();
+          const assembled = this.quoteBboAssembler.ingest({
+            contractId,
+            payload: input,
+            reconnectGeneration: generation,
+            receivedMs,
+          });
+          if (
+            assembled.quote
+            && (assembled.status === "ready"
+              || assembled.status === "locked"
+              || assembled.status === "crossed")
+          ) {
+            return assembled.quote;
+          }
+          const error = new Error(QUOTE_BBO_INCOMPLETE) as Error & {
+            diagnostic?: typeof assembled.diagnostic;
+          };
+          error.diagnostic = assembled.diagnostic;
+          throw error;
+        },
         (value) => ({
           accountId: null,
           contractId: value.contractId,
@@ -567,7 +592,7 @@ export class ProjectXRealtimeClient {
         const contractId =
           contractIdFromQuoteRawPayload(rawPayload) ?? this.options.contractId;
         this.state.markQuoteBboIncomplete(contractId, error);
-        this.quoteBboIncompleteLog.record(error);
+        this.quoteBboIncompleteLog.record(error, diagnosticFromQuoteError(error));
         return;
       }
       this.payloadFault(kind, error, kind === "user" ? { eventType, rawPayload } : undefined);
