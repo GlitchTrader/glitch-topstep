@@ -1,12 +1,12 @@
 {
   "schema_version": "glitch.topstep.paired_release.v1",
-  "created_utc": "2026-09-10T00:45:03.011Z",
+  "created_utc": "2026-09-10T00:45:50.854Z",
   "immutable": true,
   "armed_promotion_requires_human_approval": true,
-  "pair_digest": "8a70f504200410cd73acdbb5e1a79b68ca802184f5d4efaffe3c819931e4d24d",
+  "pair_digest": "20d4701ab9be7badd3c367c8f9b24e9c8ce9a2b118006abb5bccbcff13033f57",
   "gateway": {
     "repository": "GlitchTrader/glitch-topstep",
-    "commit": "bd07123c57c5c12bacd72ef1c03bcb85ba7abd14",
+    "commit": "93baf19be6c2f80d7e2bb3a83425221fb15a2eb4",
     "version": "0.2.6",
     "package_lock_sha256": "9ecdf559b07b7f064f7c84a089262890a3dc72bff0080ec53cbc74ed2639e27b"
   },
