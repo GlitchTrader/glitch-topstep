@@ -1,9 +1,29 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-09-09T15:09:58Z",
+  "updated": "2026-09-10T00:57:30Z",
   "release_target": "beta",
   "reconciliation": {
+    "quote_bbo_delta_assembler_2026_09_09": {
+      "status": "merged",
+      "gateway_pr": 281,
+      "gateway_commit": "5bd979f24f68e5a23ea8bad31ef1fc7ce5500be7",
+      "decision": "B",
+      "summary": "Per-contract QuoteBboAssembler normalizes ProjectX incremental bid/ask GatewayQuote deltas (TTL 5s; clear on reconnect/generation/timestamp regression). Never fabricates BBO from last; fail-closed for locked/crossed/missing/stale.",
+      "evidence": [
+        "docs/evidence/quote-missing-root-cause-2026-09-09.json",
+        "docs/evidence/quote-bbo-assembler-release-offline/paired-release.json",
+        "docs/evidence/quote-bbo-assembler-release-offline/SHA256SUMS"
+      ],
+      "checks": {
+        "npm_run_check_clean_checkout": "pass_658_at_5bd979f",
+        "ci": "pass",
+        "security_reviewer": "pass",
+        "paired_contract_byte_identical": true
+      },
+      "package_gateway_commit": "5bd979f24f68e5a23ea8bad31ef1fc7ce5500be7",
+      "package_lock_sha256": "9ecdf559b07b7f064f7c84a089262890a3dc72bff0080ec53cbc74ed2639e27b"
+    },
     "date": "2026-08-24",
     "entry_delivery_drift_prompt_v15": {
       "status": "implemented_local",
