@@ -1,0 +1,66 @@
+{
+  "schema_version": "glitch.topstep.quote_missing_root_cause.v1",
+  "decided_at": "2026-09-10T00:40:00Z",
+  "decision": "B",
+  "decision_label": "parser_discarding_incremental_updates",
+  "not": ["A_provider_never_provides_bbo", "C_wrong_subscription_contract", "D_other"],
+  "evidence": {
+    "live_v2_20260909_projectx_evidence": {
+      "path": "%LOCALAPPDATA%/glitch-topstep/live-v2-20260909/projectx-evidence.sqlite",
+      "quote_events": 105937,
+      "raw_shapes_bid_ask_last": {
+        "set_set_miss": 44166,
+        "set_set_set": 32142,
+        "set_miss_miss": 12553,
+        "miss_set_miss": 12121,
+        "set_miss_set": 2619,
+        "miss_set_set": 2330,
+        "miss_miss_set": 6
+      },
+      "partial_missing_side": 29629,
+      "note": "Keys omitted (miss), not JSON null. No provider sequence/update id fields observed."
+    },
+    "quote_state_live_v2_20260909": {
+      "stderr_quote_bbo_incomplete": 7472,
+      "accepted_quotes_only_complete_bbo": true,
+      "generation_max": 6622,
+      "note": "After quote_state_v1, partials are rejected before evidence append; only complete BBO recorded."
+    },
+    "contracts_observed": [
+      "CON.F.US.MNQ.U26",
+      "CON.F.US.MES.U26",
+      "CON.F.US.MCLE.V26"
+    ],
+    "subscription": "SubscribeContractQuotes — correct; complete BBOs and trades/depth also flow for same contracts."
+  },
+  "stream_model": {
+    "complete_snapshots": true,
+    "incremental_updates": true,
+    "separate_bid_ask_last_events": true,
+    "provider_sequence_id": false,
+    "timestamp_fields": ["lastUpdated", "timestamp"],
+    "post_reconnect": "same shapes; generation bump clears assembler",
+    "per_instrument": "same miss/set pattern across MNQ/MES/MCLE"
+  },
+  "implementation_local": {
+    "branch": "fix/quote-bbo-delta-assembler",
+    "worktree": ".wt-quote-bbo-assembler",
+    "pr_opened": false,
+    "modules": [
+      "src/projectx/quote-reject-diagnostics.ts",
+      "src/projectx/quote-bbo-assembler.ts",
+      "src/projectx/quote-bbo-fault.ts",
+      "src/projectx/realtime.ts",
+      "tests/quote-bbo-assembler.test.ts"
+    ]
+  },
+  "gates_preserved": {
+    "no_bbo_from_last": true,
+    "locked_stays_locked": true,
+    "crossed_stays_blocked": true,
+    "missing_blocks_new_exposure": true,
+    "flatten_protection_recovery_eligible": true,
+    "zero_intents_orders_writes_in_tests": true,
+    "state_complete_only_when_assembler_dual_side_valid": true
+  }
+}
