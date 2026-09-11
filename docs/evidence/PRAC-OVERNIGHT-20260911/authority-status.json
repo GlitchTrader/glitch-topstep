@@ -1,19 +1,27 @@
 {
   "schema_version": "glitch.topstep.overnight_authority.v1",
-  "evaluated_at": "2026-09-11T02:25:00Z",
+  "evaluated_at": "2026-09-11T02:55:00Z",
   "gateway_supervised_overnight": false,
-  "overnight_status": "blocked",
+  "overnight_status": "blocked_awaiting_redeploy_smoke",
   "orders_sent": 0,
   "intents_sent": 0,
   "smoke_started": false,
   "soak_started": false,
-  "gateway_sha": "50e68db592d5cb1543402c8bae0c2b2718253fe5",
+  "gateway_sha_merged": "2cd353daf2c3b8ab27879a3def8cc0e66c0a010b",
   "profile_sha": "a1ac0f5bef81a15a0693241e732d1c33abb8e361",
-  "gap": {
-    "function": "fail_closed_auto_flatten_on_protection_or_rearm_failure",
-    "not": "hermes_process_restart_watchdog",
-    "residual_risk": "naked_position_if_brackets_missing_and_rearm_fails_while_runner_dead",
-    "missing_test": "hermes_runner_death_matrix_with_live_position"
+  "paired_contract_hash_sha256": "2959FBEFC0810343AFAF1305493DB5288448B2CB19A6F33F0414F69D71A97E56",
+  "p0_unprotected_flatten": {
+    "merged_pr": 284,
+    "unit_matrix_a_e": "pass",
+    "npm_check": "pass_666",
+    "independent_audit": "pass",
+    "profile_tests": "pass_702",
+    "live_gateway_running_sha": "pre_merge_process_started_2026-09-10T18:43:11Z"
   },
-  "evidence": "docs/evidence/PRAC-OVERNIGHT-20260911/gateway-authority-reevaluation.md"
+  "gap_closed_in_code": "fail_closed_auto_flatten_on_protection_or_rearm_failure",
+  "block_reason": "Live gateway process predates #284; rebuild/restart required before one-envelope smoke. Overnight remains blocked until smoke passes on 2cd353d.",
+  "evidence": [
+    "docs/evidence/PRAC-OVERNIGHT-20260911/p0-unprotected-flatten-implementation.md",
+    "docs/evidence/PRAC-OVERNIGHT-20260911/gateway-authority-reevaluation.md"
+  ]
 }

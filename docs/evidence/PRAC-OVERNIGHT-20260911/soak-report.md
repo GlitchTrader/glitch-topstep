@@ -49,4 +49,8 @@ No reset, order, intent, fill, write, or exposure was created by the blocked tra
 
 ## Required follow-up
 
-Ship and test gateway fail-closed flatten on protection/rearm failure (ownership-proven). Then set `gateway_supervised_overnight=true` and only then auto-chain smoke → overnight with fail-stop. Until then overnight remains blocked.
+P0 fail-closed flatten merged as [#284](https://github.com/GlitchTrader/glitch-topstep/pull/284) (`2cd353d`). Hermes-death A–E unit matrix + independent audit PASS.
+
+**Still blocked for overnight:** live gateway process predates #284 (started 2026-09-10T18:43Z). Rebuild/restart onto `2cd353d`, run one-envelope smoke, then overnight only if smoke passes with `unprotected_open_quantity=0` and `orders_sent` consistent with fail-closed selection.
+
+Do not set `gateway_supervised_overnight=true` until that smoke evidence exists.
