@@ -165,6 +165,11 @@ def _effective_operational_state(health: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _process_identity_matches(health: dict[str, Any], expected_commit: str | None, expected_checkout: str) -> bool:
+    state = _effective_operational_state(health)
+    return state["process_commit"] == expected_commit and state["process_checkout"] == expected_checkout
+
+
 def _profile_lock_state() -> dict[str, Any]:
     state_root = Path.home() / "AppData/Local/hermes/profiles/glitch-topstep/state"
     lock = _read_json(state_root / "model-owner.lock.json")
@@ -243,8 +248,9 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
         "delivery_disabled": delivery_effective == "disabled"
         and health.get("delivery_disabled_by_mode") is True,
         "gateway_supervised_overnight_false": effective["gateway_supervised_overnight"] is False,
-        "process_commit_matches_checkout": effective["process_commit"] == expected_commit,
-        "process_checkout_matches_canonical": effective["process_checkout"] == expected_checkout,
+        "process_commit_matches_checkout": _process_identity_matches(health, expected_commit, expected_checkout)
+        and effective["process_commit"] == pairing["gateway_commit"],
+        "process_checkout_matches_canonical": _process_identity_matches(health, expected_commit, expected_checkout),
     }
     safe = all(checks.values())
     return {

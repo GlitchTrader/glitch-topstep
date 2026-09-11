@@ -43,6 +43,14 @@ class GatewayAccountPreflightTests(unittest.TestCase):
         self.assertEqual(state["delivery"], "enabled_or_unknown")
         self.assertIsNone(state["gateway_supervised_overnight"])
 
+    def test_missing_process_identity_fails_closed(self):
+        self.assertFalse(MODULE._process_identity_matches({}, "abc", "root"))
+
+    def test_mismatched_process_identity_fails_closed(self):
+        self.assertFalse(MODULE._process_identity_matches({
+            "process_identity": {"commit": "other", "checkout": "root"},
+        }, "abc", "root"))
+
 
 if __name__ == "__main__":
     unittest.main()
