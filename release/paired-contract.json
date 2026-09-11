@@ -17,10 +17,10 @@
   },
   "profile": {
     "name": "glitch-topstep",
-    "version": "0.2.9",
+    "version": "0.2.10",
     "setup_schema": "glitch.topstep.hermes.setup.v1",
     "operator_schema": "glitch.topstep.hermes.operator.v2",
-    "prompt_version": "glitch-topstep-v17.1",
+    "prompt_version": "glitch-topstep-v17.2",
     "min_gateway_version": "0.2.6",
     "tested_gateway_version": "0.2.6",
     "hermes_requires": ">=0.18.2",

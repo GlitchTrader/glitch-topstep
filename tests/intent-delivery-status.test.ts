@@ -20,7 +20,7 @@ function testIntent(id: string, action: TradeAction = "ENTER_LONG"): TradeIntent
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v17.1",
+    promptVersion: "glitch-topstep-v17.2",
     reason: "Test.",
     decisionAudit: {
       bullCase: "Bull.",

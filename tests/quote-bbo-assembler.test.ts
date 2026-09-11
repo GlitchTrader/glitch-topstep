@@ -469,7 +469,7 @@ describe("assembler + venue gates (no writes)", () => {
           confidence: 0.6,
           snapshotHash: "hash",
           modelVersion: "test",
-          promptVersion: "glitch-topstep-v17.1",
+          promptVersion: "glitch-topstep-v17.2",
           reason: "Must not enter on incomplete quote.",
           decisionAudit: {
             bullCase: "b",
