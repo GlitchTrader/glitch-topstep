@@ -1,0 +1,19 @@
+{
+  "schema_version": "glitch.topstep.overnight_authority.v1",
+  "evaluated_at": "2026-09-11T02:25:00Z",
+  "gateway_supervised_overnight": false,
+  "overnight_status": "blocked",
+  "orders_sent": 0,
+  "intents_sent": 0,
+  "smoke_started": false,
+  "soak_started": false,
+  "gateway_sha": "50e68db592d5cb1543402c8bae0c2b2718253fe5",
+  "profile_sha": "a1ac0f5bef81a15a0693241e732d1c33abb8e361",
+  "gap": {
+    "function": "fail_closed_auto_flatten_on_protection_or_rearm_failure",
+    "not": "hermes_process_restart_watchdog",
+    "residual_risk": "naked_position_if_brackets_missing_and_rearm_fails_while_runner_dead",
+    "missing_test": "hermes_runner_death_matrix_with_live_position"
+  },
+  "evidence": "docs/evidence/PRAC-OVERNIGHT-20260911/gateway-authority-reevaluation.md"
+}
