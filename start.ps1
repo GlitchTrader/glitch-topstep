@@ -40,17 +40,35 @@ function Assert-GatewayRepoIdentity {
 
 Assert-GatewayRepoIdentity
 
+$gatewayCommit = (& git -C $PSScriptRoot rev-parse HEAD 2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gatewayCommit)) {
+    throw "Refusing start: unable to resolve the gateway checkout commit."
+}
+$env:GLITCH_GATEWAY_COMMIT = $gatewayCommit
+$env:GLITCH_GATEWAY_CHECKOUT = (Resolve-Path $PSScriptRoot).Path
+
 if (-not (Test-Path ".env")) {
     Write-Error "Copie .env.example para .env e configure credenciais."
 }
 
+$dotenvValues = @{}
 Get-Content ".env" | ForEach-Object {
     $line = $_.Trim()
     if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
     $eq = $line.IndexOf("=")
     $name = $line.Substring(0, $eq).Trim()
     $value = $line.Substring($eq + 1).Trim()
-    if ($name) { Set-Item -Path "env:$name" -Value $value }
+    if ($value.Length -ge 2 -and (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'")))) {
+        $value = $value.Substring(1, $value.Length - 2)
+    }
+    if ($name) {
+        $dotenvValues[$name] = $value
+        Set-Item -Path "env:$name" -Value $value
+    }
+}
+
+if ($dotenvValues["GLITCH_TRADING_MODE"] -ne "shadow" -or $env:GLITCH_TRADING_MODE -ne "shadow") {
+    throw "Refusing start: effective GLITCH_TRADING_MODE must be shadow and must come from the canonical .env."
 }
 
 if (-not (Test-Path "node_modules")) {
@@ -70,10 +88,22 @@ $port = if ($env:GLITCH_LOCAL_PORT) { [int]$env:GLITCH_LOCAL_PORT } else { 8790 
 $url = "http://127.0.0.1:$port"
 
 $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
-if ($listeners.Count -gt 0) {
+$listenerIds = @($listeners | Select-Object -ExpandProperty OwningProcess -Unique)
+if ($listenerIds.Count -eq 0) {
+    # Get-NetTCPConnection can return no rows when the shell lacks the network
+    # inspection privilege. Fall back to netstat instead of risking a second
+    # gateway instance on the same port.
+    $netstatLines = @(netstat -ano -p tcp 2>$null | Select-String -Pattern "LISTENING")
+    foreach ($line in $netstatLines) {
+        if ($line.ToString() -match "^\s*TCP\s+\S+:$port\s+\S+\s+LISTENING\s+(\d+)\s*$") {
+            $listenerIds += [int]$Matches[1]
+        }
+    }
+    $listenerIds = @($listenerIds | Select-Object -Unique)
+}
+if ($listenerIds.Count -gt 0) {
     $owners = @(
-        $listeners |
-            Select-Object -ExpandProperty OwningProcess -Unique |
+        $listenerIds |
             ForEach-Object {
                 $processId = [int]$_
                 $process = Get-Process -Id $processId -ErrorAction SilentlyContinue

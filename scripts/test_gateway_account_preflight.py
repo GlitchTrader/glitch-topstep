@@ -24,6 +24,33 @@ class GatewayAccountPreflightTests(unittest.TestCase):
         self.assertIsNone(MODULE.age_seconds(None))
         self.assertIsNone(MODULE.age_seconds("not-a-timestamp"))
 
+    def test_effective_state_requires_explicit_shadow_delivery_and_overnight(self):
+        state = MODULE._effective_operational_state({
+            "runtime_trading_mode": "shadow",
+            "gateway_mode": "shadow",
+            "delivery_effective": "disabled",
+            "delivery_disabled_by_mode": True,
+            "gateway_supervised_overnight": False,
+            "process_identity": {"commit": "abc", "checkout": "root"},
+        })
+        self.assertEqual(state["mode"], "shadow")
+        self.assertEqual(state["delivery"], "disabled")
+        self.assertIs(state["gateway_supervised_overnight"], False)
+
+    def test_effective_state_does_not_infer_shadow_from_env_shaped_health(self):
+        state = MODULE._effective_operational_state({"trading_mode": "shadow"})
+        self.assertNotEqual(state["mode"], "shadow")
+        self.assertEqual(state["delivery"], "enabled_or_unknown")
+        self.assertIsNone(state["gateway_supervised_overnight"])
+
+    def test_missing_process_identity_fails_closed(self):
+        self.assertFalse(MODULE._process_identity_matches({}, "abc", "root"))
+
+    def test_mismatched_process_identity_fails_closed(self):
+        self.assertFalse(MODULE._process_identity_matches({
+            "process_identity": {"commit": "other", "checkout": "root"},
+        }, "abc", "root"))
+
 
 if __name__ == "__main__":
     unittest.main()

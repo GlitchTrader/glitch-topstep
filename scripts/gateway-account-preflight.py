@@ -147,6 +147,29 @@ def _paired_identity(profile_root: Path | None) -> dict[str, Any]:
     return result
 
 
+def _effective_operational_state(health: dict[str, Any]) -> dict[str, Any]:
+    mode = health.get("runtime_trading_mode") or health.get("gateway_mode")
+    delivery = health.get("delivery_effective")
+    if delivery not in {"enabled", "disabled"}:
+        delivery = "disabled" if health.get("delivery_disabled_by_mode") is True else "enabled_or_unknown"
+    overnight = health.get("gateway_supervised_overnight")
+    identity = health.get("process_identity")
+    if not isinstance(identity, dict):
+        identity = {"commit": None, "checkout": None}
+    return {
+        "mode": mode,
+        "delivery": delivery,
+        "gateway_supervised_overnight": overnight,
+        "process_commit": identity.get("commit"),
+        "process_checkout": identity.get("checkout"),
+    }
+
+
+def _process_identity_matches(health: dict[str, Any], expected_commit: str | None, expected_checkout: str) -> bool:
+    state = _effective_operational_state(health)
+    return state["process_commit"] == expected_commit and state["process_checkout"] == expected_checkout
+
+
 def _profile_lock_state() -> dict[str, Any]:
     state_root = Path.home() / "AppData/Local/hermes/profiles/glitch-topstep/state"
     lock = _read_json(state_root / "model-owner.lock.json")
@@ -203,14 +226,11 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
     stream_age = age_seconds(stream_event)
     pairing = _paired_identity(profile_root)
     locks = _profile_lock_state()
-    effective_mode = health.get("runtime_trading_mode") or health.get("gateway_mode")
-    delivery_effective = (
-        "disabled"
-        if health.get("trading_mode") in {"disabled", "shadow"}
-        and health.get("runtime_trading_mode") in {"disabled", "shadow"}
-        and health.get("gateway_mode") not in {"armed", "degraded_armed"}
-        else "enabled_or_unknown"
-    )
+    effective = _effective_operational_state(health)
+    effective_mode = effective["mode"]
+    delivery_effective = effective["delivery"]
+    expected_commit = _git_head(ROOT)
+    expected_checkout = str(ROOT.resolve())
 
     checks = {
         "health_authenticated": health_status == 200,
@@ -224,9 +244,13 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
         "user_stream_fresh": stream_age is not None and stream_age <= MAX_RECONCILIATION_AGE_SECONDS,
         "no_active_prac_cycle": not locks["active_owner"] and not locks["active_evaluation_lease"],
         "paired_gateway_profile": pairing["matched"],
-        "delivery_disabled": health.get("trading_mode") in {"disabled", "shadow"}
-        and health.get("gateway_mode") != "armed",
-        "gateway_supervised_overnight_false": health.get("gateway_supervised_overnight") is False,
+        "effective_mode_shadow": effective_mode == "shadow",
+        "delivery_disabled": delivery_effective == "disabled"
+        and health.get("delivery_disabled_by_mode") is True,
+        "gateway_supervised_overnight_false": effective["gateway_supervised_overnight"] is False,
+        "process_commit_matches_checkout": _process_identity_matches(health, expected_commit, expected_checkout)
+        and effective["process_commit"] == pairing["gateway_commit"],
+        "process_checkout_matches_canonical": _process_identity_matches(health, expected_commit, expected_checkout),
     }
     safe = all(checks.values())
     return {
@@ -249,7 +273,11 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
         "effective_operational_state": {
             "mode": effective_mode,
             "delivery": delivery_effective,
-            "gateway_supervised_overnight": health.get("gateway_supervised_overnight"),
+            "gateway_supervised_overnight": effective["gateway_supervised_overnight"],
+            "process_commit": effective["process_commit"],
+            "process_checkout": effective["process_checkout"],
+            "expected_commit": expected_commit,
+            "expected_checkout": expected_checkout,
         },
         "recovery": {
             "blocking_new_exposure": recovery.get("blockingNewExposure"),
