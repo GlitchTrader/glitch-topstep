@@ -203,6 +203,14 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
     stream_age = age_seconds(stream_event)
     pairing = _paired_identity(profile_root)
     locks = _profile_lock_state()
+    effective_mode = health.get("runtime_trading_mode") or health.get("gateway_mode")
+    delivery_effective = (
+        "disabled"
+        if health.get("trading_mode") in {"disabled", "shadow"}
+        and health.get("runtime_trading_mode") in {"disabled", "shadow"}
+        and health.get("gateway_mode") not in {"armed", "degraded_armed"}
+        else "enabled_or_unknown"
+    )
 
     checks = {
         "health_authenticated": health_status == 200,
@@ -213,9 +221,7 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
         "recovery_not_blocking": recovery.get("blockingNewExposure") is False
         and recovery.get("blockingAmbiguity") is False,
         "reconciliation_fresh": recon_age is not None and recon_age <= MAX_RECONCILIATION_AGE_SECONDS,
-        "user_stream_or_reconciliation_timestamp": (
-            stream_age is not None and stream_age <= MAX_RECONCILIATION_AGE_SECONDS
-        ) or (recon_age is not None and recon_age <= MAX_RECONCILIATION_AGE_SECONDS),
+        "user_stream_fresh": stream_age is not None and stream_age <= MAX_RECONCILIATION_AGE_SECONDS,
         "no_active_prac_cycle": not locks["active_owner"] and not locks["active_evaluation_lease"],
         "paired_gateway_profile": pairing["matched"],
         "delivery_disabled": health.get("trading_mode") in {"disabled", "shadow"}
@@ -239,6 +245,11 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
             "reconciliation_age_seconds": recon_age,
             "user_stream_last_event_at": stream_event,
             "user_stream_age_seconds": stream_age,
+        },
+        "effective_operational_state": {
+            "mode": effective_mode,
+            "delivery": delivery_effective,
+            "gateway_supervised_overnight": health.get("gateway_supervised_overnight"),
         },
         "recovery": {
             "blocking_new_exposure": recovery.get("blockingNewExposure"),
