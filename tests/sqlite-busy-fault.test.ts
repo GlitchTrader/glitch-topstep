@@ -24,7 +24,7 @@ function nothingIntent(intentId: string, createdUtc: string): TradeIntent {
     confidence: 0.5,
     snapshotHash: "hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v17.1",
+    promptVersion: "glitch-topstep-v17.2",
     reason: "Test.",
     decisionAudit: {
       bullCase: "Bull.",

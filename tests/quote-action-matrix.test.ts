@@ -44,7 +44,7 @@ function intent(): TradeIntent {
     confidence: 0.6,
     snapshotHash: "hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v17.1",
+    promptVersion: "glitch-topstep-v17.2",
     reason: "Test entry.",
     decisionAudit: {
       bullCase: "Bull.",

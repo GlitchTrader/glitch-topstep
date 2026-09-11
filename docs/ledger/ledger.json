@@ -1,7 +1,27 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-09-10T00:57:30Z",
+  "updated": "2026-09-11T15:30:00Z",
+  "prompt_v17_2_pairing_2026_09_11": {
+    "status": "paired_operational_shadow_only",
+    "gateway_commit": "928ed96",
+    "profile_commit": "90d2ef6",
+    "prompt_version": "glitch-topstep-v17.2",
+    "paired_contract_sha256": "83992E681F3EA0784667F36DAE509E1F04E96318CC61FED5B0E58F5B22D8897A",
+    "validation": {
+      "gateway_npm_run_check": "667 passed, 0 failed",
+      "profile_unittest_discover": "739 ran, 739 passed, 0 failed, 8 skipped",
+      "hermes_diagnostics_and_preload_focus": "31 passed, 0 failed",
+      "multimarket_replay": "MNQ/MES/MCL winner fixtures and fail-closed cases passed",
+      "live_orders": 0,
+      "overnight": "blocked"
+    },
+    "limitations": [
+      "Hermes provider/model outputs remain unavailable in the shadow environment; cognitive specialization is not promoted.",
+      "MES/MCL coverage is replay/fixture-only, not live coverage.",
+      "Independent reaud audit and human review remain required."
+    ]
+  },
   "release_target": "beta",
   "reconciliation": {
     "quote_bbo_delta_assembler_2026_09_09": {
