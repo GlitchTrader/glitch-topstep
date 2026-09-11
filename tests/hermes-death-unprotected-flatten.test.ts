@@ -261,4 +261,36 @@ describe("Hermes-death unprotected flatten matrix A–E", () => {
     assert.equal(result.reason, "unprotected_pending_bracket_window");
     store.close();
   });
+
+  it("E2: closePosition throw stays fail-closed ambiguous without clearing the block", async () => {
+    const store = new SqliteExecutionStore(":memory:");
+    const since = "2026-09-11T01:00:00Z";
+    const now = new Date(Date.parse(since) + BRACKET_VERIFICATION_TIMEOUT_MS + 1_000);
+    store.updateUnprotectedSince(1, since);
+    const result = await attemptUnprotectedExposureFlatten({
+      store,
+      api: {
+        searchOrders: async () => [],
+        closePosition: async () => {
+          throw new Error("provider_timeout");
+        },
+      },
+      accountId,
+      contractId,
+      accountName: "TEST",
+      instrument: "MNQ",
+      positions: [position(1)],
+      attributableTranches: [tranche(1)],
+      unprotectedOpenQuantity: 1,
+      afterRearmAttempt: true,
+      protectionVerificationFailed: true,
+      now,
+    });
+    assert.equal(result.flattened, false);
+    assert.equal(result.blockedNewExposure, true);
+    assert.equal(result.reason, "close_position_outcome_ambiguous");
+    assert.equal(store.mutationForIntent(result.controlId!)?.state, "ambiguous");
+    assert.equal(store.recoveryStatus().blockingNewExposure, true);
+    store.close();
+  });
 });

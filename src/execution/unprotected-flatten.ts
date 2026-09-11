@@ -319,7 +319,31 @@ export async function attemptUnprotectedExposureFlatten(input: {
     nowUtc,
   );
   input.store.markMutationSubmitting(controlId, nowUtc);
-  await input.api.closePosition!(input.accountId, input.contractId);
+  try {
+    await input.api.closePosition!(input.accountId, input.contractId);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    input.store.markMutationAmbiguous(controlId, detail, nowUtc);
+    input.store.recordReceipt({
+      schema_version: "glitch.direct.execution_receipt.v1",
+      receipt_id: `unprotected-flatten-${controlId}`,
+      recorded_utc: nowUtc,
+      intent_id: controlId,
+      mode: "armed",
+      status: "ambiguous",
+      code: "unprotected_fail_closed_flatten_ambiguous",
+      detail: `trigger=${decision.trigger};${ownership.detail};error=${detail}`,
+    });
+    return {
+      changed: true,
+      flattened: false,
+      blockedNewExposure: true,
+      controlId,
+      trigger: decision.trigger,
+      reason: "close_position_outcome_ambiguous",
+      detail,
+    };
+  }
   input.store.markMutationSubmitted(controlId, null, nowUtc);
   input.store.recordReceipt({
     schema_version: "glitch.direct.execution_receipt.v1",
