@@ -192,8 +192,8 @@ def run_preflight(profile_root: Path | None) -> dict[str, Any]:
     dq = health.get("data_quality") if isinstance(health.get("data_quality"), dict) else {}
     recovery = health.get("execution_recovery") if isinstance(health.get("execution_recovery"), dict) else {}
     operational = dq.get("operational") if isinstance(dq.get("operational"), dict) else {}
-    reconciliation = health.get("reconciliation") if isinstance(health.get("reconciliation"), dict) else {}
-    recon_ts = reconciliation.get("lastSucceeded") or reconciliation.get("last_succeeded_utc")
+    reconciliation = operational.get("reconciliation") if isinstance(operational.get("reconciliation"), dict) else {}
+    recon_ts = reconciliation.get("lastSucceededAt") or reconciliation.get("lastSucceeded") or reconciliation.get("last_succeeded_utc")
     recon_age = age_seconds(recon_ts)
     open_quantity = state_open_quantity(state)
     ownership_unprotected = ownership.get("unprotected_open_quantity")

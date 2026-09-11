@@ -48,6 +48,17 @@ operational-mode assertions are unavailable.
 Evidence JSON:
 `gateway-account-preflight-20260911T181226Z.json`
 
+After correcting the reconciliation field path to the effective
+`data_quality.operational.reconciliation.lastSucceededAt` field, a second
+read-only run at `2026-09-11T18:18:24Z` confirmed reconciliation freshness
+(`112s` at capture) and the reconciliation/user-stream freshness gate. The
+user stream still had no `lastEventAt`; delivery remained unproven because
+the effective mode was `armed/degraded_armed`; and the explicit overnight flag
+was absent. The result remained `safe_pre_restart=false`.
+
+Latest evidence JSON:
+`gateway-account-preflight-20260911T181809Z.json`
+
 ## `/packet` timeout diagnosis
 
 The existing source audit and sanitized incident evidence identify the hot
