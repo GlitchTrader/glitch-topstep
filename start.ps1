@@ -40,6 +40,13 @@ function Assert-GatewayRepoIdentity {
 
 Assert-GatewayRepoIdentity
 
+$gatewayCommit = (& git -C $PSScriptRoot rev-parse HEAD 2>$null).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gatewayCommit)) {
+    throw "Refusing start: unable to resolve the gateway checkout commit."
+}
+$env:GLITCH_GATEWAY_COMMIT = $gatewayCommit
+$env:GLITCH_GATEWAY_CHECKOUT = (Resolve-Path $PSScriptRoot).Path
+
 if (-not (Test-Path ".env")) {
     Write-Error "Copie .env.example para .env e configure credenciais."
 }

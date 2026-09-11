@@ -31,7 +31,7 @@ import { boundedPacketObservationRefresh, type PacketObservationRefreshResult } 
 import { applyPacketObservationRefreshMetadata } from "./service/packet-refresh-metadata.js";
 import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
-import { resolveGatewayMode } from "./execution/gateway-mode.js";
+import { gatewayModePermitsLiveOrders, resolveGatewayMode } from "./execution/gateway-mode.js";
 import { dataQualityHealthFields, evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { TradeOutcomePublisher, isIncompleteOutcome, outcomeSharesForeignClosingFill } from "./learning/trade-outcome-publisher.js";
@@ -105,6 +105,7 @@ const ORDER_FLOW_REFRESH_MS = 10_000;
 const ORDER_FLOW_MAX_EVENTS = 50_000;
 const ORDER_FLOW_DEPTH_LEVELS = 10;
 const RECONCILE_METADATA_INTERVAL_MS = 15 * 60 * 1000;
+const GATEWAY_SUPERVISED_OVERNIGHT = false;
 
 export class GlitchTopstepService {
   private readonly authManager: ProjectXAuthManager;
@@ -586,6 +587,9 @@ export class GlitchTopstepService {
           this.config.risk,
           recordedAt,
         );
+        const deliveryEffective = gatewayModePermitsLiveOrders(gatewayMode.effective)
+          ? "enabled"
+          : "disabled";
         const eventLedger = this.ledger.status();
         const outcomeFeed = this.tradeOutcomeStore.status();
         this.maybePruneAppliedEvidenceOutbox(recordedAt.getTime());
@@ -656,6 +660,13 @@ export class GlitchTopstepService {
           lifecycle: this.lifecycle.status(),
           gateway_mode: gatewayMode.effective,
           gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
+          delivery_effective: deliveryEffective,
+          delivery_disabled_by_mode: deliveryEffective === "disabled",
+          gateway_supervised_overnight: GATEWAY_SUPERVISED_OVERNIGHT,
+          process_identity: {
+            commit: process.env.GLITCH_GATEWAY_COMMIT ?? null,
+            checkout: process.env.GLITCH_GATEWAY_CHECKOUT ?? null,
+          },
           recorded_utc: recordedAt.toISOString(),
           data_quality: {
             ...dataQualityHealthFields(quality),
