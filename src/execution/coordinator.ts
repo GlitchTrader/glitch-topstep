@@ -37,6 +37,10 @@ import {
   type ProtectedReductionHealth,
 } from "./protected-reduction-saga.js";
 import { evaluateProtectionHealth } from "./protection-supervisor.js";
+import {
+  runUnprotectedFlattenCycle,
+  type UnprotectedFlattenResult,
+} from "./unprotected-flatten.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
@@ -1422,6 +1426,36 @@ export class ExecutionCoordinator {
       accountId: this.config.scope.accountId,
       contractId: this.config.scope.contractId,
     });
+  }
+
+  /**
+   * Fail-closed flatten for owned unprotected exposure after protection verification failure
+   * or exhausted rearm. Blocks new entries immediately; never flattens ambiguous identity.
+   */
+  public flattenUnprotectedOwnedExposure(
+    snapshot: AccountVenueSnapshot,
+    options: { afterRearmAttempt: boolean; now?: Date } = { afterRearmAttempt: true },
+  ): Promise<UnprotectedFlattenResult> {
+    const result = this.executionQueue.then(() => runUnprotectedFlattenCycle({
+      snapshot,
+      store: this.store,
+      api: this.api,
+      ledger: this.ledger,
+      accountId: this.config.scope.accountId,
+      contractId: this.config.scope.contractId,
+      accountName: this.config.scope.accountName,
+      instrument: this.config.scope.instrument,
+      attributableTranches: this.attributableTranches(),
+      activeReduction: this.store.activeProtectedReduction(),
+      afterRearmAttempt: options.afterRearmAttempt,
+      invalidateIssuedPackets: this.invalidateIssuedPackets,
+      now: options.now,
+    }));
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private async cancelTrancheProtectionOrders(
