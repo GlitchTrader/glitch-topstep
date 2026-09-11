@@ -22,6 +22,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { evaluateSnapshotDataQuality, newExposureBlockCode } from "../state/data-quality.js";
 import { validateProtectiveAmendment, buildOriginalRiskEnvelope, type PositionSide } from "./amendment-safety.js";
 import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
@@ -810,6 +811,26 @@ export class ExecutionCoordinator {
         status: "rejected",
         code: amendmentSafety.code,
       });
+    }
+    // Risk-increasing stop widens need execution_eligibility; tightens/protection never blocked by quote_state.
+    if (leg === "stop" && protectiveLeg.price !== null) {
+      const exposureBlock = newExposureBlockCode(
+        evaluateSnapshotDataQuality(snapshot, this.config.risk),
+      );
+      if (exposureBlock) {
+        const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
+        const widens = side === "long"
+          ? newPrice < protectiveLeg.price
+          : newPrice > protectiveLeg.price;
+        if (widens) {
+          return this.record({
+            intentId: intent.intentId,
+            status: "rejected",
+            code: exposureBlock,
+            detail: "risk_increasing_amendment_blocked",
+          });
+        }
+      }
     }
     if (protectiveLeg.providerOrderId === null) {
       return this.record({

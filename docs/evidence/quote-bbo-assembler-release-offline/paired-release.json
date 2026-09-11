@@ -1,0 +1,27 @@
+{
+  "schema_version": "glitch.topstep.paired_release.v1",
+  "created_utc": "2026-09-10T00:57:22.498Z",
+  "immutable": true,
+  "armed_promotion_requires_human_approval": true,
+  "pair_digest": "80c1143dfb3c8e5b01f681e7aaaa09eea2fd82dd1639a8984a2221065746d7a1",
+  "gateway": {
+    "repository": "GlitchTrader/glitch-topstep",
+    "commit": "5bd979f24f68e5a23ea8bad31ef1fc7ce5500be7",
+    "version": "0.2.6",
+    "package_lock_sha256": "9ecdf559b07b7f064f7c84a089262890a3dc72bff0080ec53cbc74ed2639e27b"
+  },
+  "profile": {
+    "repository": "GlitchTrader/glitch-topstep-hermes-profile",
+    "commit": "a1ac0f5bef81a15a0693241e732d1c33abb8e361",
+    "version": "0.2.8",
+    "sha256sums_sha256": "e5fd50b81539744ceceeca32482240a4531ab6e42feb84185a5ab2eec900b242",
+    "prompt_version": "glitch-topstep-v17.1"
+  },
+  "validation": {
+    "prac_or_shadow_evidence_ref": "docs/evidence/quote-missing-root-cause-2026-09-09.json",
+    "partial_exit_provider_acceptance": "proven_prac_short_long_with_saga",
+    "gateway_paired_contract_sha256": "2959fbefc0810343afaf1305493db5288448b2cb19a6f33f0414f69d71a97e56",
+    "profile_paired_contract_sha256": "2959fbefc0810343afaf1305493db5288448b2cb19a6f33f0414f69d71a97e56",
+    "paired_contract_byte_identical": true
+  }
+}

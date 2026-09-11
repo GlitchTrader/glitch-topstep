@@ -1,8 +1,14 @@
-﻿"""Read-only gateway diagnosis before PRAC/soak - capture, classify, optional single restart."""
+﻿"""Read-only gateway diagnosis before PRAC/soak - capture, classify, optional single restart.
+
+Live bar-close stability is NOT owned here. Isolated ``wait_for_bar_complete`` pre-waits are
+forbidden. The only authorized live stability entry is the profile runner
+``scripts/run-canonical-live-stability.py``.
+"""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -18,12 +24,24 @@ PROFILE_STATE = Path.home() / "AppData/Local/hermes/profiles/glitch-topstep/stat
 EVAL_PROFILE = Path.home() / "AppData/Local/hermes/profiles/glitch-topstep-evaluation"
 DATA = ROOT / "data"
 sys.path.insert(0, str(ROOT / "scripts"))
-sys.path.insert(0, str(PROFILE_SCRIPTS))
+# Lease helpers only — never import operational_stability_gate from hermes/sibling here.
+if PROFILE_SCRIPTS.is_dir():
+    sys.path.insert(0, str(PROFILE_SCRIPTS))
 
 from prac_gateway_helpers import load_token, restart_gateway, wait_gateway_ready  # noqa: E402
 
 DIAG_SCHEMA = "glitch.topstep.gateway_readonly_diagnosis.v1"
 BLOCKED_CLASSIFICATION = "blocked_operational_instability"
+CANONICAL_LIVE_RUNNER = "run-canonical-live-stability.py"
+FORBIDDEN_PATH_MARKERS = (".wt-", "wave0-", "docs\\evidence", "docs/evidence")
+CANONICAL_RUNNER_HINT = (
+    "Isolated bar-wait / ad-hoc stability windows are forbidden. "
+    f"Use the profile canonical entry only: python scripts/{CANONICAL_LIVE_RUNNER} --execute"
+)
+
+
+class LiveDiagnosisGuardError(RuntimeError):
+    """Fail-closed when live stability context is invalid."""
 
 RESTART_AUTHORIZED_CAUSES = frozenset(
     {
@@ -383,112 +401,225 @@ def _sync_profile_token_env() -> None:
         pass
 
 
-def run_stability_window(*, max_minutes: float = 8.0, required_samples: int = 5) -> dict[str, Any]:
-    _sync_profile_token_env()
-    profile_scripts = ROOT.parent / "glitch-topstep-hermes-profile" / "scripts"
-    if profile_scripts.is_dir():
-        sys.path.insert(0, str(profile_scripts))
-        try:
-            from operational_stability_gate import run_operational_stability_window
-            from shadow_gateway_readonly import fetch_gateway_health_raw, fetch_gateway_packet_readonly
-        except ImportError:
-            pass
-        else:
+def path_is_forbidden_checkout(path: Path) -> bool:
+    """Reject .wt-*, wave0-*, docs/evidence, and similar non-canonical trees."""
+    resolved = path.resolve()
+    parts = [p.lower() for p in resolved.parts]
+    joined = str(resolved).replace("/", "\\").lower()
+    for part in parts:
+        if part.startswith(".wt-") or part.startswith("wave0-"):
+            return True
+    for marker in FORBIDDEN_PATH_MARKERS:
+        if marker.lower() in joined:
+            return True
+    return False
 
-            def _lease_checker() -> tuple[bool, str | None]:
-                ok, _doc = _lease_available()
-                return ok, "lease_occupied" if not ok else None
 
-            result = run_operational_stability_window(
-                health_fetcher=fetch_gateway_health_raw,
-                packet_fetcher=fetch_gateway_packet_readonly,
-                required_samples=required_samples,
-                max_duration_seconds=max_minutes * 60,
-                bar_close_aware=True,
-                lease_checker=_lease_checker,
-            )
-            lease_ok, lease_doc = _lease_available()
-            result["lease_available"] = lease_ok
-            result["lease"] = lease_doc
-            if result.get("confirmed") and not lease_ok:
-                result["confirmed"] = False
-                result["classification"] = BLOCKED_CLASSIFICATION
-                result["stop_reason"] = "lease_occupied"
-            return result
-
-    # ponytail: fallback poll via gateway_client when profile path unavailable
-    samples: list[dict[str, Any]] = []
-    ok_streak = 0
-    started = time.monotonic()
-    while time.monotonic() - started < max_minutes * 60 and ok_streak < required_samples:
-        hs, health, err = _http_get("/health")
-        ps, packet, _ = _http_get("/packet")
-        sample_ok = (
-            hs == 200
-            and isinstance(health, dict)
-            and health.get("status") == "ok"
-            and (health.get("data_quality") or {}).get("state_complete") is True
-            and not _circuit_breaker_open(health)
-            and not _bar_partial(packet)
+def git_head(repo: Path) -> str | None:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(repo),
+            stderr=subprocess.DEVNULL,
+            text=True,
         )
-        samples.append({"ok": sample_ok, "status": (health or {}).get("status"), "error": err})
-        ok_streak = ok_streak + 1 if sample_ok else 0
-        if ok_streak < required_samples:
-            time.sleep(30)
-    confirmed = ok_streak >= required_samples
+        return out.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
+
+
+def resolve_profile_root() -> Path:
+    env = (os.environ.get("GLITCH_HERMES_PROFILE_ROOT") or "").strip()
+    if env:
+        root = Path(env).resolve()
+        if path_is_forbidden_checkout(root):
+            raise LiveDiagnosisGuardError(f"forbidden_profile_checkout:{root}")
+        return root
+    sibling = (ROOT.parent / "glitch-topstep-hermes-profile").resolve()
+    if sibling.is_dir() and not path_is_forbidden_checkout(sibling):
+        return sibling
+    raise LiveDiagnosisGuardError(
+        "set_GLITCH_HERMES_PROFILE_ROOT to a canonical profile checkout "
+        f"(not .wt-*/wave0*/docs/evidence). Then use scripts/{CANONICAL_LIVE_RUNNER}."
+    )
+
+
+def assert_import_path_allowed(path: Path, *, profile_root: Path) -> None:
+    resolved = path.resolve()
+    if path_is_forbidden_checkout(resolved):
+        raise LiveDiagnosisGuardError(f"forbidden_import_path:{resolved}")
+    try:
+        resolved.relative_to(profile_root.resolve())
+    except ValueError as exc:
+        raise LiveDiagnosisGuardError(f"import_outside_canonical_checkout:{resolved}") from exc
+
+
+def validate_live_context_before_fetch(
+    *,
+    profile_root: Path | None = None,
+    gateway_root: Path | None = None,
+) -> dict[str, Any]:
+    """Validate roots, SHAs, and paired-contract bytes before any live stability fetch."""
+    profile_root = (profile_root or resolve_profile_root()).resolve()
+    gateway_root = (gateway_root or ROOT).resolve()
+
+    if path_is_forbidden_checkout(profile_root):
+        raise LiveDiagnosisGuardError(f"forbidden_profile_checkout:{profile_root}")
+    if path_is_forbidden_checkout(gateway_root):
+        # Gateway checkout itself may live under an operator path; only block evidence/wave0/.wt markers.
+        raise LiveDiagnosisGuardError(f"forbidden_gateway_checkout:{gateway_root}")
+
+    runner = profile_root / "scripts" / CANONICAL_LIVE_RUNNER
+    gate = profile_root / "scripts" / "operational_stability_gate.py"
+    if not runner.is_file():
+        raise LiveDiagnosisGuardError(f"canonical_runner_missing:{runner}")
+    if not gate.is_file():
+        raise LiveDiagnosisGuardError("profile_scripts_missing")
+    assert_import_path_allowed(runner, profile_root=profile_root)
+    assert_import_path_allowed(gate, profile_root=profile_root)
+
+    profile_contract = profile_root / "paired-contract.json"
+    gateway_contract = gateway_root / "release" / "paired-contract.json"
+    if not profile_contract.is_file():
+        raise LiveDiagnosisGuardError("profile_paired_contract_missing")
+    if not gateway_contract.is_file():
+        raise LiveDiagnosisGuardError("gateway_paired_contract_missing")
+    profile_raw = profile_contract.read_bytes()
+    gateway_raw = gateway_contract.read_bytes()
+    if profile_raw != gateway_raw:
+        raise LiveDiagnosisGuardError("paired_contract_byte_mismatch")
+
+    profile_sha = git_head(profile_root)
+    gateway_sha = git_head(gateway_root)
+    if not profile_sha:
+        raise LiveDiagnosisGuardError("profile_sha_unreadable")
+    if not gateway_sha:
+        raise LiveDiagnosisGuardError("gateway_sha_unreadable")
+
+    expected_profile = (os.environ.get("GLITCH_EXPECTED_PROFILE_SHA") or "").strip()
+    expected_gateway = (os.environ.get("GLITCH_EXPECTED_GATEWAY_SHA") or "").strip()
+    if expected_profile and not profile_sha.startswith(expected_profile) and profile_sha != expected_profile:
+        raise LiveDiagnosisGuardError(f"profile_sha_divergence:{profile_sha}:{expected_profile}")
+    if expected_gateway and not gateway_sha.startswith(expected_gateway) and gateway_sha != expected_gateway:
+        raise LiveDiagnosisGuardError(f"gateway_sha_divergence:{gateway_sha}:{expected_gateway}")
+
     return {
-        "confirmed": confirmed,
-        "classification": None if confirmed else BLOCKED_CLASSIFICATION,
-        "samples": samples,
-        "consecutive_ok": ok_streak,
+        "ok": True,
+        "profile_root": str(profile_root),
+        "gateway_root": str(gateway_root),
+        "profile_sha": profile_sha,
+        "gateway_sha": gateway_sha,
+        "canonical_runner": str(runner),
+        "paired_contract_sha256": hashlib.sha256(profile_raw).hexdigest(),
+        "pre_wait_forbidden": True,
     }
 
 
-def wait_for_bar_complete(*, timeout_seconds: float = 300.0, poll_seconds: float = 0.25) -> dict[str, Any]:
-    _sync_profile_token_env()
-    profile_scripts = ROOT.parent / "glitch-topstep-hermes-profile" / "scripts"
-    if profile_scripts.is_dir():
-        sys.path.insert(0, str(profile_scripts))
-        try:
-            from operational_stability_gate import wait_for_bar_complete as profile_wait_for_bar_complete
-            from shadow_gateway_readonly import fetch_gateway_packet_readonly
-        except ImportError:
-            pass
-        else:
-
-            def _packet_fetcher() -> dict[str, Any]:
-                packet = fetch_gateway_packet_readonly()
-                if not isinstance(packet, dict):
-                    raise RuntimeError("packet_fetch_not_dict")
-                return packet
-
-            return profile_wait_for_bar_complete(
-                _packet_fetcher,
-                timeout_seconds=timeout_seconds,
-                poll_seconds=poll_seconds,
-            )
-
-    # ponytail: legacy poll when profile path unavailable — still wrong for always-partial feeds
-    started = time.monotonic()
-    polls: list[dict[str, Any]] = []
-    while time.monotonic() - started < timeout_seconds:
-        _, packet, err = _http_get("/packet")
-        polls.append({"partial": _bar_partial(packet), "error": err})
-        if not _bar_partial(packet):
-            return {
-                "ready": True,
-                "waited_seconds": round(time.monotonic() - started, 2),
-                "polls": polls,
-                "fallback": "legacy_partial_poll",
-            }
-        time.sleep(max(poll_seconds, 5.0))
+def refuse_isolated_bar_wait() -> dict[str, Any]:
+    """Hard refuse: no isolated bar-wait before diagnosis or live validation."""
     return {
         "ready": False,
-        "reason": "bar_still_partial",
-        "waited_seconds": round(time.monotonic() - started, 2),
-        "polls": polls,
-        "fallback": "legacy_partial_poll",
+        "refused": True,
+        "reason": "isolated_bar_wait_forbidden",
+        "hint": CANONICAL_RUNNER_HINT,
+        "canonical_entry": CANONICAL_LIVE_RUNNER,
+        "pre_wait_forbidden": True,
     }
+
+
+def run_stability_window(*, out_path: Path | None = None) -> dict[str, Any]:
+    """Delegate live stability exclusively to the profile canonical runner.
+
+    Validates profile/gateway roots, SHAs, and paired contract *before* any fetch.
+    Does not call wait_for_bar_complete and does not import .wt-*/wave0*/docs/evidence trees.
+    """
+    provenance = validate_live_context_before_fetch()
+    profile_root = Path(provenance["profile_root"])
+    runner = Path(provenance["canonical_runner"])
+    _sync_profile_token_env()
+
+    out = out_path or (
+        ROOT
+        / "docs"
+        / "evidence"
+        / "gateway-diagnosis"
+        / f"canonical-live-stability-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+    )
+    # Artifact may live under docs/evidence (operator output), but imports must not.
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env["GLITCH_HERMES_PROFILE_ROOT"] = str(profile_root)
+    env["GLITCH_GATEWAY_ROOT"] = str(ROOT)
+    try:
+        token = load_token()
+    except RuntimeError as exc:
+        raise LiveDiagnosisGuardError("GLITCH_LOCAL_TOKEN_required") from exc
+    env["GLITCH_LOCAL_TOKEN"] = token
+    env["GLITCH_TOPSTEP_LOCAL_TOKEN"] = token
+
+    cmd = [
+        sys.executable,
+        str(runner),
+        "--profile-root",
+        str(profile_root),
+        "--gateway-root",
+        str(ROOT),
+        "--execute",
+        "--out",
+        str(out),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=str(profile_root))
+    stdout = (proc.stdout or "").strip()
+    stderr = (proc.stderr or "").strip()
+    payload: dict[str, Any]
+    try:
+        payload = json.loads(stdout) if stdout else {}
+    except json.JSONDecodeError:
+        payload = {"raw_stdout": stdout}
+
+    artifact: dict[str, Any] | None = None
+    if out.is_file():
+        try:
+            artifact = json.loads(out.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            artifact = None
+
+    confirmed = bool((artifact or {}).get("confirmed")) if artifact else bool(payload.get("confirmed"))
+    classification = (artifact or {}).get("classification") if artifact else payload.get("classification")
+    if proc.returncode not in (0, 1):
+        return {
+            "confirmed": False,
+            "classification": BLOCKED_CLASSIFICATION,
+            "stop_reason": "canonical_runner_failed",
+            "delegated_to": CANONICAL_LIVE_RUNNER,
+            "pre_wait_forbidden": True,
+            "provenance": provenance,
+            "returncode": proc.returncode,
+            "stdout": payload,
+            "stderr": stderr[-2000:],
+            "canonical_artifact_path": str(out) if out.is_file() else None,
+        }
+
+    lease_ok, lease_doc = _lease_available()
+    result = {
+        "confirmed": confirmed,
+        "classification": classification if confirmed else (classification or BLOCKED_CLASSIFICATION),
+        "delegated_to": CANONICAL_LIVE_RUNNER,
+        "pre_wait_forbidden": True,
+        "provenance": provenance,
+        "canonical_artifact_path": str(out) if out.is_file() else None,
+        "canonical_artifact": artifact,
+        "runner_payload": payload,
+        "lease_available": lease_ok,
+        "lease": lease_doc,
+        "returncode": proc.returncode,
+    }
+    if result.get("confirmed") and not lease_ok:
+        result["confirmed"] = False
+        result["classification"] = BLOCKED_CLASSIFICATION
+        result["stop_reason"] = "lease_occupied"
+    return result
 
 
 def main() -> int:
@@ -499,30 +630,64 @@ def main() -> int:
     parser.add_argument(
         "--stability-window",
         action="store_true",
-        help="Run bounded stability window (read-only, no restart)",
+        help=(
+            "Delegate to profile canonical live stability runner "
+            f"({CANONICAL_LIVE_RUNNER}); never uses isolated bar-wait"
+        ),
     )
-    parser.add_argument("--wait-bar-complete", action="store_true", help="Wait for 1m bar close before diagnosis")
+    parser.add_argument(
+        "--wait-bar-complete",
+        action="store_true",
+        help="REFUSED: isolated bar-wait is forbidden; use run-canonical-live-stability.py",
+    )
     args = parser.parse_args()
 
     out_dir = args.output_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    bar_wait = None
     if args.wait_bar_complete:
-        bar_wait = wait_for_bar_complete()
-        (out_dir / f"bar-wait-{stamp}.json").write_text(json.dumps(bar_wait, indent=2) + "\n", encoding="utf-8")
-        if not bar_wait.get("ready"):
+        bar_wait = refuse_isolated_bar_wait()
+        (out_dir / f"bar-wait-refused-{stamp}.json").write_text(
+            json.dumps(bar_wait, indent=2) + "\n", encoding="utf-8"
+        )
+        report = {
+            "generated_utc": utc_now(),
+            "classification": "isolated_bar_wait_forbidden",
+            "bar_wait": bar_wait,
+            "hint": CANONICAL_RUNNER_HINT,
+            "lanes": {"prac": "BLOCKED", "evaluation_soak": "BLOCKED"},
+        }
+        path = out_dir / f"gateway-diagnosis-verdict-{stamp}.json"
+        path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(
+            json.dumps(
+                {
+                    "blocked": "isolated_bar_wait_forbidden",
+                    "hint": CANONICAL_RUNNER_HINT,
+                    "output": str(path),
+                },
+                indent=2,
+            )
+        )
+        return 2
+
+    needs_stability = bool(args.stability_window) or bool(args.restart_if_authorized)
+    if needs_stability:
+        try:
+            validate_live_context_before_fetch()
+        except LiveDiagnosisGuardError as exc:
             report = {
                 "generated_utc": utc_now(),
-                "classification": "bar_1m_partial",
-                "bar_wait": bar_wait,
+                "classification": "live_context_invalid",
+                "error": str(exc),
+                "hint": CANONICAL_RUNNER_HINT,
                 "lanes": {"prac": "BLOCKED", "evaluation_soak": "BLOCKED"},
             }
             path = out_dir / f"gateway-diagnosis-verdict-{stamp}.json"
             path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-            print(json.dumps({"blocked": "bar_1m_partial", "output": str(path)}, indent=2))
-            return 1
+            print(json.dumps({"blocked": "live_context_invalid", "error": str(exc), "output": str(path)}, indent=2))
+            return 2
 
     pre = capture_gateway_diagnosis()
     pre_path = out_dir / f"gateway-diagnosis-pre-{stamp}.json"
@@ -530,7 +695,7 @@ def main() -> int:
 
     verdict = classify_blocking(pre)
     verdict_path = out_dir / f"gateway-diagnosis-verdict-{stamp}.json"
-    report = {
+    report: dict[str, Any] = {
         "generated_utc": utc_now(),
         "pre_diagnosis_path": str(pre_path),
         "verdict": verdict,
@@ -550,7 +715,16 @@ def main() -> int:
         report["lanes"]["evaluation_soak"] = "READY_PENDING_PRAC_FIRST_CYCLE"
 
     if args.stability_window and not args.restart_if_authorized:
-        stability = run_stability_window()
+        try:
+            stability = run_stability_window(out_path=out_dir / f"canonical-live-stability-{stamp}.json")
+        except LiveDiagnosisGuardError as exc:
+            stability = {
+                "confirmed": False,
+                "classification": BLOCKED_CLASSIFICATION,
+                "stop_reason": str(exc),
+                "hint": CANONICAL_RUNNER_HINT,
+                "pre_wait_forbidden": True,
+            }
         report["stability_window"] = stability
         stab_path = out_dir / f"gateway-stability-window-{stamp}.json"
         stab_path.write_text(json.dumps(stability, indent=2) + "\n", encoding="utf-8")
@@ -573,7 +747,16 @@ def main() -> int:
         report["restart_performed"] = True
         report["post_diagnosis_path"] = str(post_path)
         if args.stability_after_restart:
-            stability = run_stability_window()
+            try:
+                stability = run_stability_window(out_path=out_dir / f"canonical-live-stability-{stamp}.json")
+            except LiveDiagnosisGuardError as exc:
+                stability = {
+                    "confirmed": False,
+                    "classification": BLOCKED_CLASSIFICATION,
+                    "stop_reason": str(exc),
+                    "hint": CANONICAL_RUNNER_HINT,
+                    "pre_wait_forbidden": True,
+                }
             report["stability_window"] = stability
             stab_path = out_dir / f"gateway-stability-window-{stamp}.json"
             stab_path.write_text(json.dumps(stability, indent=2) + "\n", encoding="utf-8")
@@ -598,6 +781,7 @@ def main() -> int:
             {
                 "verdict": report.get("verdict", verdict),
                 "stability_confirmed": (report.get("stability_window") or {}).get("confirmed"),
+                "delegated_to": (report.get("stability_window") or {}).get("delegated_to"),
                 "output": str(verdict_path),
             },
             indent=2,
