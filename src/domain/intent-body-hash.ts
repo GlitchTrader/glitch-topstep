@@ -24,6 +24,8 @@ function canonicalIntentPayload(intent: TradeIntent): Record<string, unknown> {
     ...(intent.newTakeProfit === undefined ? {} : { new_take_profit: intent.newTakeProfit }),
     ...(intent.exitFraction === undefined ? {} : { exit_fraction: intent.exitFraction }),
     ...(intent.targetIntentId === undefined ? {} : { target_intent_id: intent.targetIntentId }),
+    ...(intent.symbolId === undefined ? {} : { symbol_id: intent.symbolId }),
+    ...(intent.selectedCandidateHandoff === undefined ? {} : { selected_candidate_handoff: intent.selectedCandidateHandoff }),
   };
 }
 

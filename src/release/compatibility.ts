@@ -24,6 +24,10 @@ export const GATEWAY_COMPATIBILITY = Object.freeze({
     amendment_source_schema: PAIRED_CONTRACT.distributed_contract.amendment_source_schema,
     original_risk_envelope_schema: PAIRED_CONTRACT.distributed_contract.original_risk_envelope_schema,
     model_owner_schema: PAIRED_CONTRACT.distributed_contract.model_owner_schema,
+    selected_candidate_handoff_schema: PAIRED_CONTRACT.distributed_contract.selected_candidate_handoff_schema,
+    selected_candidate_handoff_fields: Object.freeze([
+      ...PAIRED_CONTRACT.distributed_contract.selected_candidate_handoff_fields,
+    ]),
     outcome_path_chronology_schema:
       PAIRED_CONTRACT.distributed_contract.outcome_path_chronology_schema,
     cadence: Object.freeze({ ...PAIRED_CONTRACT.distributed_contract.cadence }),

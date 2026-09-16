@@ -16,7 +16,7 @@ describe("gateway compatibility contract", () => {
   });
 
   it("names the profile-facing wire contracts and capabilities", () => {
-    assert.deepEqual(GATEWAY_COMPATIBILITY.intent_schemas, ["glitch.intent.v2", "glitch.intent.v3"]);
+    assert.deepEqual(GATEWAY_COMPATIBILITY.intent_schemas, ["glitch.intent.v2", "glitch.intent.v3", "glitch.intent.v4"]);
     assert.equal(GATEWAY_COMPATIBILITY.protocol_revision, "glitch.topstep.paired.v3");
     assert.deepEqual(GATEWAY_COMPATIBILITY.decision_packet_schemas, [
       "glitch.direct.decision_packet.v1",
