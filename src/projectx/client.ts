@@ -326,7 +326,7 @@ export class ProjectXApiClient {
             : null;
           const delayMs = operationRetryDelayMs(attempt, retryAfterMs);
           this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, error, true, retryAfterMs);
-          console.error(
+          console.warn(
             `ProjectX ${path} transient failure; retrying in ${delayMs}ms (${attempt + 1}): ${formatLogError(error)}`,
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
