@@ -25,6 +25,11 @@ import {
   shouldRetryPost,
 } from "./retry-policy.js";
 import { formatLogError } from "../observability/log-sanitize.js";
+import { randomUUID } from "node:crypto";
+import type {
+  ProjectXDiagnosticContext,
+  ProjectXDiagnosticsSink,
+} from "./diagnostics.js";
 
 export interface ProjectXClientOptions {
   apiUrl: string;
@@ -37,6 +42,9 @@ export interface ProjectXClientOptions {
   readCircuitFailureThreshold?: number;
   readCircuitCooldownMs?: number;
   operationDeadlineMs?: number;
+  diagnostics?: ProjectXDiagnosticsSink;
+  diagnosticContext?: () => ProjectXDiagnosticContext;
+  sessionCorrelation?: string;
 }
 
 export interface PlaceOrderRequest {
@@ -104,6 +112,7 @@ export class ProjectXApiClient {
   private readonly operationDeadlineMs: number;
   private readonly restGate: RestConcurrencyGate;
   private readonly readCircuit: ReadCircuitBreaker;
+  private readonly sessionCorrelation: string;
   private static readonly defaultRateLimitRetryMs = [0, 5_000, 15_000, 30_000] as const;
   private static readonly defaultMaxConcurrentRest = 4;
   private static readonly defaultOperationDeadlineMs = 60_000;
@@ -119,6 +128,7 @@ export class ProjectXApiClient {
       options.readCircuitFailureThreshold,
       options.readCircuitCooldownMs,
     );
+    this.sessionCorrelation = options.sessionCorrelation ?? randomUUID();
   }
 
   public get sessionToken(): string {
@@ -288,13 +298,20 @@ export class ProjectXApiClient {
     const startedMs = Date.now();
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       if (Date.now() - startedMs >= this.operationDeadlineMs) {
+        this.recordRestDiagnostic(path, startedMs, attempt + 1, new ProjectXApiError(
+          "operation_deadline_exceeded",
+          `ProjectX ${path} exceeded operation deadline`,
+        ), false, null);
         throw new ProjectXApiError(
           "operation_deadline_exceeded",
           `ProjectX ${path} exceeded operation deadline`,
         );
       }
+      const attemptStartedMs = Date.now();
       try {
-        return await this.restGate.run(() => this.postOnce(path, body, authenticated));
+        const result = await this.restGate.run(() => this.postOnce(path, body, authenticated));
+        this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, null, false, null);
+        return result;
       } catch (error: unknown) {
         lastError = error;
         if (!isMutationPath(path)) {
@@ -308,16 +325,71 @@ export class ProjectXApiClient {
             ? error.retryAfterMs ?? null
             : null;
           const delayMs = operationRetryDelayMs(attempt, retryAfterMs);
+          this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, error, true, retryAfterMs);
           console.error(
             `ProjectX ${path} transient failure; retrying in ${delayMs}ms (${attempt + 1}): ${formatLogError(error)}`,
           );
           await new Promise((resolve) => setTimeout(resolve, delayMs));
           continue;
         }
+        this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, error, false,
+          error instanceof ProjectXApiError && error.status === 429
+            ? error.retryAfterMs ?? null
+            : null);
         throw error;
       }
     }
     throw lastError;
+  }
+
+  private recordRestDiagnostic(
+    path: string,
+    startedMs: number,
+    attempt: number,
+    error: unknown,
+    retryPerformed: boolean,
+    retryAfterMs: number | null,
+  ): void {
+    const finishedMs = Date.now();
+    const projectXError = error instanceof ProjectXApiError ? error : null;
+    const errorName = error instanceof Error ? error.name : null;
+    const timedOut = projectXError?.code === "operation_deadline_exceeded"
+      || errorName === "TimeoutError"
+      || errorName === "AbortError";
+    const cancelled = errorName === "AbortError";
+    const errorClass = projectXError?.status === 401 || projectXError?.status === 403
+      ? "authentication"
+      : projectXError?.status === 429
+        ? "rate_limited"
+        : projectXError?.status !== undefined && projectXError.status >= 500
+          ? "server_error"
+          : timedOut
+            ? "timeout"
+            : error
+              ? errorName === "TypeError" ? "network" : projectXError?.code ?? "error"
+              : null;
+    const context = this.options.diagnosticContext?.();
+    this.options.diagnostics?.rest({
+      schema_version: "glitch.projectx.rest_diagnostic.v1",
+      endpoint: path,
+      started_utc: new Date(startedMs).toISOString(),
+      finished_utc: new Date(finishedMs).toISOString(),
+      latency_ms: Math.max(0, finishedMs - startedMs),
+      status_http: projectXError?.status ?? null,
+      error_class: errorClass,
+      error_message: error ? formatLogError(error) : null,
+      timed_out: timedOut,
+      cancelled,
+      attempt,
+      retry_performed: retryPerformed,
+      retry_after_ms: retryAfterMs,
+      session_correlation: this.sessionCorrelation,
+      reconciliation_state: context?.reconciliation_state ?? null,
+      reconciliation_generation: context?.reconciliation_generation ?? null,
+      state_complete: context?.state_complete ?? null,
+      user_stream_fresh: context?.user_stream_fresh ?? null,
+      quote_stale: context?.quote_stale ?? null,
+    });
   }
 
   private async postOnce(path: string, body: unknown, authenticated = true): Promise<unknown> {
