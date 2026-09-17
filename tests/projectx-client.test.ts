@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it, mock } from "node:test";
 import { ProjectXApiClient, ProjectXApiError } from "../src/projectx/client.js";
 import { readLimitedResponseText, ResponseTooLargeError } from "../src/projectx/response-limit.js";
-import type { ProjectXRestDiagnostic } from "../src/projectx/diagnostics.js";
+import {
+  logProjectXRestDiagnostic,
+  type ProjectXRestDiagnostic,
+} from "../src/projectx/diagnostics.js";
 
 const loginEnvelope = {
   success: true,
@@ -188,5 +191,37 @@ describe("ProjectXApiClient", () => {
       assert.equal("headers" in event, false);
       assert.equal("payload" in event, false);
     }
+  });
+
+  it("routes successful diagnostics to info and failures to error", async () => {
+    const diagnostics: ProjectXRestDiagnostic[] = [];
+    let fail = false;
+    mock.method(globalThis, "fetch", async () => fail
+      ? new Response("{}", { status: 401 })
+      : new Response(JSON.stringify(loginEnvelope), { status: 200 }));
+    const client = new ProjectXApiClient({
+      apiUrl: "https://api.example.com",
+      username: "user",
+      apiKey: "key",
+      requestTimeoutMs: 5_000,
+      rateLimitRetryMs: [0],
+      diagnostics: { rest: (event) => diagnostics.push(event), stream: () => undefined },
+    });
+
+    await client.login();
+    const levels: string[] = [];
+    const logger = {
+      info: () => levels.push("info"),
+      warn: () => levels.push("warn"),
+      error: () => levels.push("error"),
+    };
+    logProjectXRestDiagnostic(diagnostics.at(-1)!, logger);
+    assert.deepEqual(levels, ["info"]);
+    fail = true;
+    await assert.rejects(() => client.login());
+    logProjectXRestDiagnostic(diagnostics.at(-1)!, logger);
+    assert.deepEqual(levels, ["info", "error"]);
+    logProjectXRestDiagnostic({ ...diagnostics[0]!, error_class: "server_error" }, logger);
+    assert.deepEqual(levels, ["info", "error", "warn"]);
   });
 });

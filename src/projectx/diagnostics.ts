@@ -48,9 +48,40 @@ export interface ProjectXDiagnosticsSink {
   stream(event: ProjectXStreamDiagnostic): void;
 }
 
+export type ProjectXDiagnosticLogLevel = "info" | "warn" | "error";
+
+export interface ProjectXDiagnosticLogger {
+  info(message: string, event: ProjectXRestDiagnostic): void;
+  warn(message: string, event: ProjectXRestDiagnostic): void;
+  error(message: string, event: ProjectXRestDiagnostic): void;
+}
+
+export function projectXRestDiagnosticLogLevel(event: ProjectXRestDiagnostic): ProjectXDiagnosticLogLevel {
+  if (!event.error_class) return "info";
+  return event.error_class === "rate_limited" || event.error_class === "server_error"
+    ? "warn"
+    : "error";
+}
+
+export function logProjectXRestDiagnostic(
+  event: ProjectXRestDiagnostic,
+  logger: ProjectXDiagnosticLogger = console,
+): void {
+  const level = projectXRestDiagnosticLogLevel(event);
+  logger[level]("ProjectX REST diagnostic", event);
+}
+
 export const projectXConsoleDiagnostics: ProjectXDiagnosticsSink = {
-  rest: (event) => console.error("ProjectX REST diagnostic", event),
-  stream: (event) => console.error("ProjectX stream diagnostic", event),
+  rest: (event) => logProjectXRestDiagnostic(event),
+  stream: (event) => {
+    if (event.new_state === "connected" && !event.error_message) {
+      console.info("ProjectX stream diagnostic", event);
+    } else if (event.error_message || event.new_state === "disconnected") {
+      console.error("ProjectX stream diagnostic", event);
+    } else {
+      console.warn("ProjectX stream diagnostic", event);
+    }
+  },
 };
 
 export function projectXDiagnosticContext(
