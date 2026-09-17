@@ -8,6 +8,7 @@ import type {
   ProjectXApiClient,
   RetrieveBarsRequest,
 } from "../projectx/client.js";
+import type { HistoryScheduleOptions } from "./rate-aware-scheduler.js";
 import { buildMultiTimeframeMarketObservation } from "./observation.js";
 
 const TIMEFRAMES: MarketObservationTimeframeMinutes[] = [1, 5, 15, 60];
@@ -21,6 +22,13 @@ export interface ProjectXObservationOptions {
   lookbackMultiplier: number;
 }
 
+type ScheduledProjectXApi = Pick<ProjectXApiClient, "retrieveBars"> & {
+  retrieveBars: (
+    request: RetrieveBarsRequest,
+    options?: HistoryScheduleOptions,
+  ) => ReturnType<ProjectXApiClient["retrieveBars"]>;
+};
+
 export class ProjectXMarketObservationService {
   private state: MarketObservationState = {
     last_attempt_utc: null,
@@ -28,10 +36,13 @@ export class ProjectXMarketObservationService {
     last_error: null,
     observation: null,
   };
-  private inFlight: Promise<MarketObservationState> | null = null;
+  // ProjectX fetch cancellation is not assumed to be reliable. Keep lanes independent and
+  // use a sequence fence so a late background result cannot overwrite a newer critical one.
+  private readonly inFlight = new Map<string, Promise<MarketObservationState>>();
+  private refreshSequence = 0;
 
   public constructor(
-    private readonly api: Pick<ProjectXApiClient, "retrieveBars">,
+    private readonly api: ScheduledProjectXApi,
     private readonly options: ProjectXObservationOptions,
     private readonly now: () => Date = () => new Date(),
   ) {
@@ -51,60 +62,63 @@ export class ProjectXMarketObservationService {
     return structuredClone(this.state);
   }
 
-  public refresh(): Promise<MarketObservationState> {
-    if (this.inFlight) {
-      return this.inFlight;
+  public refresh(scheduleOptions: HistoryScheduleOptions = {}): Promise<MarketObservationState> {
+    const lane = scheduleOptions.priority ?? "background";
+    const existing = this.inFlight.get(lane);
+    if (existing) {
+      return existing;
     }
-    const run = this.run();
-    this.inFlight = run;
+    const sequence = ++this.refreshSequence;
+    const run = this.run(scheduleOptions, sequence);
+    this.inFlight.set(lane, run);
     void run.finally(() => {
-      if (this.inFlight === run) {
-        this.inFlight = null;
+      if (this.inFlight.get(lane) === run) {
+        this.inFlight.delete(lane);
       }
     });
     return run;
   }
 
   public async waitForIdle(): Promise<void> {
-    if (!this.inFlight) {
+    if (this.inFlight.size === 0) {
       return;
     }
-    await this.inFlight.then(
-      () => undefined,
-      () => undefined,
-    );
+    await Promise.all([...this.inFlight.values()].map((run) => run.then(() => undefined, () => undefined)));
   }
 
-  private async run(): Promise<MarketObservationState> {
+  private async run(scheduleOptions: HistoryScheduleOptions, sequence: number): Promise<MarketObservationState> {
     const now = this.now();
-    this.state = {
-      ...this.state,
-      last_attempt_utc: now.toISOString(),
-    };
+    if (sequence === this.refreshSequence) {
+      this.state = { ...this.state, last_attempt_utc: now.toISOString() };
+    }
     try {
       const entries = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
-        const bars = await this.api.retrieveBars(this.request(timeframe, now));
+        const bars = await this.api.retrieveBars(this.request(timeframe, now), scheduleOptions);
         return [timeframe, bars.map(toCanonicalMarketBar)] as const;
       }));
-      this.state = {
-        last_attempt_utc: now.toISOString(),
-        last_succeeded_utc: now.toISOString(),
-        last_error: null,
-        observation: buildMultiTimeframeMarketObservation({
-          instrument: this.options.instrument,
-          contractId: this.options.contractId,
-          source: "projectx_bars",
-          now,
-          series: Object.fromEntries(entries) as Partial<
-            Record<MarketObservationTimeframeMinutes, CanonicalMarketBar[]>
-          >,
-        }),
-      };
+      if (sequence === this.refreshSequence) {
+        this.state = {
+          last_attempt_utc: now.toISOString(),
+          last_succeeded_utc: now.toISOString(),
+          last_error: null,
+          observation: buildMultiTimeframeMarketObservation({
+            instrument: this.options.instrument,
+            contractId: this.options.contractId,
+            source: "projectx_bars",
+            now,
+            series: Object.fromEntries(entries) as Partial<
+              Record<MarketObservationTimeframeMinutes, CanonicalMarketBar[]>
+            >,
+          }),
+        };
+      }
     } catch (error) {
-      this.state = {
-        ...this.state,
-        last_error: error instanceof Error ? `${error.name}:${error.message}` : String(error),
-      };
+      if (sequence === this.refreshSequence) {
+        this.state = {
+          ...this.state,
+          last_error: error instanceof Error ? `${error.name}:${error.message}` : String(error),
+        };
+      }
     }
     return this.current();
   }
