@@ -88,8 +88,14 @@ export class ProjectXOrderOwnershipService {
       WHERE outbox.operation = 'place_order'
         AND outbox.state = 'submitted'
         AND intent.action IN ('ENTER_LONG', 'ENTER_SHORT')
+        -- Historical mutations stay durable, but only the configured account and
+        -- exact contract are candidates for the operational ownership projection.
+        -- Keep identity-invalid rows inside the scope so a current ambiguous entry
+        -- remains visible and fail-closed; older contracts never become exposure.
+        AND CAST(json_extract(outbox.request_json, '$.accountId') AS INTEGER) = ?
+        AND json_extract(outbox.request_json, '$.contractId') = ?
       ORDER BY outbox.created_utc ASC, outbox.intent_id ASC
-    `).all() as unknown as SubmittedEntryRow[];
+    `).all(this.options.accountId, this.options.contractId) as unknown as SubmittedEntryRow[];
 
     const openOrders = this.openOrdersEvidence();
     const entries = rows.map((row) => this.buildEntry(row, venueOpenContracts > 0, openOrders));
