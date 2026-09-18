@@ -88,6 +88,10 @@ export class MultiInstrumentMarketDataPlane {
           live: this.liveMarketData,
           barLimit: 500,
           lookbackMultiplier: 3,
+          onDiagnostic: (diagnostic) => console.info("projectx_bar_observation_diagnostic", {
+            ...diagnostic,
+            scheduler: this.scheduler.status(),
+          }),
         },
         now,
       ),

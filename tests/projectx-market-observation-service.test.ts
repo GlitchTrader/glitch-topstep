@@ -104,4 +104,40 @@ describe("ProjectX market observation service", () => {
     assert.match(degraded.last_error ?? "", /history unavailable/);
     assert.equal(degraded.last_succeeded_utc, successful.last_succeeded_utc);
   });
+
+  it("emits request, response, provider-bar and update timestamps without changing the observation wire shape", async () => {
+    const diagnostics: Array<{
+      schema_version: string;
+      contract_id: string;
+      request_started_utc: string;
+      response_received_utc: string;
+      provider_bar_timestamp_utc: string | null;
+    }> = [];
+    let nowMs = Date.parse("2026-07-21T12:00:00Z");
+    const service = new ProjectXMarketObservationService(
+      {
+        retrieveBars: async (request) => {
+          nowMs += 10_000;
+          return bars(request.unitNumber);
+        },
+      },
+      {
+        contractId: "CON.F.US.MNQ.Z26",
+        instrument: "MNQ",
+        live: true,
+        barLimit: 500,
+        lookbackMultiplier: 3,
+        onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      },
+      () => new Date(nowMs),
+    );
+    const state = await service.refresh();
+    assert.equal(diagnostics.length, 4);
+    assert.ok(diagnostics.every((entry) => entry.schema_version === "glitch.projectx.bar_observation_diagnostic.v1"));
+    assert.ok(diagnostics.every((entry) => entry.contract_id === "CON.F.US.MNQ.Z26"));
+    assert.ok(diagnostics.every((entry) => typeof entry.request_started_utc === "string"));
+    assert.ok(diagnostics.every((entry) => typeof entry.response_received_utc === "string"));
+    assert.ok(diagnostics.every((entry) => typeof entry.provider_bar_timestamp_utc === "string"));
+    assert.ok(state.observation?.timeframes.every((timeframe) => "current_partial_bar" in timeframe));
+  });
 });
