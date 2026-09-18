@@ -20,6 +20,25 @@ export interface ProjectXObservationOptions {
   live: boolean;
   barLimit: number;
   lookbackMultiplier: number;
+  /** Operational-only hook; diagnostics are never part of the market wire contract. */
+  onDiagnostic?: (diagnostic: ProjectXBarObservationDiagnostic) => void;
+}
+
+export interface ProjectXBarObservationDiagnostic {
+  schema_version: "glitch.projectx.bar_observation_diagnostic.v1";
+  contract_id: string;
+  instrument: string;
+  timeframe_minutes: MarketObservationTimeframeMinutes;
+  gateway_local_time: string;
+  request_started_utc: string;
+  response_received_utc: string;
+  response_latency_ms: number;
+  provider_bar_timestamp_utc: string | null;
+  latest_completed_bar_timestamp_utc: string | null;
+  observation_updated_utc: string;
+  provider_bar_lag_ms: number | null;
+  refresh_sequence: number;
+  error: string | null;
 }
 
 type ScheduledProjectXApi = Pick<ProjectXApiClient, "retrieveBars"> & {
@@ -93,7 +112,51 @@ export class ProjectXMarketObservationService {
     }
     try {
       const entries = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
-        const bars = await this.api.retrieveBars(this.request(timeframe, now), scheduleOptions);
+        const requestStarted = this.now();
+        let bars: BarInfo[];
+        try {
+          bars = await this.api.retrieveBars(this.request(timeframe, now), scheduleOptions);
+        } catch (error) {
+          const responseReceived = this.now();
+          this.emitDiagnostic({
+            schema_version: "glitch.projectx.bar_observation_diagnostic.v1",
+            contract_id: this.options.contractId,
+            instrument: this.options.instrument,
+            timeframe_minutes: timeframe,
+            gateway_local_time: responseReceived.toString(),
+            request_started_utc: requestStarted.toISOString(),
+            response_received_utc: responseReceived.toISOString(),
+            response_latency_ms: Math.max(0, responseReceived.getTime() - requestStarted.getTime()),
+            provider_bar_timestamp_utc: null,
+            latest_completed_bar_timestamp_utc: null,
+            observation_updated_utc: responseReceived.toISOString(),
+            provider_bar_lag_ms: null,
+            refresh_sequence: sequence,
+            error: error instanceof Error ? `${error.name}:${error.message}` : String(error),
+          });
+          throw error;
+        }
+        const responseReceived = this.now();
+        const latest = bars.at(-1)?.timestamp ?? null;
+        const completed = bars.length > 1 ? bars.at(-2)?.timestamp ?? null : null;
+        this.emitDiagnostic({
+          schema_version: "glitch.projectx.bar_observation_diagnostic.v1",
+          contract_id: this.options.contractId,
+          instrument: this.options.instrument,
+          timeframe_minutes: timeframe,
+          gateway_local_time: responseReceived.toString(),
+          request_started_utc: requestStarted.toISOString(),
+          response_received_utc: responseReceived.toISOString(),
+          response_latency_ms: Math.max(0, responseReceived.getTime() - requestStarted.getTime()),
+          provider_bar_timestamp_utc: latest,
+          latest_completed_bar_timestamp_utc: completed,
+          observation_updated_utc: responseReceived.toISOString(),
+          provider_bar_lag_ms: latest
+            ? Math.max(0, responseReceived.getTime() - Date.parse(latest))
+            : null,
+          refresh_sequence: sequence,
+          error: null,
+        });
         return [timeframe, bars.map(toCanonicalMarketBar)] as const;
       }));
       if (sequence === this.refreshSequence) {
@@ -121,6 +184,14 @@ export class ProjectXMarketObservationService {
       }
     }
     return this.current();
+  }
+
+  private emitDiagnostic(diagnostic: ProjectXBarObservationDiagnostic): void {
+    if (this.options.onDiagnostic) {
+      this.options.onDiagnostic(diagnostic);
+      return;
+    }
+    console.info("projectx_bar_observation_diagnostic", diagnostic);
   }
 
   private request(
