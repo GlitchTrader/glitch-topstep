@@ -1,0 +1,63 @@
+{
+  "account": {
+    "open_quantity_from_state": 0.0,
+    "source": "state_and_ownership_or_health_invariant;never_packet",
+    "unprotected_open_quantity": 0
+  },
+  "captured_utc": "2026-09-11T18:18:24.789239Z",
+  "checks": {
+    "account_flat_from_state": true,
+    "delivery_disabled": false,
+    "gateway_supervised_overnight_false": false,
+    "health_authenticated": true,
+    "no_active_prac_cycle": true,
+    "ownership_endpoint_authenticated": true,
+    "paired_gateway_profile": true,
+    "reconciliation_fresh": true,
+    "recovery_not_blocking": true,
+    "state_endpoint_authenticated": true,
+    "unprotected_zero_from_non_packet_source": true,
+    "user_stream_or_reconciliation_timestamp": true
+  },
+  "endpoints": {
+    "/health": {
+      "error_type": null,
+      "http_status": 200
+    },
+    "/ownership": {
+      "error_type": null,
+      "http_status": 200
+    },
+    "/state": {
+      "error_type": null,
+      "http_status": 200
+    }
+  },
+  "fail_closed": true,
+  "freshness": {
+    "reconciliation_age_seconds": 112.047175,
+    "reconciliation_timestamp": "2026-09-11T18:16:32.692Z",
+    "user_stream_age_seconds": null,
+    "user_stream_last_event_at": null
+  },
+  "locks": {
+    "active_evaluation_lease": false,
+    "active_owner": false
+  },
+  "packet_called": false,
+  "packet_used_for_flatness": false,
+  "pairing": {
+    "gateway_commit": "9d7e2571541dadfbb7356e0812bc8b97601f9131",
+    "gateway_pair_sha256": "83992e681f3ea0784667f36dae509e1f04e96318cc61fed5b0e58f5b22d8897a",
+    "matched": true,
+    "profile_commit": "041f60b9eb6a3591d9e9de2195ebe68bb192a044",
+    "profile_pair_sha256": "83992e681f3ea0784667f36dae509e1f04e96318cc61fed5b0e58f5b22d8897a",
+    "reason": null
+  },
+  "recovery": {
+    "blocking_ambiguity": false,
+    "blocking_new_exposure": false
+  },
+  "safe_pre_restart": false,
+  "schema_version": "glitch.topstep.gateway_account_preflight.v1"
+}

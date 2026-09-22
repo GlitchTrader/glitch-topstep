@@ -131,11 +131,13 @@ describe("venue state truth", () => {
 
   it("makes malformed payload state visible instead of silently ignoring it", () => {
     const state = readyState();
+    const generationBefore = state.operationalStatus().generation;
     state.markPayloadFault("user", new Error("contract mismatch"));
     const snapshot = state.buildSnapshot(1, "MNQ");
     assert.equal(snapshot.stateComplete, false);
     assert.equal(snapshot.operational.userStream.state, "degraded");
     assert.match(snapshot.operational.userStream.lastError ?? "", /contract mismatch/);
+    assert.equal(snapshot.operational.generation, generationBefore);
   });
 
   it("never assumes zero PnL for another open account position", () => {

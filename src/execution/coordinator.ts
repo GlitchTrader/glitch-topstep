@@ -22,6 +22,7 @@ import {
   ProjectXApiError,
 } from "../projectx/client.js";
 import { RiskRejectedError, validateEntryRisk } from "../risk/risk-engine.js";
+import { evaluateSnapshotDataQuality, newExposureBlockCode } from "../state/data-quality.js";
 import { validateProtectiveAmendment, buildOriginalRiskEnvelope, type PositionSide } from "./amendment-safety.js";
 import { instrumentNetSignedLots, sumInstrumentNetContracts } from "../state/venue-state.js";
 import {
@@ -36,13 +37,17 @@ import {
   type ProtectedReductionHealth,
 } from "./protected-reduction-saga.js";
 import { evaluateProtectionHealth } from "./protection-supervisor.js";
+import {
+  runUnprotectedFlattenCycle,
+  type UnprotectedFlattenResult,
+} from "./unprotected-flatten.js";
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { evaluatePortfolioAdmission, type ProtectedExposure } from "../risk/portfolio-risk.js";
 import { validatePortfolioSelection } from "../risk/portfolio-selection.js";
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
-
+import { selectedCandidateHandoffMatchesPacket } from "./selected-candidate-handoff.js";
 export interface ExecutionReceipt {
   schema_version: "glitch.direct.execution_receipt.v1";
   receipt_id: string;
@@ -260,8 +265,8 @@ export class ExecutionCoordinator {
     }
 
     const { intent, issuedPacket } = early;
-
     try {
+      if (!selectedCandidateHandoffMatchesPacket(intent, issuedPacket)) return this.record({ intentId: intent.intentId, status: "rejected", code: "selected_candidate_handoff_invalid" });
       const currentSnapshot = this.packetSnapshot(issuedPacket);
       const intentContractId = this.packetContractId(issuedPacket);
       const validated = validateEntryRisk(
@@ -810,6 +815,26 @@ export class ExecutionCoordinator {
         status: "rejected",
         code: amendmentSafety.code,
       });
+    }
+    // Risk-increasing stop widens need execution_eligibility; tightens/protection never blocked by quote_state.
+    if (leg === "stop" && protectiveLeg.price !== null) {
+      const exposureBlock = newExposureBlockCode(
+        evaluateSnapshotDataQuality(snapshot, this.config.risk),
+      );
+      if (exposureBlock) {
+        const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
+        const widens = side === "long"
+          ? newPrice < protectiveLeg.price
+          : newPrice > protectiveLeg.price;
+        if (widens) {
+          return this.record({
+            intentId: intent.intentId,
+            status: "rejected",
+            code: exposureBlock,
+            detail: "risk_increasing_amendment_blocked",
+          });
+        }
+      }
     }
     if (protectiveLeg.providerOrderId === null) {
       return this.record({
@@ -1401,6 +1426,36 @@ export class ExecutionCoordinator {
       accountId: this.config.scope.accountId,
       contractId: this.config.scope.contractId,
     });
+  }
+
+  /**
+   * Fail-closed flatten for owned unprotected exposure after protection verification failure
+   * or exhausted rearm. Blocks new entries immediately; never flattens ambiguous identity.
+   */
+  public flattenUnprotectedOwnedExposure(
+    snapshot: AccountVenueSnapshot,
+    options: { afterRearmAttempt: boolean; now?: Date } = { afterRearmAttempt: true },
+  ): Promise<UnprotectedFlattenResult> {
+    const result = this.executionQueue.then(() => runUnprotectedFlattenCycle({
+      snapshot,
+      store: this.store,
+      api: this.api,
+      ledger: this.ledger,
+      accountId: this.config.scope.accountId,
+      contractId: this.config.scope.contractId,
+      accountName: this.config.scope.accountName,
+      instrument: this.config.scope.instrument,
+      attributableTranches: this.attributableTranches(),
+      activeReduction: this.store.activeProtectedReduction(),
+      afterRearmAttempt: options.afterRearmAttempt,
+      invalidateIssuedPackets: this.invalidateIssuedPackets,
+      now: options.now,
+    }));
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private async cancelTrancheProtectionOrders(

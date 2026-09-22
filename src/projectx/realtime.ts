@@ -22,12 +22,19 @@ import {
   parseMarketTrade,
   parseOrder,
   parsePosition,
-  parseQuote,
   parseTrade,
   unwrapMarketStreamArgs,
   unwrapUserStreamPayload,
   userStreamPayloadFaultDetail,
 } from "./schemas.js";
+import {
+  contractIdFromQuoteRawPayload,
+  diagnosticFromQuoteError,
+  isQuoteBboIncompleteError,
+  QUOTE_BBO_INCOMPLETE,
+  RateLimitedQuoteBboIncompleteLog,
+} from "./quote-bbo-fault.js";
+import { QuoteBboAssembler } from "./quote-bbo-assembler.js";
 import {
   DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES,
   DEFAULT_HUB_START_TIMEOUT_MS,
@@ -41,6 +48,8 @@ import {
   shouldScheduleHubRestart,
 } from "./stream-supervisor.js";
 import { HubRecoveryController } from "./hub-recovery-controller.js";
+import type { ProjectXDiagnosticsSink, ProjectXStreamDiagnostic } from "./diagnostics.js";
+import { formatLogError } from "../observability/log-sanitize.js";
 
 export interface ReconnectContext {
   kind: VenueStreamKind;
@@ -69,6 +78,7 @@ export interface ProjectXRealtimeOptions {
   sleep?: (ms: number) => Promise<void>;
   /** Test seam: lets a fake hub replace the SignalR transport without changing lifecycle wiring. */
   connectionFactory?: (kind: VenueStreamKind, url: string) => SignalRConnection;
+  diagnostics?: ProjectXDiagnosticsSink;
 }
 
 export interface SignalRConnection {
@@ -108,6 +118,9 @@ export class ProjectXRealtimeClient {
     user: 0,
     market: 0,
   };
+  private readonly quoteBboIncompleteLog = new RateLimitedQuoteBboIncompleteLog();
+  private readonly quoteBboAssembler = new QuoteBboAssembler();
+  private readonly reconnectCounts: Record<VenueStreamKind, number> = { user: 0, market: 0 };
 
   public constructor(
     private readonly options: ProjectXRealtimeOptions,
@@ -251,7 +264,29 @@ export class ProjectXRealtimeClient {
         "market",
         "quote",
         { contractId, payload: input },
-        () => parseQuote(contractId, input),
+        () => {
+          const generation = this.state.operationalStatus().generation;
+          const receivedMs = this.options.now?.() ?? Date.now();
+          const assembled = this.quoteBboAssembler.ingest({
+            contractId,
+            payload: input,
+            reconnectGeneration: generation,
+            receivedMs,
+          });
+          if (
+            assembled.quote
+            && (assembled.status === "ready"
+              || assembled.status === "locked"
+              || assembled.status === "crossed")
+          ) {
+            return assembled.quote;
+          }
+          const error = new Error(QUOTE_BBO_INCOMPLETE) as Error & {
+            diagnostic?: typeof assembled.diagnostic;
+          };
+          error.diagnostic = assembled.diagnostic;
+          throw error;
+        },
         (value) => ({
           accountId: null,
           contractId: value.contractId,
@@ -557,6 +592,13 @@ export class ProjectXRealtimeClient {
         this.marketLivenessStaleChecks = 0;
       }
     } catch (error) {
+      if (kind === "market" && eventType === "quote" && isQuoteBboIncompleteError(error)) {
+        const contractId =
+          contractIdFromQuoteRawPayload(rawPayload) ?? this.options.contractId;
+        this.state.markQuoteBboIncomplete(contractId, error);
+        this.quoteBboIncompleteLog.record(error, diagnosticFromQuoteError(error));
+        return;
+      }
       this.payloadFault(kind, error, kind === "user" ? { eventType, rawPayload } : undefined);
     }
   }
@@ -566,6 +608,31 @@ export class ProjectXRealtimeClient {
     eventType: string,
     error?: unknown,
   ): void {
+    const operational = this.state.operationalStatus();
+    const current = kind === "user" ? operational.userStream : operational.marketStream;
+    const nextState = lifecycleState(eventType, current.state);
+    const now = new Date().toISOString();
+    const lastEventAgeMs = current.lastEventAt
+      ? Math.max(0, Date.now() - Date.parse(current.lastEventAt))
+      : null;
+    if (eventType === "reconnecting" || eventType === "closed" || eventType === "restart_failed") {
+      this.reconnectCounts[kind] += 1;
+    }
+    const diagnostic: ProjectXStreamDiagnostic = {
+      schema_version: "glitch.projectx.stream_diagnostic.v1",
+      hub: kind,
+      previous_state: current.state,
+      new_state: nextState,
+      event: eventType,
+      occurred_utc: now,
+      close_code: closeCode(error),
+      error_message: errorMessage(error),
+      generation: current.generation,
+      reconnect_count: this.reconnectCounts[kind],
+      last_event_utc: current.lastEventAt,
+      last_event_age_ms: lastEventAgeMs,
+    };
+    this.options.diagnostics?.stream(diagnostic);
     recordProviderLifecycleEvent(this.options.evidence, {
       receivedUtc: new Date().toISOString(),
       providerTimestampUtc: null,
@@ -574,7 +641,7 @@ export class ProjectXRealtimeClient {
       accountId: kind === "user" ? this.options.accountId : null,
       contractId: kind === "market" ? this.options.contractId : null,
       providerEntityId: null,
-      rawPayload: errorPayload(error),
+      rawPayload: diagnostic,
     });
   }
 
@@ -595,6 +662,8 @@ export class ProjectXRealtimeClient {
     error: unknown,
     context?: { eventType: string; rawPayload: unknown },
   ): void {
+    // Quote BBO incompleteness is handled in recordAndApply (no generation bump).
+    // Other payload faults may degrade the stream for visibility without stream-gap invalidation.
     this.state.markPayloadFault(kind, error);
     console.error("Rejected ProjectX realtime event", error);
     if (kind === "user" && context) {
@@ -649,11 +718,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-function errorPayload(error: unknown): unknown {
-  if (error === undefined) {
-    return null;
+function lifecycleState(eventType: string, current: string): string {
+  if (eventType === "connecting" || eventType === "reconnecting") return eventType;
+  if (eventType === "connected_and_subscribed" || eventType === "reconnected_and_subscribed") {
+    return "connected";
   }
-  return error instanceof Error
-    ? { name: error.name, message: error.message }
-    : { value: String(error) };
+  if (eventType === "closed" || eventType === "connect_failed" || eventType === "restart_failed") {
+    return "disconnected";
+  }
+  return current;
+}
+
+function closeCode(error: unknown): string | number | null {
+  if (!error || typeof error !== "object") return null;
+  const value = (error as Record<string, unknown>).code;
+  return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function errorMessage(error: unknown): string | null {
+  if (error === undefined) return null;
+  return formatLogError(error);
 }

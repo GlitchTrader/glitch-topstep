@@ -249,9 +249,24 @@ export async function runReconciliationCycle(
       if (swept) {
         runtime.invalidateIssuedPackets();
       }
+      // Clear unprotected latch once flat.
+      await runtime.coordinator.flattenUnprotectedOwnedExposure(liveSnapshot, {
+        afterRearmAttempt: true,
+      });
     } else {
       const rearmed = await runtime.coordinator.rearmTrancheProtection(liveSnapshot);
       if (rearmed) {
+        runtime.invalidateIssuedPackets();
+      }
+      const postRearmSnapshot = runtime.state.buildSnapshot(
+        runtime.scope.accountId,
+        runtime.scope.contractId,
+      );
+      const flattened = await runtime.coordinator.flattenUnprotectedOwnedExposure(
+        postRearmSnapshot,
+        { afterRearmAttempt: true },
+      );
+      if (flattened.changed || flattened.flattened) {
         runtime.invalidateIssuedPackets();
       }
     }

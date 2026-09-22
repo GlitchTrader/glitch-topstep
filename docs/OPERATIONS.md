@@ -171,13 +171,15 @@ Risk-reducing exits should remain available after the corresponding ownership an
 
 ## Bracket verification failure (`protection_status: failed`)
 
-When SL/TP children are not observed within **30 seconds** of fill (`BRACKET_VERIFICATION_TIMEOUT_MS`), the decision packet exposes `protection.protection_status: failed` and the entry receipt code becomes `entry_protection_verification_failed`. The gateway does **not** auto-flatten.
+When SL/TP children are not observed within **30 seconds** of fill (`BRACKET_VERIFICATION_TIMEOUT_MS`), the decision packet exposes `protection.protection_status: failed` and the entry receipt code becomes `entry_protection_verification_failed`.
 
-Operator steps:
+**Fail-closed autonomous flatten (P0):** after a reconcile rearm attempt, if `unprotected_open_quantity > 0` and ownership of the scoped position is proven (attributable remaining qty matches venue size), the gateway submits an idempotent `closePosition` / EXIT mutation (`unprotected_fail_closed_flatten_submitted`). New entries are blocked immediately while unprotected. Ambiguous ownership, contract, or quantity **never** flattens — entries stay blocked until reconciled flat.
+
+Operator steps when ownership is ambiguous (no auto-flatten):
 
 1. Verify TopstepX account has **Auto OCO Brackets** enabled (not Position Brackets).
 2. Check `/ownership` and TopstepX for missing protective orders.
-3. Issue `EXIT` via Hermes if the position should be closed.
+3. Issue control flatten or reconcile identity, then clear the unprotected block.
 4. After partial scale-out, wait for `tranche_protection_rearmed` or restart reconcile — see `docs/PARITY.md` PM-3 notes.
 
 ## Comparative cognition evaluation (TS-EVAL-01)

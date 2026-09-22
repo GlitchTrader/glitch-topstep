@@ -488,15 +488,28 @@ export class SqliteExecutionStore {
     const ambiguousMutations = Number(counts.ambiguous ?? 0);
     const blockingAmbiguity = ambiguousMutations > 0;
     const entrySubmissionPending = this.entrySubmissionIntentId() !== null;
+    const unprotectedFlattenBlock = this.meta("unprotected_flatten_block") !== null;
     return {
       blockingAmbiguity,
       entrySubmissionPending,
-      blockingNewExposure: blockingAmbiguity || entrySubmissionPending,
+      blockingNewExposure: blockingAmbiguity || entrySubmissionPending || unprotectedFlattenBlock,
       unresolvedMutations,
       ambiguousMutations,
       lastRecoveryUtc,
       lastRecoveryError,
     };
+  }
+
+  public setUnprotectedFlattenBlock(reason: string, atUtc: string): void {
+    this.setMeta("unprotected_flatten_block", `${atUtc}|${reason}`);
+  }
+
+  public clearUnprotectedFlattenBlock(): void {
+    this.setMeta("unprotected_flatten_block", null);
+  }
+
+  public unprotectedFlattenBlockReason(): string | null {
+    return this.meta("unprotected_flatten_block");
   }
 
   public recordRecoveryResult(atUtc: string, error: string | null): void {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ProjectXRealtimeClient, type SignalRConnection } from "../src/projectx/realtime.js";
 import type { VenueStreamKind } from "../src/domain/models.js";
 import { VenueStateStore } from "../src/state/venue-state.js";
+import type { ProjectXStreamDiagnostic } from "../src/projectx/diagnostics.js";
 
 const MNQ = "CON.F.US.MNQ.U26";
 const MES = "CON.F.US.MES.U26";
@@ -69,6 +70,7 @@ async function settle(): Promise<void> {
 
 function harness(options: { contractIds: readonly string[]; depthContractIds: readonly string[] }) {
   const hubs = new Map<VenueStreamKind, FakeHub>();
+  const diagnostics: ProjectXStreamDiagnostic[] = [];
   const state = new VenueStateStore();
   const client = new ProjectXRealtimeClient(
     {
@@ -80,6 +82,7 @@ function harness(options: { contractIds: readonly string[]; depthContractIds: re
       contractIds: options.contractIds,
       depthContractIds: options.depthContractIds,
       evidence: { append: () => undefined },
+      diagnostics: { rest: () => undefined, stream: (event) => diagnostics.push(event) },
       sleep: async () => undefined,
       connectionFactory: (kind) => {
         const hub = new FakeHub();
@@ -89,7 +92,7 @@ function harness(options: { contractIds: readonly string[]; depthContractIds: re
     },
     state,
   );
-  return { client, state, market: hubs.get("market")!, user: hubs.get("user")! };
+  return { client, state, market: hubs.get("market")!, user: hubs.get("user")!, diagnostics };
 }
 
 function duplicates(keys: string[]): string[] {
@@ -175,6 +178,26 @@ describe("TS-MULTI-02 multi-contract subscription lifecycle", () => {
     assert.equal(quotes.length, 2, "one subscription per connect cycle, not one per allowlist entry");
     assert.equal(depth.length, 2);
 
+    await client.stop();
+  });
+
+  it("records sanitized close diagnostics with prior/new state and reconnect age", async () => {
+    const { client, market, diagnostics } = harness({
+      contractIds: [MNQ, MES, MCLE],
+      depthContractIds: [],
+    });
+    await client.start();
+    market.emitClose();
+    await settle();
+
+    const closed = diagnostics.find((event) => event.hub === "market" && event.event === "closed");
+    assert.ok(closed);
+    assert.equal(closed.previous_state, "connected");
+    assert.equal(closed.new_state, "disconnected");
+    assert.equal(closed.close_code, null);
+    assert.equal(closed.error_message, "transport_closed");
+    assert.equal(typeof closed.reconnect_count, "number");
+    assert.equal("payload" in closed, false);
     await client.stop();
   });
 });

@@ -18,9 +18,8 @@ import {
 } from "./projectx/evidence-write-queue.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
-import { ProjectXRealtimeClient } from "./projectx/realtime.js";
-import { HubRecoveryController } from "./projectx/hub-recovery-controller.js";
-import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
+import { ProjectXRealtimeClient } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
+import { HubRecoveryController } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -31,8 +30,8 @@ import { boundedPacketObservationRefresh, type PacketObservationRefreshResult } 
 import { applyPacketObservationRefreshMetadata } from "./service/packet-refresh-metadata.js";
 import { GATEWAY_COMPATIBILITY } from "./release/compatibility.js";
 import { ProjectXOrderOwnershipService } from "./ownership/projectx-order-ownership.js";
-import { resolveGatewayMode } from "./execution/gateway-mode.js";
-import { evaluateSnapshotDataQuality } from "./state/data-quality.js";
+import { gatewayModePermitsLiveOrders, resolveGatewayMode } from "./execution/gateway-mode.js";
+import { dataQualityHealthFields, evaluateSnapshotDataQuality } from "./state/data-quality.js";
 import { VenueStateStore } from "./state/venue-state.js";
 import { TradeOutcomePublisher, isIncompleteOutcome, outcomeSharesForeignClosingFill } from "./learning/trade-outcome-publisher.js";
 import {
@@ -105,6 +104,7 @@ const ORDER_FLOW_REFRESH_MS = 10_000;
 const ORDER_FLOW_MAX_EVENTS = 50_000;
 const ORDER_FLOW_DEPTH_LEVELS = 10;
 const RECONCILE_METADATA_INTERVAL_MS = 15 * 60 * 1000;
+const GATEWAY_SUPERVISED_OVERNIGHT = false;
 
 export class GlitchTopstepService {
   private readonly authManager: ProjectXAuthManager;
@@ -168,6 +168,7 @@ export class GlitchTopstepService {
       apiUrl: config.projectX.apiUrl,
       username: config.projectX.username,
       apiKey: config.projectX.apiKey,
+      diagnostics: projectXConsoleDiagnostics, diagnosticContext: () => projectXDiagnosticContext(this.state, this.config),
     });
     this.api = this.authManager.authenticatedClient();
     this.ledger = new JsonlEventStore(config.dataDir);
@@ -447,7 +448,7 @@ export class GlitchTopstepService {
         depthContractIds: this.instrumentUniverse.contracts
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
-        evidence: this.evidenceQueue,
+        evidence: this.evidenceQueue, diagnostics: projectXConsoleDiagnostics,
         marketRecovery: this.marketHubRecovery,
         onReconnected: async ({ kind, generation }) => {
           await this.handleHubReconnected(kind, generation);
@@ -567,10 +568,13 @@ export class GlitchTopstepService {
         const healthBuildStartMs = performance.now();
         const recordedAt = new Date();
         const current = snapshot();
-        const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt);
+        const marketObservation = this.currentMarketObservation();
+        const quality = evaluateSnapshotDataQuality(current, this.config.risk, recordedAt, {
+          quoteSource: "projectx_quote_stream",
+          observationSucceededUtc: marketObservation?.last_succeeded_utc ?? null,
+        });
         const executionRecovery = this.executionStore.recoveryStatus();
         const providerHistory = this.historySync.currentStatus();
-        const marketObservation = this.currentMarketObservation();
         const orderFlow = this.orderFlow?.current() ?? {
           last_attempt_utc: null,
           last_succeeded_utc: null,
@@ -583,6 +587,9 @@ export class GlitchTopstepService {
           this.config.risk,
           recordedAt,
         );
+        const deliveryEffective = gatewayModePermitsLiveOrders(gatewayMode.effective)
+          ? "enabled"
+          : "disabled";
         const eventLedger = this.ledger.status();
         const outcomeFeed = this.tradeOutcomeStore.status();
         this.maybePruneAppliedEvidenceOutbox(recordedAt.getTime());
@@ -653,12 +660,16 @@ export class GlitchTopstepService {
           lifecycle: this.lifecycle.status(),
           gateway_mode: gatewayMode.effective,
           gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
+          delivery_effective: deliveryEffective,
+          delivery_disabled_by_mode: deliveryEffective === "disabled",
+          gateway_supervised_overnight: GATEWAY_SUPERVISED_OVERNIGHT,
+          process_identity: {
+            commit: process.env.GLITCH_GATEWAY_COMMIT ?? null,
+            checkout: process.env.GLITCH_GATEWAY_CHECKOUT ?? null,
+          },
           recorded_utc: recordedAt.toISOString(),
           data_quality: {
-            state_complete: quality.stateComplete,
-            issues: quality.issues,
-            quote_age_ms: quality.quoteAgeMs,
-            state_age_ms: quality.stateAgeMs,
+            ...dataQualityHealthFields(quality),
             operational: current.operational,
           },
           execution_recovery: executionRecovery,

@@ -11,7 +11,8 @@ import { SqliteProviderEvidenceStore } from "../src/storage/sqlite-provider-evid
 
 const ACCOUNT_ID = 101;
 const ACCOUNT_NAME = "TEST_ACCOUNT";
-const CONTRACT_ID = "CON.F.US.MNQ.U26";
+const CONTRACT_ID = "CON.F.US.MNQ.Z26";
+const HISTORICAL_CONTRACT_ID = "CON.F.US.MNQ.U26";
 const INSTRUMENT = "MNQ";
 
 function intent(
@@ -30,7 +31,7 @@ function intent(
     confidence: 0.6,
     snapshotHash: "snapshot-hash",
     modelVersion: "test",
-    promptVersion: "glitch-topstep-v17.1",
+    promptVersion: "glitch-topstep-v17.3",
     reason: "Ownership fixture.",
     decisionAudit: {
       bullCase: "Bull.",
@@ -54,14 +55,16 @@ function submittedEntry(
   store: SqliteExecutionStore,
   value: TradeIntent,
   providerOrderId: number,
+  contractId = CONTRACT_ID,
+  accountId = ACCOUNT_ID,
 ): void {
   store.registerIntent(value, "2026-07-21T12:00:05Z");
   store.prepareMutation(
     value.intentId,
     "place_order",
     {
-      accountId: ACCOUNT_ID,
-      contractId: CONTRACT_ID,
+      accountId,
+      contractId,
       type: 2,
       side: value.action === "ENTER_LONG" ? 0 : 1,
       size: value.quantity,
@@ -71,6 +74,22 @@ function submittedEntry(
   );
   store.markMutationSubmitting(value.intentId, "2026-07-21T12:00:07Z");
   store.markMutationSubmitted(value.intentId, providerOrderId, "2026-07-21T12:00:08Z");
+}
+
+function receipt(
+  store: SqliteExecutionStore,
+  intentId: string,
+  status: string,
+  code: string,
+): void {
+  store.recordReceipt({
+    schema_version: "glitch.direct.execution_receipt.v1",
+    receipt_id: `receipt-${intentId}`,
+    intent_id: intentId,
+    recorded_utc: "2026-07-21T12:00:11Z",
+    status,
+    code,
+  });
 }
 
 function order(id: number, side = 0, size = 1): OrderInfo {
@@ -159,6 +178,78 @@ describe("ProjectX order ownership", () => {
       assert.equal(snapshot.entries[0]?.latestObservedOrder, null);
       assert.equal(snapshot.entries[0]?.protection.status, "unknown");
       assert.equal(snapshot.unresolved_entry_count, 1);
+    });
+  });
+
+  it("excludes historical contracts from operational ownership while retaining receipts", () => {
+    withStores((execution, _evidence, ownership) => {
+      const historical = intent("00000000-0000-4000-8000-000000009007");
+      for (let index = 0; index < 22; index += 1) {
+        const value = index === 0
+          ? historical
+          : intent(`00000000-0000-4000-8000-${String(9070 + index).padStart(12, "0")}`);
+        submittedEntry(execution, value, 9007 + index, HISTORICAL_CONTRACT_ID);
+      }
+      receipt(execution, historical.intentId, "open_protected", "entry_open_with_proven_protection");
+
+      const snapshot = ownership.current();
+
+      assert.equal(snapshot.entries.length, 0);
+      assert.equal(snapshot.unresolved_entry_count, 0);
+      assert.deepEqual(execution.receiptForIntent(historical.intentId), {
+        schema_version: "glitch.direct.execution_receipt.v1",
+        receipt_id: `receipt-${historical.intentId}`,
+        intent_id: historical.intentId,
+        recorded_utc: "2026-07-21T12:00:11Z",
+        status: "open_protected",
+        code: "entry_open_with_proven_protection",
+      });
+    });
+  });
+
+  it("keeps a current-scope identity ambiguity visible and unresolved", () => {
+    withStores((execution, _evidence, ownership) => {
+      const ambiguous = intent("00000000-0000-4000-8000-000000009008");
+      ambiguous.account = "OTHER_ACCOUNT";
+      submittedEntry(execution, ambiguous, 9008);
+
+      const snapshot = ownership.current();
+
+      assert.equal(snapshot.entries.length, 1);
+      assert.equal(snapshot.entries[0]?.status, "incomplete");
+      assert.equal(snapshot.unresolved_entry_count, 1);
+      assert.ok(snapshot.entries[0]?.issues.some((issue) => issue.startsWith("intent_account_mismatch")));
+    });
+  });
+
+  it("keeps historical pending receipts durable and outside current protection", () => {
+    withStores((execution, _evidence, ownership) => {
+      const historical = intent("00000000-0000-4000-8000-000000009009");
+      submittedEntry(execution, historical, 9009, HISTORICAL_CONTRACT_ID);
+      receipt(execution, historical.intentId, "pending", "entry_submitted_pending_reconciliation");
+
+      const snapshot = ownership.current();
+
+      assert.equal(snapshot.entries.length, 0);
+      assert.equal(snapshot.protection_status, "unknown");
+      const storedReceipt = execution.receiptForIntent<{ status?: string; code?: string }>(historical.intentId);
+      assert.equal(storedReceipt?.status, "pending");
+      assert.equal(
+        storedReceipt?.code,
+        "entry_submitted_pending_reconciliation",
+      );
+    });
+  });
+
+  it("excludes a different account even when its contract matches", () => {
+    withStores((execution, _evidence, ownership) => {
+      const foreign = intent("00000000-0000-4000-8000-000000009013");
+      submittedEntry(execution, foreign, 9013, CONTRACT_ID, ACCOUNT_ID + 1);
+
+      const snapshot = ownership.current();
+
+      assert.equal(snapshot.entries.length, 0);
+      assert.equal(snapshot.unresolved_entry_count, 0);
     });
   });
 
@@ -480,7 +571,7 @@ describe("multi-tranche ownership reconstruction", () => {
         confidence: 0.7,
         snapshotHash: "snapshot-hash",
         modelVersion: "test",
-        promptVersion: "glitch-topstep-v17.1",
+        promptVersion: "glitch-topstep-v17.3",
         reason: "Exit second tranche.",
         decisionAudit: {
           bullCase: "Bull.",

@@ -1,4 +1,4 @@
-import { TradeActions, type DecisionAudit, type TradeAction, type TradeIntent } from "./models.js";
+import { TradeActions, type DecisionAudit, type SelectedCandidateHandoff, type TradeAction, type TradeIntent } from "./models.js";
 import {
   GLITCH_TOPSTEP_OPERATOR_PROFILE,
   GLITCH_TOPSTEP_PROMPT_VERSION,
@@ -34,6 +34,8 @@ const CORE_FIELDS = new Set([
   "entry_price_min",
   "entry_price_max",
   "supersedes_intent_id",
+  "symbol_id",
+  "selected_candidate_handoff",
 ]);
 
 const AUDIT_FIELDS = new Set([
@@ -130,6 +132,70 @@ function parseDecisionAudit(value: unknown, action: TradeAction): DecisionAudit 
   };
 }
 
+function parseSelectedCandidateHandoff(value: unknown, input: Record<string, unknown>): SelectedCandidateHandoff {
+  if (!isRecord(value)) throw new IntentParseError("selected_candidate_handoff_invalid", "selected_candidate_handoff");
+  const required = [
+    "schema_version", "comparison_decision_id", "candidate_root", "selected_instrument",
+    "executable_contract_id", "symbol_id", "packet_id", "snapshot_hash", "scope_hash",
+    "scope_generation", "lease_generation", "range_identity", "entry_price_min", "entry_price_max",
+    "expires_utc", "selection_profile_id", "selection_profile_version", "selection_evidence", "selection_version",
+  ] as const;
+  for (const key of Object.keys(value)) {
+    if (!(required as readonly string[]).includes(key)) throw new IntentParseError("selected_candidate_handoff_unknown_field", `selected_candidate_handoff.${key}`);
+  }
+  for (const key of required) {
+    if (value[key] === undefined) throw new IntentParseError("selected_candidate_handoff_incomplete", `selected_candidate_handoff.${key}`);
+  }
+  if (value.schema_version !== "glitch.topstep.selected_candidate_handoff.v1") throw new IntentParseError("selected_candidate_handoff_schema_invalid", "selected_candidate_handoff.schema_version");
+  const text = (key: string, max = 512): string => stringField(value, key, max);
+  const integer = (key: string): number => {
+    const n = optionalNumber(value, key);
+    if (!Number.isInteger(n) || (n ?? 0) < 1) throw new IntentParseError("selected_candidate_handoff_number_invalid", `selected_candidate_handoff.${key}`);
+    return n as number;
+  };
+  const price = (key: string): number => {
+    const n = optionalNumber(value, key);
+    if (n === undefined || n <= 0) throw new IntentParseError("selected_candidate_handoff_price_invalid", `selected_candidate_handoff.${key}`);
+    return n;
+  };
+  const handoff: SelectedCandidateHandoff = {
+    schemaVersion: "glitch.topstep.selected_candidate_handoff.v1",
+    comparisonDecisionId: text("comparison_decision_id"),
+    candidateRoot: text("candidate_root"),
+    selectedInstrument: text("selected_instrument", 32).toUpperCase(),
+    executableContractId: text("executable_contract_id"),
+    symbolId: text("symbol_id", 128),
+    packetId: text("packet_id", 128),
+    snapshotHash: text("snapshot_hash"),
+    scopeHash: text("scope_hash"),
+    scopeGeneration: integer("scope_generation"),
+    leaseGeneration: integer("lease_generation"),
+    rangeIdentity: text("range_identity"),
+    entryPriceMin: price("entry_price_min"),
+    entryPriceMax: price("entry_price_max"),
+    expiresUtc: text("expires_utc", 64),
+    selectionProfileId: text("selection_profile_id", 128),
+    selectionProfileVersion: text("selection_profile_version", 128),
+    selectionEvidence: text("selection_evidence", 4000),
+    selectionVersion: text("selection_version", 128),
+  };
+  if (handoff.selectedInstrument !== String(input.instrument).toUpperCase()
+    || handoff.executableContractId !== String(input.contract_id)
+    || handoff.symbolId !== String(input.symbol_id)
+    || handoff.packetId !== String(input.packet_id)
+    || handoff.snapshotHash !== String(input.snapshot_hash)
+    || handoff.scopeHash !== String(input.scope_hash)
+    || handoff.scopeGeneration !== Number(input.scope_generation)
+    || handoff.entryPriceMin !== Number(input.entry_price_min)
+    || handoff.entryPriceMax !== Number(input.entry_price_max)
+    || handoff.expiresUtc !== String(input.expires_utc)) {
+    throw new IntentParseError("selected_candidate_handoff_identity_mismatch", "selected_candidate_handoff");
+  }
+  if (handoff.entryPriceMin > handoff.entryPriceMax) throw new IntentParseError("selected_candidate_handoff_range_invalid", "selected_candidate_handoff");
+  if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(handoff.expiresUtc) || !Number.isFinite(Date.parse(handoff.expiresUtc))) throw new IntentParseError("selected_candidate_handoff_expiry_invalid", "selected_candidate_handoff.expires_utc");
+  return handoff;
+}
+
 export function parseTradeIntent(input: unknown): TradeIntent {
   if (!isRecord(input)) {
     throw new IntentParseError("intent_must_be_object");
@@ -139,7 +205,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
       throw new IntentParseError("unknown_intent_field", key);
     }
   }
-  if (input.schema_version !== "glitch.intent.v2" && input.schema_version !== "glitch.intent.v3") {
+  if (input.schema_version !== "glitch.intent.v2" && input.schema_version !== "glitch.intent.v3" && input.schema_version !== "glitch.intent.v4") {
     throw new IntentParseError("schema_version_invalid", "schema_version");
   }
 
@@ -177,6 +243,8 @@ export function parseTradeIntent(input: unknown): TradeIntent {
   const scopeGeneration = optionalNumber(input, "scope_generation");
   const targetIntentIdRaw = input.target_intent_id;
   const orderType = input.order_type;
+  const symbolId = input.symbol_id;
+  if (symbolId !== undefined) stringField(input, "symbol_id", 128);
   if (orderType !== undefined && orderType !== "MARKET") {
     throw new IntentParseError("order_type_invalid", "order_type");
   }
@@ -203,7 +271,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     if (stopLoss === undefined || stopLoss <= 0 || takeProfit1 === undefined || takeProfit1 <= 0) {
       throw new IntentParseError("entry_fields_invalid", "stop_loss");
     }
-    if (schemaVersion === "glitch.intent.v3") {
+    if (schemaVersion === "glitch.intent.v3" || schemaVersion === "glitch.intent.v4") {
       const requiredStrings = ["packet_id", "contract_id", "scope_hash", "expires_utc"] as const;
       for (const field of requiredStrings) {
         stringField(input, field, 256);
@@ -223,6 +291,9 @@ export function parseTradeIntent(input: unknown): TradeIntent {
       const expiresUtc = stringField(input, "expires_utc", 64);
       if (!/[zZ]$|[+-]\d{2}:\d{2}$/.test(expiresUtc) || !Number.isFinite(Date.parse(expiresUtc))) {
         throw new IntentParseError("expires_utc_invalid", "expires_utc");
+      }
+      if (schemaVersion === "glitch.intent.v4") {
+        if (symbolId === undefined || !isRecord(input.selected_candidate_handoff)) throw new IntentParseError("selected_candidate_handoff_required", "selected_candidate_handoff");
       }
     }
   } else if (action === "MOVE_STOP") {
@@ -285,6 +356,9 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     ? (newTakeProfit ?? takeProfit1)
     : takeProfit1;
 
+  const selectedCandidateHandoff = schemaVersion === "glitch.intent.v4"
+    ? parseSelectedCandidateHandoff(input.selected_candidate_handoff, input)
+    : undefined;
   return {
     schemaVersion,
     intentId,
@@ -317,5 +391,7 @@ export function parseTradeIntent(input: unknown): TradeIntent {
     ...(input.supersedes_intent_id === undefined
       ? {}
       : { supersedesIntentId: stringField(input, "supersedes_intent_id", 64) }),
+    ...(symbolId === undefined ? {} : { symbolId: stringField(input, "symbol_id", 128) }),
+    ...(selectedCandidateHandoff === undefined ? {} : { selectedCandidateHandoff }),
   };
 }

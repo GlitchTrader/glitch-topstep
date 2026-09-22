@@ -1,90 +1,90 @@
 {
   "schema_version": "glitch.topstep.reaudit_fault_matrix_proof.v1",
-  "recorded_utc": "2026-08-31T16:53:31.328Z",
-  "gateway_commit": "f2de2ec0291a29063efc88f48219f9c8984f6490",
+  "recorded_utc": "2026-09-10T00:45:27.530Z",
+  "gateway_commit": "bd07123c57c5c12bacd72ef1c03bcb85ba7abd14",
   "proofs": [
     {
       "file": "tests/reaudit-fault-matrix.test.ts",
-      "sha256": "67958b4131c558b0ce7862853bce9892b7be59207289e3492252a12d27088de9"
+      "sha256": "2c7ccf5693ad8abc91f4734ee1d606d7d930301b6aba6e0ea3c65493cd3f0723"
     },
     {
       "file": "tests/projectx-auth-manager.test.ts",
-      "sha256": "8fa4b796ee3403adb197a17d0e489b1d98427e064f4c4cf89139620f1006a553"
+      "sha256": "47962678c96cbbacc642b8dc194dc37a47ecf39d18ede062aa91250ef35f3653"
     },
     {
       "file": "tests/reaudit-phase1.test.ts",
-      "sha256": "e053a0056d207ac58a22542ee4cc57177e0480b8fa763bd61b03b3497d30baeb"
+      "sha256": "e508fdca0a50ca3c0921c75c5bc1874166d7bf095274b8f742fa0e86a65c66f1"
     },
     {
       "file": "tests/lifecycle-supervisor.test.ts",
-      "sha256": "aa155cd43cfc260fc9903e02e6b794521bfb7ce29e31ad8df7b9079c15b29e94"
+      "sha256": "1834c8fdc465f0943cec8ca3516ca41100f5162703c63d356b5c932a09bc358c"
     },
     {
       "file": "tests/flatten-workflow.test.ts",
-      "sha256": "9ff342a0d15ec97dc199220579ce628db816266b24fb03b48e12192d598c134a"
+      "sha256": "d2c4d10b717d0aa211802b3c96de6d3a57b7c24e4acb50767570cc6df3448037"
     },
     {
       "file": "tests/kill-matrix.test.ts",
-      "sha256": "cc7d9b65ecdfff6544a152fd483a2758368c23344ced612dec6df19ff77febe3"
+      "sha256": "cf5bbd66ff3132337e23e93b8b53414c2117ec4b3f7ff3423caa73072509d0ac"
     },
     {
       "file": "tests/paired-release-manifest.test.ts",
-      "sha256": "0d2a59b56148ec7fb8e41f11a0af1603fdaf34b55fbe5217b4df9ca18454fe2f"
+      "sha256": "f8186d5c414318980cfb9bb29d5659def7726569b3664127a621370af93ce2e1"
     },
     {
       "file": "tests/projectx-client.test.ts",
-      "sha256": "f6c176f9afac674edd4fc7433a44d0cbd34a36ed315c77c19c9ea3d3e9173a46"
+      "sha256": "c1812ce69199ab86074b6c4d19c7c528b55008727cd1931114a11d77c29caed9"
     },
     {
       "file": "tests/gateway-shutdown-deadline.test.ts",
-      "sha256": "b7b8e20043a7509717170137b76d0e2603438085b2cfb976290eb291996687d3"
+      "sha256": "e9cda6d9283944ee96f2dedfc085c638505832e258defa5f4338bafdf7c74bff"
     },
     {
       "file": "tests/audit-wave-abc.test.ts",
-      "sha256": "8d7a4198c7713a7cd603f4032726dde19403b14eb380d97724b35726a3af62ea"
+      "sha256": "d92813a4d4c05cffbcc5d26d2b3b9ec1bcf6942cff8d9afb2b2806a5f09f7efe"
     },
     {
       "file": "tests/invariant-metrics.test.ts",
-      "sha256": "e9b86e295c7267ddf467de20b772bb67390a15860a053be41973c085505fe7b2"
+      "sha256": "f8ea16855d4b31f40dc7da4e0e0871bf63c93bd9e280a565ace858bf80277968"
     },
     {
       "file": "tests/sqlite-execution-store.test.ts",
-      "sha256": "58cbed5e845d97f9132b93aa92bab2f2c615d29d917846e120ff3df22eed783c"
+      "sha256": "3da2f8776b37f5dcade03d5d5c2abf8e0ae6df2376ac1b0b28704ab39267de01"
     },
     {
       "file": "tests/protection.test.ts",
-      "sha256": "9a9a89a98578275b1e4504b6dbab415d48a4e199cdb435230aa788811e2894ec"
+      "sha256": "42d2f70f87de8baa3221ab44cf60b618e8e64c0262cb83ba52a9a71de5588bda"
     },
     {
       "file": "tests/protection-supervisor.test.ts",
-      "sha256": "cc2a4e79350b34e9d48933ea2c13fba303ab3d396da8cbeb1ec07df181a39c3e"
+      "sha256": "6dfe2cd6eba11b5b7c519ccbabd2780e8794b1217d631a400144e364644a3479"
     },
     {
       "file": "tests/read-circuit-breaker.test.ts",
-      "sha256": "c799ebb147a2d6c32c2d497718c57277bf75ddf73ce6fe0e0e0f8af6c7233219"
+      "sha256": "93adf55cd7fe8049ddff84d4322fdc6bcd017619dc41c87e5cb194d7cc873200"
     },
     {
       "file": "tests/intent-delivery-status.test.ts",
-      "sha256": "6d59f6666fb42a4b80a72669da3b3774b284db26d27b2ae9254005617fedd47c"
+      "sha256": "5ab42cd930de30589c8175a001f2f25c8c47f11e134fdc718b604a9c95be78b5"
     },
     {
       "file": "tests/sqlite-busy-fault.test.ts",
-      "sha256": "2de12c38332a23a51877966579290fa383f78ebeaed143e355680fb418980b16"
+      "sha256": "b660a234e9239924ec12edab9b159d464a94ad2511261f374e9ded753bbd11c1"
     },
     {
       "file": "tests/shutdown-failure-recovery.test.ts",
-      "sha256": "6382ddb52cf86f4a733cb9fcde7b1b32be02d54be669559eb4d8439894fd4ec0"
+      "sha256": "d81a8aaba1b3fe806f3ee7fc9c850bbd97c38d9c4afa40faeac630d34d1eeddc"
     },
     {
       "file": "tests/task-scheduler.test.ts",
-      "sha256": "1eba93b5ba91dad2793839c9e9bbab2783f6da02ed9feb8346f410ba1b9c4962"
+      "sha256": "ff5b1c0cdb736d2afe967d333ece810021701fdb9254b06bf4e1ad7280e03edd"
     },
     {
       "file": "scripts/rollback-rehearsal.mjs",
-      "sha256": "9b057b065e56dfe00b2db7fe359e7971ec951a0a89c85091281c094775d12376"
+      "sha256": "42f9b7d77b6ccba659606573794e97d31aea1cbc0c4205ba78d96f1b28ce9be4"
     }
   ],
-  "profile_commit": "a35e5b5339648a00d900beac1243e105e185b9b7",
+  "profile_commit": "a1ac0f5bef81a15a0693241e732d1c33abb8e361",
   "profile_proofs": [
     {
       "file": "tests/test_fault_injection.py",

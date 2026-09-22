@@ -201,8 +201,30 @@ export interface DecisionAudit {
   finalChoice: TradeAction;
 }
 
+export interface SelectedCandidateHandoff {
+  schemaVersion: "glitch.topstep.selected_candidate_handoff.v1";
+  comparisonDecisionId: string;
+  candidateRoot: string;
+  selectedInstrument: string;
+  executableContractId: string;
+  symbolId: string;
+  packetId: string;
+  snapshotHash: string;
+  scopeHash: string;
+  scopeGeneration: number;
+  leaseGeneration: number;
+  rangeIdentity: string;
+  entryPriceMin: number;
+  entryPriceMax: number;
+  expiresUtc: string;
+  selectionProfileId: string;
+  selectionProfileVersion: string;
+  selectionEvidence: string;
+  selectionVersion: string;
+}
+
 export interface TradeIntent {
-  schemaVersion: "glitch.intent.v2" | "glitch.intent.v3";
+  schemaVersion: "glitch.intent.v2" | "glitch.intent.v3" | "glitch.intent.v4";
   intentId: string;
   createdUtc: string;
   instrument: string;
@@ -231,6 +253,8 @@ export interface TradeIntent {
   entryPriceMin?: number;
   entryPriceMax?: number;
   supersedesIntentId?: string;
+  symbolId?: string;
+  selectedCandidateHandoff?: SelectedCandidateHandoff;
 }
 
 export interface ValidatedEntry {

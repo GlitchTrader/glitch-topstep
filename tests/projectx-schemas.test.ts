@@ -33,15 +33,41 @@ describe("parseQuote", () => {
   });
 
   it("accepts quotes with missing bid or ask when lastPrice is present", () => {
+    assert.throws(
+      () => parseQuote(CONTRACT, {
+        symbol: "F.US.MNQ",
+        lastPrice: 27972.25,
+        bestAsk: null,
+        timestamp: "2026-07-28T02:37:54.090Z",
+      }),
+      /quote_bbo_incomplete/,
+    );
+  });
+
+  it("does not fabricate BBO from last when ask is missing", () => {
+    assert.throws(
+      () => parseQuote(CONTRACT, {
+        symbol: "F.US.MNQ",
+        lastPrice: 27972.25,
+        bestBid: 27972,
+        bestAsk: null,
+        timestamp: "2026-07-28T02:37:54.090Z",
+      }),
+      /quote_bbo_incomplete/,
+    );
+  });
+
+  it("keeps provider bid/ask when both sides are present", () => {
     const quote = parseQuote(CONTRACT, {
       symbol: "F.US.MNQ",
-      lastPrice: 27972.25,
-      bestAsk: null,
+      lastPrice: 28012,
+      bestBid: 28011.5,
+      bestAsk: 28012,
       timestamp: "2026-07-28T02:37:54.090Z",
     });
-    assert.equal(quote.lastPrice, 27972.25);
-    assert.equal(quote.bestBid, 27972.25);
-    assert.equal(quote.bestAsk, 27972.25);
+    assert.equal(quote.bestBid, 28011.5);
+    assert.equal(quote.bestAsk, 28012);
+    assert.equal(quote.lastPrice, 28012);
   });
 });
 
