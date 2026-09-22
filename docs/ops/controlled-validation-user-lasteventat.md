@@ -94,6 +94,24 @@ This accepted risk is **not** authorization to trade, arm, or continue with an
 unknown position or unknown working order. Position / order / BBO / reconciliation
 gates remain fail-closed and are never relaxed by flat-idle mode.
 
+## Scope freeze (evaluator)
+
+The three cheap audit closers for this contract are done:
+
+1. Fail-closed reconciliation generations (present, valid, equal)
+2. Regression tests (generation cases + BBO-absent ⇒ `insufficient`)
+3. Traceable flat-idle premise evidence under `docs/evidence/FLAT-IDLE-USER-STREAM-PREMISE-20260922/`
+
+**Stop adding reactive preconditions to this evaluator for the next exotic incident.**
+
+Default response to a new field anomaly:
+
+1. Classify (provider / gateway propagation / contract-valid idle / unresolved)
+2. **Document as a known accepted risk** (this file or `docs/PROJECTX-API-REFERENCE.md`) when it is a provider blind spot that independent flat/orders/recon/BBO checks cannot close
+3. Only open a new evaluator precondition after an explicit contract decision with tests + evidence — not as an incident reflex
+
+The suspended-bracket gap (§ above) is the canonical example: document the blind spot; do **not** invent evaluator logic that pretends to see invisible `status: 8` orders.
+
 ## CLI
 
 ```text
