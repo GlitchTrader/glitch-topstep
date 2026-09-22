@@ -40,10 +40,7 @@ def main() -> int:
 
     health_status, health = request_json("/health")
     verify_gateway_compatibility(health)
-    packet_status, packet = request_json("/packet", token=token)
-    if packet_status != 200 or not isinstance(packet, dict):
-        print(json.dumps({"error": "packet_fetch_failed", "status": packet_status}))
-        return 1
+    packet = cycle.fetch_cycle_packet(token=token, health=health)
 
     cycle.capture_frame(packet, state)
     frames = cycle.cycle_recent_frames(state, packet)
@@ -81,6 +78,11 @@ def main() -> int:
         "prompt_chars": len(prompt),
         "frame_count": len(frames),
         "positioned": positioned,
+        "market_universe_candidates": [
+            candidate.get("instrument")
+            for candidate in packet.get("market_universe", {}).get("candidates", [])
+            if isinstance(candidate, dict)
+        ],
         "entry_band_guidance": band,
         "template_entry_min": template.get("entry_price_min"),
         "template_entry_max": template.get("entry_price_max"),
