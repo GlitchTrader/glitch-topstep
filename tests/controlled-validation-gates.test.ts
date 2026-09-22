@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assessBbo,
+  assessFlatIdleUserStream,
   assessOpenOrders,
   evaluateControlledValidationGates,
   normalizeExplicitArray,
+  resolveCaptureClock,
 } from "../src/ops/controlled-validation-gates.js";
 
 describe("normalizeExplicitArray", () => {
@@ -27,6 +29,31 @@ describe("normalizeExplicitArray", () => {
     assert.equal(result.present, true);
     assert.equal(result.ambiguous, false);
     assert.equal(result.items.length, 0);
+  });
+});
+
+describe("resolveCaptureClock", () => {
+  it("prefers capture_now_ms then health.recorded_utc", () => {
+    assert.equal(
+      resolveCaptureClock(
+        { recorded_utc: "2026-09-22T16:54:00.000Z" },
+        { capturedAt: "2026-09-22T16:53:00.000Z" },
+        { capture_now_ms: 1000 },
+      )?.source,
+      "capture_now_ms",
+    );
+    assert.equal(
+      resolveCaptureClock(
+        { recorded_utc: "2026-09-22T16:54:00.000Z" },
+        { capturedAt: "2026-09-22T16:53:00.000Z" },
+        {},
+      )?.source,
+      "health.recorded_utc",
+    );
+  });
+
+  it("returns null when no capture clock is available (no Date.now fallback)", () => {
+    assert.equal(resolveCaptureClock({}, {}, {}), null);
   });
 });
 
@@ -72,9 +99,9 @@ describe("assessOpenOrders", () => {
 });
 
 describe("assessBbo", () => {
-  const now = Date.parse("2026-09-22T16:54:00.000Z");
+  const captureNow = Date.parse("2026-09-22T16:54:00.000Z");
 
-  it("accepts BBO from state.quote.bestBid/bestAsk", () => {
+  it("accepts BBO from state.quote.bestBid/bestAsk via capture clock", () => {
     const result = assessBbo(
       {
         quote: {
@@ -84,13 +111,54 @@ describe("assessBbo", () => {
         },
       },
       {},
-      { now_ms: now, max_age_ms: 6_000 },
+      { capture_now_ms: captureNow, max_age_ms: 6_000 },
     );
     assert.equal(result.complete, true);
     assert.equal(result.stale, false);
     assert.equal(result.source, "state.quote");
+    assert.equal(result.age_source, "timestamp_vs_capture");
     assert.equal(result.bid, 30943);
     assert.equal(result.ask, 30943.5);
+  });
+
+  it("prefers health.quote_age_ms over timestamp math", () => {
+    const result = assessBbo(
+      {
+        quote: {
+          bestBid: 30943,
+          bestAsk: 30943.5,
+          // Deliberately old timestamp — must be ignored when quote_age_ms is present.
+          timestamp: "2026-09-22T16:00:00.000Z",
+        },
+      },
+      {},
+      {
+        capture_now_ms: captureNow,
+        max_age_ms: 6_000,
+        health: { data_quality: { quote_age_ms: 44, issues: [] } },
+      },
+    );
+    assert.equal(result.complete, true);
+    assert.equal(result.stale, false);
+    assert.equal(result.age_ms, 44);
+    assert.equal(result.age_source, "quote_age_ms");
+  });
+
+  it("does not use wall-clock: missing capture clock without quote_age_ms fails closed", () => {
+    const result = assessBbo(
+      {
+        quote: {
+          bestBid: 30943,
+          bestAsk: 30943.5,
+          timestamp: "2026-09-22T16:53:58.000Z",
+        },
+      },
+      {},
+      { capture_now_ms: null, max_age_ms: 6_000 },
+    );
+    assert.equal(result.complete, false);
+    assert.equal(result.stale, true);
+    assert.equal(result.reason, "bbo_capture_age_unavailable");
   });
 
   it("accepts BBO from packet.market.bid/ask when state quote is missing", () => {
@@ -103,7 +171,7 @@ describe("assessBbo", () => {
           quote_timestamp: "2026-09-22T16:53:58.000Z",
         },
       },
-      { now_ms: now, max_age_ms: 6_000 },
+      { capture_now_ms: captureNow, max_age_ms: 6_000 },
     );
     assert.equal(result.complete, true);
     assert.equal(result.source, "packet.market");
@@ -121,14 +189,14 @@ describe("assessBbo", () => {
           quote_timestamp: "2026-09-22T16:53:58.000Z",
         },
       },
-      { now_ms: now },
+      { capture_now_ms: captureNow },
     );
     assert.equal(result.complete, false);
     assert.equal(result.ambiguous, true);
     assert.equal(result.reason, "bbo_missing_on_official_paths");
   });
 
-  it("marks present BBO stale when timestamp is too old", () => {
+  it("marks present BBO stale when timestamp is too old vs capture", () => {
     const result = assessBbo(
       {
         quote: {
@@ -138,7 +206,7 @@ describe("assessBbo", () => {
         },
       },
       {},
-      { now_ms: now, max_age_ms: 6_000 },
+      { capture_now_ms: captureNow, max_age_ms: 6_000 },
     );
     assert.equal(result.complete, false);
     assert.equal(result.stale, true);
@@ -156,9 +224,9 @@ describe("assessBbo", () => {
       },
       {},
       {
-        now_ms: now,
+        capture_now_ms: captureNow,
         max_age_ms: 6_000,
-        health: { data_quality: { issues: ["quote_stale"] } },
+        health: { data_quality: { issues: ["quote_stale"], quote_age_ms: 100 } },
       },
     );
     assert.equal(result.complete, false);
@@ -166,7 +234,7 @@ describe("assessBbo", () => {
   });
 
   it("fail-closes when BBO is absent", () => {
-    const result = assessBbo({ quote: {} }, { market: {} }, { now_ms: now });
+    const result = assessBbo({ quote: {} }, { market: {} }, { capture_now_ms: captureNow });
     assert.equal(result.complete, false);
     assert.equal(result.ambiguous, true);
   });
@@ -177,12 +245,13 @@ describe("evaluateControlledValidationGates", () => {
 
   function baseReady() {
     return {
-      now_ms: now,
+      capture_now_ms: now,
       packet_latency_ms: 1_000,
       health: {
         status: "ok",
         trading_mode: "shadow",
         delivery_effective: "disabled",
+        recorded_utc: "2026-09-22T16:54:00.000Z",
         protected_reduction: { unprotected_open_quantity: 0 },
         read_circuit_breaker: {
           positions: { open: false },
@@ -191,7 +260,9 @@ describe("evaluateControlledValidationGates", () => {
         data_quality: {
           state_complete: true,
           issues: [],
+          quote_age_ms: 44,
           operational: {
+            generation: 1,
             userStream: {
               state: "connected",
               lastEventAt: "2026-09-22T16:53:50.000Z",
@@ -202,6 +273,7 @@ describe("evaluateControlledValidationGates", () => {
             },
             reconciliation: {
               state: "succeeded",
+              generation: 1,
               lastSucceededAt: "2026-09-22T16:53:40.000Z",
             },
           },
@@ -232,6 +304,8 @@ describe("evaluateControlledValidationGates", () => {
     assert.deepEqual(result.failed_gates, []);
     assert.equal(result.open_orders.confirmed_empty, true);
     assert.equal(result.bbo.complete, true);
+    assert.equal(result.user_stream_mode, "recent_events");
+    assert.equal(result.schema_version, "glitch.topstep.controlled_validation_gates.v2");
   });
 
   it("fail-closes on orders=null phantom without openOrders", () => {
@@ -252,18 +326,184 @@ describe("evaluateControlledValidationGates", () => {
     assert.ok(result.failed_gates.includes("open_orders_confirmed_empty"));
   });
 
-  it("does not relax user.lastEventAt=null for flat accounts", () => {
+  it("allows flat_idle_user_stream when all preconditions hold", () => {
     const input = baseReady();
     const health = structuredClone(input.health) as {
-      data_quality: { operational: { userStream: { lastEventAt: string | null } } };
+      data_quality: {
+        operational: {
+          userStream: { lastEventAt: string | null };
+        };
+      };
     };
     health.data_quality.operational.userStream.lastEventAt = null;
     const result = evaluateControlledValidationGates({
       ...input,
       health,
     });
-    assert.equal(result.gates.user_stream_recent_events, false);
+    assert.equal(result.user_stream_mode, "flat_idle_user_stream");
+    assert.equal(result.flat_idle_user_stream.eligible, true);
+    assert.equal(result.gates.user_stream_recent_events, true);
+    assert.equal(result.all_passed, true);
+  });
+
+  it("still fails flat-idle when a position is open", () => {
+    const input = baseReady();
+    const health = structuredClone(input.health) as {
+      data_quality: {
+        operational: {
+          userStream: { lastEventAt: string | null };
+        };
+      };
+    };
+    health.data_quality.operational.userStream.lastEventAt = null;
+    const result = evaluateControlledValidationGates({
+      ...input,
+      health,
+      state: {
+        ...input.state,
+        positions: [{ id: 1, size: 1, contractId: "CON.F.US.MNQ.Z26" }],
+      },
+    });
+    assert.equal(result.user_stream_mode, "insufficient");
+    assert.equal(result.flat_idle_user_stream.eligible, false);
     assert.ok(result.failed_gates.includes("user_stream_recent_events"));
-    assert.ok(result.notes.some((note) => note.includes("flat-idle")));
+    assert.ok(result.failed_gates.includes("account_flat"));
+  });
+
+  it("still fails flat-idle when openOrders is non-empty", () => {
+    const input = baseReady();
+    const health = structuredClone(input.health) as {
+      data_quality: {
+        operational: {
+          userStream: { lastEventAt: string | null };
+        };
+      };
+    };
+    health.data_quality.operational.userStream.lastEventAt = null;
+    const result = evaluateControlledValidationGates({
+      ...input,
+      health,
+      state: {
+        ...input.state,
+        openOrders: [{ id: 9, status: 1, size: 1 }],
+      },
+    });
+    assert.equal(result.user_stream_mode, "insufficient");
+    assert.equal(result.flat_idle_user_stream.reason, "open_orders_not_confirmed_empty");
+    assert.ok(result.failed_gates.includes("user_stream_recent_events"));
+  });
+
+  it("still fails flat-idle when reconciliation is running (pending recovery)", () => {
+    const input = baseReady();
+    const health = structuredClone(input.health) as {
+      data_quality: {
+        issues: string[];
+        operational: {
+          userStream: { lastEventAt: string | null };
+          reconciliation: { state: string };
+        };
+      };
+    };
+    health.data_quality.operational.userStream.lastEventAt = null;
+    health.data_quality.operational.reconciliation.state = "running";
+    health.data_quality.issues = ["reconciliation_not_current"];
+    const result = evaluateControlledValidationGates({
+      ...input,
+      health,
+    });
+    assert.equal(result.user_stream_mode, "insufficient");
+    assert.match(result.flat_idle_user_stream.reason, /reconciliation/);
+    assert.ok(result.failed_gates.includes("user_stream_recent_events"));
+    assert.ok(result.failed_gates.includes("reconciliation_ok"));
+  });
+
+  it("still fails flat-idle when market events are not recent", () => {
+    const input = baseReady();
+    const health = structuredClone(input.health) as {
+      data_quality: {
+        operational: {
+          userStream: { lastEventAt: string | null };
+          marketStream: { lastEventAt: string };
+        };
+      };
+    };
+    health.data_quality.operational.userStream.lastEventAt = null;
+    health.data_quality.operational.marketStream.lastEventAt = "2026-09-22T16:50:00.000Z";
+    const result = evaluateControlledValidationGates({
+      ...input,
+      health,
+    });
+    assert.equal(result.user_stream_mode, "insufficient");
+    assert.equal(result.flat_idle_user_stream.reason, "market_stream_events_not_recent");
+    assert.ok(result.failed_gates.includes("user_stream_recent_events"));
+    assert.ok(result.failed_gates.includes("market_stream_recent_events"));
+  });
+
+  it("evaluates BBO from frozen health.quote_age_ms without wall-clock", () => {
+    const input = baseReady();
+    // Omit capture_now_ms; clock comes from health.recorded_utc. quote_age_ms=44 wins.
+    const { capture_now_ms: _drop, ...rest } = input;
+    const result = evaluateControlledValidationGates(rest);
+    assert.equal(result.capture_clock?.source, "health.recorded_utc");
+    assert.equal(result.bbo.age_source, "quote_age_ms");
+    assert.equal(result.bbo.complete, true);
+    assert.equal(result.gates.bbo_complete, true);
+  });
+});
+
+describe("assessFlatIdleUserStream", () => {
+  it("rejects when user hub is disconnected", () => {
+    const result = assessFlatIdleUserStream({
+      open_orders: {
+        confirmed_empty: true,
+        ambiguous: false,
+        count: 0,
+        reason: "openOrders_empty",
+        working_orders: [],
+      },
+      account_flat: true,
+      positions_present: true,
+      positions_ambiguous: false,
+      user_stream: {
+        connected: false,
+        recent_events: false,
+        last_event_at: null,
+        age_ms: null,
+        reason: "user_stream_not_connected",
+      },
+      market_stream: {
+        connected: true,
+        recent_events: true,
+        last_event_at: "2026-09-22T16:53:55.000Z",
+        age_ms: 5_000,
+        reason: "market_stream_ok",
+      },
+      bbo: {
+        complete: true,
+        stale: false,
+        ambiguous: false,
+        bid: 1,
+        ask: 2,
+        source: "state.quote",
+        reason: "ok",
+        age_ms: 44,
+        age_source: "quote_age_ms",
+      },
+      operational: {
+        generation: 1,
+        userStream: { state: "disconnected" },
+        marketStream: { state: "connected" },
+        reconciliation: {
+          state: "succeeded",
+          generation: 1,
+          lastSucceededAt: "2026-09-22T16:53:40.000Z",
+        },
+      },
+      health: { data_quality: { issues: [] } },
+      capture_now_ms: Date.parse("2026-09-22T16:54:00.000Z"),
+      reconciliation_max_age_ms: 120_000,
+    });
+    assert.equal(result.eligible, false);
+    assert.equal(result.reason, "user_stream_not_connected");
   });
 });
