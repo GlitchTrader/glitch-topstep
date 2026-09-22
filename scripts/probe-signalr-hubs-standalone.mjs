@@ -90,11 +90,16 @@ async function main() {
 
   const userConn = buildConn(userHubUrl);
   const marketConn = buildConn(marketHubUrl);
+  let deliberateStop = false;
 
   for (const [name, conn] of [["user", userConn], ["market", marketConn]]) {
     conn.onreconnecting((error) => record({ phase: "reconnecting", hub: name, error: error?.message ?? null }));
     conn.onreconnected(() => record({ phase: "reconnected", hub: name }));
-    conn.onclose((error) => record({ phase: "closed", hub: name, error: error?.message ?? null }));
+    conn.onclose((error) => record({
+      phase: deliberateStop ? "closed_deliberate" : "closed_unexpected",
+      hub: name,
+      error: error?.message ?? null,
+    }));
   }
 
   await userConn.start();
@@ -119,15 +124,20 @@ async function main() {
 
   await new Promise((resolve) => setTimeout(resolve, durationMinutes * 60_000));
 
+  deliberateStop = true;
   await userConn.stop();
   await marketConn.stop();
 
-  const reconnectEvents = events.filter((e) => e.phase === "reconnecting" || e.phase === "closed");
+  // Only reconnecting/reconnected and closed_unexpected count as instability;
+  // closed_deliberate is our own end-of-probe shutdown, not a hub drop.
+  const instabilityEvents = events.filter(
+    (e) => e.phase === "reconnecting" || e.phase === "closed_unexpected",
+  );
   record({
     phase: "summary",
     total_events: events.length,
-    reconnect_or_close_events: reconnectEvents.length,
-    verdict: reconnectEvents.length === 0
+    instability_events: instabilityEvents.length,
+    verdict: instabilityEvents.length === 0
       ? "stable_standalone_no_flapping_without_gateway"
       : "flapping_reproduced_without_gateway",
   });
