@@ -8,6 +8,16 @@ import type { RetrieveBarsRequest } from "../src/projectx/client.js";
 
 const NOW = new Date("2026-08-20T12:00:00Z");
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 const AVAILABLE: ContractInfo[] = [
   { id: "CON.F.US.MNQ.U26", name: "MNQU6", description: "Micro Nasdaq", tickSize: 0.25, tickValue: 0.5, activeContract: true, symbolId: "F.US.MNQ" },
   { id: "CON.F.US.MES.U26", name: "MESU6", description: "Micro S&P", tickSize: 0.25, tickValue: 1.25, activeContract: true, symbolId: "F.US.MES" },
@@ -200,5 +210,86 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
 
     assert.ok(calls.length >= 4);
     assert.ok(calls.every((contractId) => contractId === "CON.F.US.MNQ.U26"));
+  });
+
+  it("does not put a critical contract refresh behind a blocked global refresh", async () => {
+    const universe = resolveInstrumentUniverse(["MNQ", "MES", "MCL"], AVAILABLE);
+    const time = clock();
+    const blocked = new Map<string, ReturnType<typeof deferred<BarInfo[]>>>();
+    const counts = new Map<string, number>();
+    const dataPlane = new MultiInstrumentMarketDataPlane(
+      {
+        retrieveBars: async (request) => {
+          const count = (counts.get(request.contractId) ?? 0) + 1;
+          counts.set(request.contractId, count);
+          if (count === 1) {
+            const gate = deferred<BarInfo[]>();
+            blocked.set(`${request.contractId}:${request.unitNumber}`, gate);
+            return gate.promise;
+          }
+          return bars(request.contractId, request.unitNumber);
+        },
+      },
+      universe,
+      60,
+      "CON.F.US.MNQ.U26",
+      false,
+      time.now,
+      time.sleep,
+    );
+
+    const background = dataPlane.refreshAll();
+    await Promise.resolve();
+    const critical = dataPlane.refreshSelected("CON.F.US.MES.U26");
+    const selected = await critical;
+    assert.equal(selected.observation?.contract_id, "CON.F.US.MES.U26");
+    assert.equal(selected.observation?.instrument, "MES");
+    assert.equal(blocked.size, 3);
+
+    for (const gate of blocked.values()) {
+      gate.resolve(bars("CON.F.US.MNQ.U26", 1));
+    }
+    await background;
+    await dataPlane.waitForIdle();
+  });
+
+  it("discards a late background result after a newer critical observation", async () => {
+    const universe = resolveInstrumentUniverse(["MNQ"], AVAILABLE);
+    const time = clock();
+    const backgroundGate = deferred<BarInfo[]>();
+    let calls = 0;
+    const dataPlane = new MultiInstrumentMarketDataPlane(
+      {
+        retrieveBars: async (request) => {
+          calls += 1;
+          if (calls === 1) return backgroundGate.promise;
+          return bars(request.contractId, request.unitNumber).map((bar) => ({
+            ...bar,
+            open: bar.open + 10_000,
+            high: bar.high + 10_000,
+            low: bar.low + 10_000,
+            close: bar.close + 10_000,
+          }));
+        },
+      },
+      universe,
+      60,
+      "CON.F.US.MNQ.U26",
+      false,
+      time.now,
+      time.sleep,
+    );
+
+    const background = dataPlane.refreshAll();
+    await Promise.resolve();
+    const critical = dataPlane.refreshSelected("CON.F.US.MNQ.U26");
+    await critical;
+    const newerClose = dataPlane.current().candidates[0]!.market_observation.observation!.timeframes[0]!.features!.latest_close;
+    backgroundGate.resolve(bars("CON.F.US.MNQ.U26", 1));
+    await background;
+    await dataPlane.waitForIdle();
+    const finalClose = dataPlane.current().candidates[0]!.market_observation.observation!.timeframes[0]!.features!.latest_close;
+    assert.equal(finalClose, newerClose);
+    assert.ok(finalClose > 10_000);
   });
 });

@@ -18,9 +18,8 @@ import {
 } from "./projectx/evidence-write-queue.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
-import { ProjectXRealtimeClient } from "./projectx/realtime.js";
-import { HubRecoveryController } from "./projectx/hub-recovery-controller.js";
-import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
+import { ProjectXRealtimeClient } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
+import { HubRecoveryController } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -169,6 +168,7 @@ export class GlitchTopstepService {
       apiUrl: config.projectX.apiUrl,
       username: config.projectX.username,
       apiKey: config.projectX.apiKey,
+      diagnostics: projectXConsoleDiagnostics, diagnosticContext: () => projectXDiagnosticContext(this.state, this.config),
     });
     this.api = this.authManager.authenticatedClient();
     this.ledger = new JsonlEventStore(config.dataDir);
@@ -448,7 +448,7 @@ export class GlitchTopstepService {
         depthContractIds: this.instrumentUniverse.contracts
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
-        evidence: this.evidenceQueue,
+        evidence: this.evidenceQueue, diagnostics: projectXConsoleDiagnostics,
         marketRecovery: this.marketHubRecovery,
         onReconnected: async ({ kind, generation }) => {
           await this.handleHubReconnected(kind, generation);

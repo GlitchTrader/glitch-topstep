@@ -47,7 +47,7 @@ import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { evaluatePortfolioAdmission, type ProtectedExposure } from "../risk/portfolio-risk.js";
 import { validatePortfolioSelection } from "../risk/portfolio-selection.js";
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
-
+import { selectedCandidateHandoffMatchesPacket } from "./selected-candidate-handoff.js";
 export interface ExecutionReceipt {
   schema_version: "glitch.direct.execution_receipt.v1";
   receipt_id: string;
@@ -265,8 +265,8 @@ export class ExecutionCoordinator {
     }
 
     const { intent, issuedPacket } = early;
-
     try {
+      if (!selectedCandidateHandoffMatchesPacket(intent, issuedPacket)) return this.record({ intentId: intent.intentId, status: "rejected", code: "selected_candidate_handoff_invalid" });
       const currentSnapshot = this.packetSnapshot(issuedPacket);
       const intentContractId = this.packetContractId(issuedPacket);
       const validated = validateEntryRisk(

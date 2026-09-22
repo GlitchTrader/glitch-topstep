@@ -108,10 +108,10 @@ export function validateEntryRisk(
   if (context.dailyCaptureLocked) {
     throw new RiskRejectedError("daily_capture_new_exposure_locked");
   }
-  if (context.armedMode && intent.schemaVersion !== "glitch.intent.v3") {
-    throw new RiskRejectedError("armed_intent_v3_required");
+  if (context.armedMode && intent.schemaVersion !== "glitch.intent.v3" && intent.schemaVersion !== "glitch.intent.v4") {
+    throw new RiskRejectedError("armed_intent_v3_or_v4_required");
   }
-  if (intent.schemaVersion === "glitch.intent.v3") {
+  if (intent.schemaVersion === "glitch.intent.v3" || intent.schemaVersion === "glitch.intent.v4") {
     if (intent.packetId !== context.expectedPacketId) {
       throw new RiskRejectedError("packet_id_mismatch");
     }
@@ -173,7 +173,7 @@ export function validateEntryRisk(
     throw new RiskRejectedError("target_not_tick_aligned");
   }
 
-  if (intent.schemaVersion === "glitch.intent.v3") {
+  if (intent.schemaVersion === "glitch.intent.v3" || intent.schemaVersion === "glitch.intent.v4") {
     if (intent.entryPriceMin === undefined || intent.entryPriceMax === undefined) {
       throw new RiskRejectedError("entry_price_range_missing");
     }

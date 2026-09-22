@@ -30,7 +30,7 @@ function assertPairedContractsByteIdentical(gatewayPath: string, profilePath: st
 
 test("TS-AUDIT-10 paired-contract.json drives gateway compatibility", () => {
   assert.equal(GATEWAY_COMPATIBILITY.protocol_revision, PAIRED_CONTRACT.protocol_revision);
-  assert.equal(GATEWAY_COMPATIBILITY.runtime_intent_schema, "glitch.intent.v3");
+  assert.equal(GATEWAY_COMPATIBILITY.runtime_intent_schema, "glitch.intent.v4");
   assert.equal(GATEWAY_COMPATIBILITY.gateway_version, packageJson.version);
   assert.deepEqual(
     [...GATEWAY_COMPATIBILITY.intent_schemas],

@@ -78,6 +78,57 @@ describe("Glitch intent contract", () => {
     );
   });
 
+  it("accepts v4 only with an explicit selected-candidate handoff", () => {
+    const input = baseIntent();
+    const entry = {
+      ...input,
+      schema_version: "glitch.intent.v4",
+      action: "ENTER_LONG",
+      quantity: 1,
+      order_type: "MARKET",
+      stop_loss: 19_990,
+      take_profit_1: 20_020,
+      symbol_id: "F.US.MNQ",
+      packet_id: "packet-1",
+      contract_id: "CON.F.US.MNQ.Z26",
+      scope_hash: "scope-hash",
+      scope_generation: 2,
+      expires_utc: "2026-07-21T12:05:00Z",
+      entry_price_min: 70.01,
+      entry_price_max: 70.05,
+      selected_candidate_handoff: {
+        schema_version: "glitch.topstep.selected_candidate_handoff.v1",
+        comparison_decision_id: "comparison-1",
+        candidate_root: "candidate/MNQ",
+        selected_instrument: "MNQ",
+        executable_contract_id: "CON.F.US.MNQ.Z26",
+        symbol_id: "F.US.MNQ",
+        packet_id: "packet-1",
+        snapshot_hash: "snapshot",
+        scope_hash: "scope-hash",
+        scope_generation: 2,
+        lease_generation: 2,
+        range_identity: "range-1",
+        entry_price_min: 70.01,
+        entry_price_max: 70.05,
+        expires_utc: "2026-07-21T12:05:00Z",
+        selection_profile_id: "profile-1",
+        selection_profile_version: "v1",
+        selection_evidence: "global ranking selected MNQ",
+        selection_version: "selection-v1",
+      },
+      decision_audit: { ...input.decision_audit, final_choice: "ENTER_LONG" },
+    };
+    const parsed = parseTradeIntent(entry);
+    assert.equal(parsed.schemaVersion, "glitch.intent.v4");
+    assert.equal(parsed.symbolId, "F.US.MNQ");
+    assert.equal(parsed.selectedCandidateHandoff?.executableContractId, "CON.F.US.MNQ.Z26");
+    assert.throws(
+      () => parseTradeIntent({ ...entry, selected_candidate_handoff: { ...entry.selected_candidate_handoff, symbol_id: "F.US.MES" } }),
+      /selected_candidate_handoff_identity_mismatch/,
+    );
+  });
+
   it("accepts long decision_audit strings without per-field max (NT parity)", () => {
     const long = "x".repeat(8000);
     const intent = {

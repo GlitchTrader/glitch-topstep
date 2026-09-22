@@ -46,12 +46,16 @@ export interface MultiInstrumentMarketPacket {
 export class MultiInstrumentMarketDataPlane {
   private readonly scheduler: RateAwareScheduler;
   private readonly observations: Map<string, ProjectXMarketObservationService>;
-  private readonly refreshQueue = new UniverseRefreshQueue({
+  private readonly backgroundRefreshQueue = new UniverseRefreshQueue({
     onLog: (entry) => {
       console.info("universe_refresh", entry);
     },
   });
-  private scheduleMinHeadroom = PROJECTX_HISTORY_MIN_HEADROOM;
+  private readonly criticalRefreshQueue = new UniverseRefreshQueue({
+    onLog: (entry) => {
+      console.info("universe_refresh_critical", entry);
+    },
+  });
 
   public constructor(
     api: Pick<ProjectXApiClient, "retrieveBars">,
@@ -64,10 +68,13 @@ export class MultiInstrumentMarketDataPlane {
   ) {
     this.scheduler = new RateAwareScheduler(requestsPerMinute, () => now().getTime(), sleep);
     const scheduledApi = {
-      retrieveBars: (request: Parameters<ProjectXApiClient["retrieveBars"]>[0]) => (
+      retrieveBars: (
+        request: Parameters<ProjectXApiClient["retrieveBars"]>[0],
+        scheduleOptions?: HistoryScheduleOptions,
+      ) => (
         this.scheduler.schedule(
           () => api.retrieveBars(request),
-          { minHeadroom: this.scheduleMinHeadroom },
+          scheduleOptions,
         )
       ),
     };
@@ -81,6 +88,10 @@ export class MultiInstrumentMarketDataPlane {
           live: this.liveMarketData,
           barLimit: 500,
           lookbackMultiplier: 3,
+          onDiagnostic: (diagnostic) => console.info("projectx_bar_observation_diagnostic", {
+            ...diagnostic,
+            scheduler: this.scheduler.status(),
+          }),
         },
         now,
       ),
@@ -88,13 +99,14 @@ export class MultiInstrumentMarketDataPlane {
   }
 
   public refreshAll(): Promise<MultiInstrumentMarketPacket> {
-    return this.refreshQueue.enqueue({
+    return this.backgroundRefreshQueue.enqueue({
       coalesceKey: "__all__",
       targetContract: "__all__",
       refresh: async () => {
-        await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
-          this.refreshContractsParallel(this.universe.contracts.map((contract) => contract.contract_id))
-        ));
+        await this.refreshContractsParallel(
+          this.universe.contracts.map((contract) => contract.contract_id),
+          { minHeadroom: PROJECTX_HISTORY_MIN_HEADROOM, priority: "background" },
+        );
       },
       buildResult: () => this.current(),
     });
@@ -106,7 +118,7 @@ export class MultiInstrumentMarketDataPlane {
     scope?: Pick<ActivePositionScope, "packetTargetContractId" | "executionModeFor">,
   ): Promise<MultiInstrumentMarketPacket> {
     const targetContract = scope?.packetTargetContractId ?? this.selectedContractId;
-    return this.refreshQueue.enqueue({
+    return this.criticalRefreshQueue.enqueue({
       coalesceKey: targetContract,
       targetContract,
       refresh: async () => {
@@ -121,22 +133,21 @@ export class MultiInstrumentMarketDataPlane {
         ) {
           contractIds.splice(0, contractIds.length, targetContract);
         }
-        await this.withScheduleMinHeadroom(minHeadroom, () => (
-          this.refreshContractsParallel(contractIds)
-        ));
+        await this.refreshContractsParallel(contractIds, { minHeadroom, priority: "packet" });
       },
       buildResult: () => this.current(now, scope),
     });
   }
 
   public refreshSelected(contractId: string): Promise<MarketObservationState> {
-    return this.refreshQueue.enqueue({
+    return this.criticalRefreshQueue.enqueue({
       coalesceKey: contractId,
       targetContract: contractId,
       refresh: async () => {
-        await this.withScheduleMinHeadroom(PROJECTX_HISTORY_MIN_HEADROOM, () => (
-          this.refreshContractsParallel([contractId])
-        ));
+        await this.refreshContractsParallel([contractId], {
+          minHeadroom: PROJECTX_HISTORY_MIN_HEADROOM,
+          priority: "packet",
+        });
       },
       buildResult: () => this.observations.get(contractId)!.current(),
     });
@@ -185,7 +196,8 @@ export class MultiInstrumentMarketDataPlane {
   }
 
   public async waitForIdle(): Promise<void> {
-    await this.refreshQueue.waitForIdle();
+    await this.backgroundRefreshQueue.waitForIdle();
+    await this.criticalRefreshQueue.waitForIdle();
     await Promise.all([...this.observations.values()].map((service) => service.waitForIdle()));
     await this.scheduler.waitForIdle();
   }
@@ -203,16 +215,13 @@ export class MultiInstrumentMarketDataPlane {
       .map((contract) => contract.contract_id);
   }
 
-  private refreshContractsParallel(contractIds: string[]): Promise<MarketObservationState[]> {
-    return Promise.all(contractIds.map((contractId) => this.observations.get(contractId)!.refresh()));
-  }
-
-  private withScheduleMinHeadroom<T>(minHeadroom: number, run: () => Promise<T>): Promise<T> {
-    const previous = this.scheduleMinHeadroom;
-    this.scheduleMinHeadroom = minHeadroom;
-    return run().finally(() => {
-      this.scheduleMinHeadroom = previous;
-    });
+  private refreshContractsParallel(
+    contractIds: string[],
+    scheduleOptions: HistoryScheduleOptions,
+  ): Promise<MarketObservationState[]> {
+    return Promise.all(contractIds.map((contractId) => (
+      this.observations.get(contractId)!.refresh(scheduleOptions)
+    )));
   }
 
 }

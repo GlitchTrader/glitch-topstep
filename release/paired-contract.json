@@ -2,10 +2,11 @@
   "schema_version": "glitch.topstep.paired_contract.v1",
   "protocol_revision": "glitch.topstep.paired.v3",
   "health_schema": "glitch.direct.health.v3",
-  "runtime_intent_schema": "glitch.intent.v3",
+  "runtime_intent_schema": "glitch.intent.v4",
   "gateway_accepted_intent_schemas": [
     "glitch.intent.v2",
-    "glitch.intent.v3"
+    "glitch.intent.v3",
+    "glitch.intent.v4"
   ],
   "decision_packet_schemas": [
     "glitch.direct.decision_packet.v1",
@@ -76,6 +77,26 @@
     "original_risk_envelope_schema": "glitch.topstep.original_risk_envelope.v1",
     "model_owner_schema": "glitch.topstep.model_owner.v1",
     "selected_candidate_handoff_schema": "glitch.topstep.selected_candidate_handoff.v1",
+    "selected_candidate_handoff_fields": [
+      "comparison_decision_id",
+      "candidate_root",
+      "selected_instrument",
+      "executable_contract_id",
+      "symbol_id",
+      "packet_id",
+      "snapshot_hash",
+      "scope_hash",
+      "scope_generation",
+      "lease_generation",
+      "range_identity",
+      "entry_price_min",
+      "entry_price_max",
+      "expires_utc",
+      "selection_profile_id",
+      "selection_profile_version",
+      "selection_evidence",
+      "selection_version"
+    ],
     "outcome_path_chronology_schema": "glitch.topstep.path_chronology.v1",
     "cadence": {
       "flat_decision_interval_minutes": 5,
