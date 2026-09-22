@@ -21,8 +21,8 @@
  * User stream event requirement:
  * - `recent_events` when `userStream.lastEventAt` is fresh on the capture clock, or
  * - `flat_idle_user_stream` when lastEventAt is null/stale BUT the account is flat,
- *   openOrders=[], reconciliation current/fresh, user connected, market recent,
- *   and BBO fresh — otherwise fail closed.
+ *   openOrders=[], reconciliation current/fresh (both generations present, valid,
+ *   and equal), user connected, market recent, and BBO fresh — otherwise fail closed.
  */
 
 export type OpenOrdersAssessment = {
@@ -112,6 +112,13 @@ function asFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(parsed)) return parsed;
   }
   return null;
+}
+
+/** Operational / reconciliation generation: non-negative integer only. Missing → null (fail closed). */
+function asGeneration(value: unknown): number | null {
+  const n = asFiniteNumber(value);
+  if (n === null || !Number.isInteger(n) || n < 0) return null;
+  return n;
 }
 
 function parseUtcMs(value: unknown): number | null {
@@ -419,7 +426,12 @@ function accountIsFlat(state: unknown): { flat: boolean; present: boolean; ambig
   return { flat, present: true, ambiguous: false };
 }
 
-function reconciliationFresh(
+/**
+ * Fail-closed reconciliation freshness for controlled validation / flat-idle.
+ * Both `operational.generation` and `reconciliation.generation` must be present,
+ * non-negative integers, and equal — missing or invalid generations never pass.
+ */
+export function reconciliationFresh(
   operational: unknown,
   health: unknown,
   captureNowMs: number | null,
@@ -447,9 +459,15 @@ function reconciliationFresh(
     return { ok: false, reason: "health_issue_account_state_stale" };
   }
 
-  const reconGen = asFiniteNumber(recon.generation);
-  const opGen = asFiniteNumber(operational.generation);
-  if (reconGen !== null && opGen !== null && reconGen !== opGen) {
+  const reconGen = asGeneration(recon.generation);
+  const opGen = asGeneration(operational.generation);
+  if (opGen === null) {
+    return { ok: false, reason: "operational_generation_missing_or_invalid" };
+  }
+  if (reconGen === null) {
+    return { ok: false, reason: "reconciliation_generation_missing_or_invalid" };
+  }
+  if (reconGen !== opGen) {
     return { ok: false, reason: "reconciliation_generation_mismatch" };
   }
 

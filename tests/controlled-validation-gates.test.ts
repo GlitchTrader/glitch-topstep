@@ -6,6 +6,7 @@ import {
   assessOpenOrders,
   evaluateControlledValidationGates,
   normalizeExplicitArray,
+  reconciliationFresh,
   resolveCaptureClock,
 } from "../src/ops/controlled-validation-gates.js";
 
@@ -448,6 +449,127 @@ describe("evaluateControlledValidationGates", () => {
     assert.equal(result.bbo.age_source, "quote_age_ms");
     assert.equal(result.bbo.complete, true);
     assert.equal(result.gates.bbo_complete, true);
+  });
+
+  it("keeps flat_idle insufficient when BBO is absent (never approves)", () => {
+    const input = baseReady();
+    const health = structuredClone(input.health) as {
+      data_quality: {
+        quote_age_ms?: number;
+        operational: {
+          userStream: { lastEventAt: string | null };
+        };
+      };
+    };
+    health.data_quality.operational.userStream.lastEventAt = null;
+    delete health.data_quality.quote_age_ms;
+    const result = evaluateControlledValidationGates({
+      ...input,
+      health,
+      state: {
+        positions: [],
+        openOrders: [],
+        quote: {},
+      },
+      packet: { market: {} },
+    });
+    assert.equal(result.user_stream_mode, "insufficient");
+    assert.equal(result.flat_idle_user_stream.eligible, false);
+    assert.equal(result.flat_idle_user_stream.reason, "bbo_not_fresh");
+    assert.equal(result.gates.user_stream_recent_events, false);
+    assert.equal(result.gates.bbo_complete, false);
+    assert.ok(result.failed_gates.includes("user_stream_recent_events"));
+    assert.ok(result.failed_gates.includes("bbo_complete"));
+    assert.equal(result.all_passed, false);
+  });
+});
+
+describe("reconciliationFresh", () => {
+  const captureNow = Date.parse("2026-09-22T16:54:00.000Z");
+  const healthOk = { data_quality: { issues: [] } };
+
+  function baseOperational(overrides: Record<string, unknown> = {}) {
+    return {
+      generation: 3,
+      reconciliation: {
+        state: "succeeded",
+        generation: 3,
+        lastSucceededAt: "2026-09-22T16:53:40.000Z",
+      },
+      ...overrides,
+    };
+  }
+
+  it("passes when generations are present, valid, and equal", () => {
+    const result = reconciliationFresh(baseOperational(), healthOk, captureNow, 120_000);
+    assert.equal(result.ok, true);
+    assert.equal(result.reason, "reconciliation_fresh");
+  });
+
+  it("fail-closes when operational.generation is absent", () => {
+    const operational = baseOperational();
+    delete (operational as { generation?: number }).generation;
+    const result = reconciliationFresh(operational, healthOk, captureNow, 120_000);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "operational_generation_missing_or_invalid");
+  });
+
+  it("fail-closes when reconciliation.generation is absent", () => {
+    const operational = baseOperational({
+      reconciliation: {
+        state: "succeeded",
+        lastSucceededAt: "2026-09-22T16:53:40.000Z",
+      },
+    });
+    const result = reconciliationFresh(operational, healthOk, captureNow, 120_000);
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "reconciliation_generation_missing_or_invalid");
+  });
+
+  it("fail-closes when generation is invalid (non-integer / negative / non-numeric)", () => {
+    for (const bad of [1.5, -1, "abc", Number.NaN, null]) {
+      const resultOp = reconciliationFresh(
+        baseOperational({ generation: bad }),
+        healthOk,
+        captureNow,
+        120_000,
+      );
+      assert.equal(resultOp.ok, false, `operational generation=${String(bad)}`);
+      assert.equal(resultOp.reason, "operational_generation_missing_or_invalid");
+
+      const resultRecon = reconciliationFresh(
+        baseOperational({
+          reconciliation: {
+            state: "succeeded",
+            generation: bad,
+            lastSucceededAt: "2026-09-22T16:53:40.000Z",
+          },
+        }),
+        healthOk,
+        captureNow,
+        120_000,
+      );
+      assert.equal(resultRecon.ok, false, `recon generation=${String(bad)}`);
+      assert.equal(resultRecon.reason, "reconciliation_generation_missing_or_invalid");
+    }
+  });
+
+  it("fail-closes when generations diverge", () => {
+    const result = reconciliationFresh(
+      baseOperational({
+        generation: 3,
+        reconciliation: {
+          state: "succeeded",
+          generation: 1,
+          lastSucceededAt: "2026-09-22T16:53:40.000Z",
+        },
+      }),
+      healthOk,
+      captureNow,
+      120_000,
+    );
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, "reconciliation_generation_mismatch");
   });
 });
 
