@@ -11,7 +11,7 @@ import { snapshot } from "./fixtures.js";
 
 const TOKEN = "012345678901234567890123456";
 
-describe("IA-260901 audit remediation", () => {
+describe("health liveness, scale-in, and applied-outbox prune", () => {
   it("GW-04 exposes liveness-only /health without auth", async () => {
     const gateway = new LocalGatewayServer(
       { host: "127.0.0.1", port: 0, token: TOKEN },

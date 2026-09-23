@@ -134,4 +134,4 @@ Gateway path: cancel only targeted tranche brackets → submit reduction → dur
 
 ## Promotion rule
 
-Tests prove software contracts; they do not prove profitability or live readiness. `armed` promotion requires named runtime evidence for all P0 execution rows, followed by a frozen, attributable, after-fee shadow or simulated sample. Profitability remains an empirical property of the operator and evidence, not a claim inferred from architecture.
+Tests prove software contracts; they do not prove profitability or live readiness. `armed` promotion ceremony lives only in [`OPERATIONS.md`](OPERATIONS.md) (single checklist). This file records capability evidence, not a second process. Profitability remains an empirical property of the operator and evidence, not a claim inferred from architecture.

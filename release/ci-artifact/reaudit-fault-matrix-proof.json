@@ -12,7 +12,7 @@
       "sha256": "de0cb576f91396db18481bd9ee8d150b095a0f341d6e59af07ec2afa8b88bcd8"
     },
     {
-      "file": "tests/reaudit-phase1.test.ts",
+      "file": "tests/evidence-outbox-and-auth-gate.test.ts",
       "sha256": "e508fdca0a50ca3c0921c75c5bc1874166d7bf095274b8f742fa0e86a65c66f1"
     },
     {
@@ -40,7 +40,7 @@
       "sha256": "c56c1328a736b5ece0e8fc063b4df64fbbb6459d3cc1349ea081dc8243f72a64"
     },
     {
-      "file": "tests/audit-wave-abc.test.ts",
+      "file": "tests/log-sanitize-retry-health-alerts.test.ts",
       "sha256": "95c0afdf2e4ebfda3d42fc7eb965f07a2d0df5008c0b661ef5f1ed59fa5997ae"
     },
     {

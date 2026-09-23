@@ -1,20 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  EXECUTION_SAGA_TRANSITIONS,
   INTENT_ADMISSION_TRANSITIONS,
   LIFECYCLE_TRANSITIONS,
   OUTCOME_FEED_TRANSITIONS,
   PROTECTED_REDUCTION_TRANSITIONS,
-  PROTECTION_SAGA_TRANSITIONS,
   RECONCILIATION_TRANSITIONS,
   TRANSITION_GRAPHS,
-  transitionExecutionSaga,
   transitionIntentAdmission,
   transitionLifecycle,
   transitionOutcomeFeed,
   transitionProtectedReduction,
-  transitionProtectionSaga,
   transitionReconciliation,
 } from "../src/domain/state-machines.js";
 
@@ -24,12 +20,10 @@ function expectInvalid(fn: () => void): void {
   assert.throws(fn, /invalid_state_transition/);
 }
 
-test("TRANSITION_GRAPHS exposes all seven state machines", () => {
-  assert.equal(Object.keys(TRANSITION_GRAPHS).length, 7);
+test("TRANSITION_GRAPHS exposes the live state machines", () => {
+  assert.equal(Object.keys(TRANSITION_GRAPHS).length, 5);
   assert.ok(TRANSITION_GRAPHS.lifecycle);
   assert.ok(TRANSITION_GRAPHS.intentAdmission);
-  assert.ok(TRANSITION_GRAPHS.executionSaga);
-  assert.ok(TRANSITION_GRAPHS.protectionSaga);
   assert.ok(TRANSITION_GRAPHS.reconciliation);
   assert.ok(TRANSITION_GRAPHS.outcomeFeed);
   assert.ok(TRANSITION_GRAPHS.protectedReduction);
@@ -45,19 +39,6 @@ test("intent admission transitions reject illegal edges", () => {
   transitionIntentAdmission(null, "received", "intent-1", "wire", OCCURRED);
   transitionIntentAdmission("received", "validated", "intent-1", "ok", OCCURRED);
   expectInvalid(() => transitionIntentAdmission("rejected", "validated", "intent-1", "bad", OCCURRED));
-});
-
-test("execution saga transitions reject illegal edges", () => {
-  transitionExecutionSaga(null, "prepared", "intent-1", "prepare", OCCURRED);
-  transitionExecutionSaga("prepared", "submitting", "intent-1", "wire", OCCURRED);
-  transitionExecutionSaga("submitting", "ambiguous", "intent-1", "timeout", OCCURRED);
-  expectInvalid(() => transitionExecutionSaga("filled", "prepared", "intent-1", "bad", OCCURRED));
-});
-
-test("protection saga transitions reject illegal edges", () => {
-  transitionProtectionSaga(null, "pending", "intent-1", "need", OCCURRED);
-  transitionProtectionSaga("pending", "proven", "intent-1", "brackets", OCCURRED);
-  expectInvalid(() => transitionProtectionSaga("unrequired", "failed", "intent-1", "bad", OCCURRED));
 });
 
 test("reconciliation transitions reject illegal edges", () => {
@@ -87,7 +68,6 @@ test("every graph exposes at least one legal edge or is terminal-only by design"
       assert.ok(Array.isArray(graph[state as keyof typeof graph]), `${name}.${state}`);
     }
   }
-  assert.deepEqual(EXECUTION_SAGA_TRANSITIONS.filled, []);
   assert.deepEqual(INTENT_ADMISSION_TRANSITIONS.rejected, []);
   assert.deepEqual(LIFECYCLE_TRANSITIONS.failed_shutdown, ["starting"]);
 });

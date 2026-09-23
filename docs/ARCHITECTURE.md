@@ -2,6 +2,21 @@
 
 > **Canonical for this gateway repo.** Runtime topology, evidence, and execution. Cognition/profile architecture lives in `GlitchTrader/glitch-topstep-hermes-profile`. A nested checkout at `.hermes-foundation2/docs/ARCHITECTURE.md` is a profile worktree — not authoritative here.
 
+## Which document answers which question
+
+One owner per question. If two docs disagree, the owner wins.
+
+| Question | Owner |
+|----------|--------|
+| What may Glitch reject, and what is forbidden policy? | [`AUTHORITY.md`](AUTHORITY.md) |
+| How is the runtime wired (evidence, packets, execution, stores)? | This file |
+| What are the rebuild requirements and HTTP surface? | [`GATEWAY-SPEC.md`](GATEWAY-SPEC.md) |
+| Is a capability implemented and what evidence is still missing? | [`PARITY.md`](PARITY.md) |
+| How do I run, promote to armed, and roll back? | [`OPERATIONS.md`](OPERATIONS.md) |
+| Why is this Topstep-native and not an NT port? | [`TOPSTEP-NATIVE.md`](TOPSTEP-NATIVE.md) |
+| What are account-rule / loss-floor policy facts? | [`TOPSTEP-POLICY.md`](TOPSTEP-POLICY.md) |
+| What are the trust boundaries and abuse cases? | [`THREAT-MODEL.md`](THREAT-MODEL.md) |
+
 ## Objective
 
 Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. It is not a port of NinjaTrader, Apex rules, replication, or a generic prop-firm compliance engine.

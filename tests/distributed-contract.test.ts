@@ -31,8 +31,6 @@ test("TS-REAUDIT-09 state machine document references runtime graphs", () => {
     const mapped = {
       lifecycle: "lifecycle",
       intent_admission: "intentAdmission",
-      execution_saga: "executionSaga",
-      protection_saga: "protectionSaga",
       reconciliation: "reconciliation",
       outcome_feed: "outcomeFeed",
       protected_reduction: "protectedReduction",
