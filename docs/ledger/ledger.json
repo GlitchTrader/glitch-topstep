@@ -118,6 +118,7 @@
         "npm run check and reaudit fault matrix green.",
         "72h PRAC soak evidence with session-conditioned metrics."
       ],
+      "interim_merge_gate_2026_09_23": "Shadow/PRAC-only gate to merge the #13-16 stream/REST/circuit-breaker unification for further iteration: minimum 2h continuous PRAC/shadow run, zero unexplained restarts, zero duplicate-order or duplicate-protection events, quote/reconciliation staleness within normal bounds throughout. This authorizes merging into shadow/PRAC for continued testing only. It does not satisfy, shorten, or substitute the 72h PRAC soak this ticket's acceptance criteria already require before trusting the unified path for continuous armed operation — that requirement is unchanged.",
       "sources": [
         "docs/plans/2026-08-27-stream-recovery-implementation-plan.md",
         "src/projectx/stream-supervisor.ts",
