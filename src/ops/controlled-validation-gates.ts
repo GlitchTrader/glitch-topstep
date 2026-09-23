@@ -23,7 +23,16 @@
  * - `flat_idle_user_stream` when lastEventAt is null/stale BUT the account is flat,
  *   openOrders=[], reconciliation current/fresh (both generations present, valid,
  *   and equal), user connected, market recent, and BBO fresh — otherwise fail closed.
+ *
+ * Quote geometry / age / reconciliation generation call the same production
+ * functions as armed execution. This file only adapts frozen JSON and the
+ * capture clock — it does not recompute those facts.
  */
+
+import type { AccountVenueSnapshot, RiskSettings, VenueOperationalStatus } from "../domain/models.js";
+import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
+import { classifyQuoteState } from "../state/quote-state.js";
+import { isReconciliationCurrent } from "../state/venue-state.js";
 
 export type OpenOrdersAssessment = {
   confirmed_empty: boolean;
@@ -286,7 +295,8 @@ export function assessBbo(
     };
   }
 
-  if (!(ask > bid)) {
+  const geometry = classifyQuoteState(bid, ask);
+  if (geometry.quote_state !== "normal") {
     return {
       complete: false,
       stale: false,
@@ -311,21 +321,24 @@ export function assessBbo(
 
   let ageMs: number | null = null;
   let ageSource: BboAssessment["age_source"] = null;
+  let staleFromQuality = false;
   if (quoteAgeFromHealth !== null && quoteAgeFromHealth >= 0) {
     ageMs = quoteAgeFromHealth;
     ageSource = "quote_age_ms";
-  } else {
-    const tsMs = parseUtcMs(timestamp);
-    if (tsMs !== null && captureNowMs !== null) {
-      ageMs = Math.max(0, captureNowMs - tsMs);
-      ageSource = "timestamp_vs_capture";
-    }
+    staleFromQuality = ageMs > maxAgeMs;
+  } else if (timestamp !== null && captureNowMs !== null) {
+    const quality = evaluateSnapshotDataQuality(
+      snapshotForQuoteCheck(bid, ask, timestamp, captureNowMs),
+      riskForQuoteCheck(maxAgeMs),
+      new Date(captureNowMs),
+    );
+    ageMs = quality.quoteAgeMs;
+    ageSource = ageMs === null ? null : "timestamp_vs_capture";
+    staleFromQuality = quality.issues.includes("quote_stale");
   }
 
-  let stale = healthSaysStale;
-  let reasonComplete = `bbo_complete_from_${source}`;
+  const stale = healthSaysStale || staleFromQuality;
   if (ageMs === null || ageSource === null) {
-    stale = true;
     return {
       complete: false,
       stale: true,
@@ -338,7 +351,6 @@ export function assessBbo(
       age_source: null,
     };
   }
-  if (ageMs > maxAgeMs) stale = true;
 
   if (stale) {
     return {
@@ -361,9 +373,107 @@ export function assessBbo(
     bid,
     ask,
     source,
-    reason: reasonComplete,
+    reason: `bbo_complete_from_${source}`,
     age_ms: ageMs,
     age_source: ageSource,
+  };
+}
+
+function riskForQuoteCheck(maxQuoteAgeMs: number): RiskSettings {
+  return {
+    estimatedRoundTurnFeesUsd: 0,
+    slippageReserveTicks: 0,
+    maxQuoteAgeMs,
+    maxStateAgeMs: Number.MAX_SAFE_INTEGER,
+    maxIntentAgeMs: 1,
+  };
+}
+
+/** ponytail: stub snapshot so preflight reuses evaluateSnapshotDataQuality; ceiling is dummy identity fields. */
+function snapshotForQuoteCheck(
+  bestBid: number,
+  bestAsk: number,
+  timestamp: string,
+  captureNowMs: number,
+): AccountVenueSnapshot {
+  const capturedAt = new Date(captureNowMs).toISOString();
+  const idleStream = {
+    state: "disconnected" as const,
+    generation: 0,
+    lastChangedAt: capturedAt,
+    lastEventAt: null,
+    lastError: null,
+  };
+  return {
+    capturedAt,
+    account: { id: 0, name: "", balance: 0, canTrade: false, isVisible: false },
+    contract: {
+      id: "",
+      name: "",
+      description: "",
+      tickSize: 0,
+      tickValue: 0,
+      activeContract: false,
+      symbolId: "",
+    },
+    quote: {
+      contractId: "",
+      symbol: "",
+      lastPrice: 0,
+      bestBid,
+      bestAsk,
+      open: 0,
+      high: 0,
+      low: 0,
+      volume: 0,
+      timestamp,
+    },
+    positions: [],
+    openOrders: [],
+    totalOpenContracts: 0,
+    instrumentOpenContracts: 0,
+    unrealizedPnl: 0,
+    conservativeEquity: 0,
+    operational: {
+      generation: 0,
+      userStream: idleStream,
+      marketStream: idleStream,
+      reconciliation: {
+        state: "succeeded",
+        generation: 0,
+        lastStartedAt: capturedAt,
+        lastSucceededAt: capturedAt,
+        lastError: null,
+      },
+    },
+    stateIssues: [],
+    stateComplete: true,
+  };
+}
+
+function operationalForReconCheck(
+  generation: number,
+  reconGeneration: number,
+  lastSucceededAt: string,
+): VenueOperationalStatus {
+  const stream = {
+    state: "disconnected" as const,
+    generation,
+    lastChangedAt: lastSucceededAt,
+    lastEventAt: null,
+    lastError: null,
+  };
+  return {
+    generation,
+    userStream: stream,
+    marketStream: stream,
+    reconciliation: {
+      state: "succeeded",
+      generation: reconGeneration,
+      lastStartedAt: null,
+      lastSucceededAt,
+      lastError: null,
+    },
   };
 }
 
@@ -467,15 +577,15 @@ export function reconciliationFresh(
   if (reconGen === null) {
     return { ok: false, reason: "reconciliation_generation_missing_or_invalid" };
   }
-  if (reconGen !== opGen) {
+  const succeededAt = typeof recon.lastSucceededAt === "string" ? recon.lastSucceededAt : null;
+  const succeededMs = parseUtcMs(succeededAt);
+  if (succeededAt === null || succeededMs === null) {
+    return { ok: false, reason: "reconciliation_lastSucceededAt_missing" };
+  }
+  if (!isReconciliationCurrent(operationalForReconCheck(opGen, reconGen, succeededAt))) {
     return { ok: false, reason: "reconciliation_generation_mismatch" };
   }
 
-  const succeededAt = typeof recon.lastSucceededAt === "string" ? recon.lastSucceededAt : null;
-  const succeededMs = parseUtcMs(succeededAt);
-  if (succeededMs === null) {
-    return { ok: false, reason: "reconciliation_lastSucceededAt_missing" };
-  }
   if (captureNowMs === null) {
     return { ok: false, reason: "capture_clock_missing" };
   }
