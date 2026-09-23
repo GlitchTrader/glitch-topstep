@@ -56,9 +56,9 @@ describe("ProjectX provider evidence store", () => {
         earliestSequence: 1,
         latestSequence: 2,
         latestReceivedUtc: "2026-07-21T12:00:01Z",
-        marketEventRetention: 500_000,
+        marketEventRetention: 600_000,
         marketPruneInterval: 10_000,
-        maximumMarketEventsBetweenPrunes: 509_999,
+        maximumMarketEventsBetweenPrunes: 609_999,
       });
       store.close();
     } finally {
