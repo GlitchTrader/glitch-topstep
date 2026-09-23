@@ -6,7 +6,7 @@ Paired profile: `GlitchTrader/glitch-topstep-hermes-profile` (Python only — ne
 ## Before you change code
 
 1. Read `docs/plans/2026-08-20-nt-adaptation-roadmap.md` for wave order and frozen policies (daily capture entry lock, intent-free automatic breakeven).
-2. Read `docs/plans/2026-08-25-complete-audit-implementation-plan.md` for current P0 (C1–C4) and wave order from the 2026-08-25 architecture audit.
+2. Read `docs/AUDIT-2026-08-31.md` for the last reconciled audit. Do not treat archived plans under `docs/plans/archive/` as current P0.
 3. Read `docs/ledger/ledger.json` for item status — update ledger when closing work.
 4. Paired releases: bump `release/paired-contract.json` and the profile copy **together** when the wire contract changes.
 5. Run `npm run check` before every PR.

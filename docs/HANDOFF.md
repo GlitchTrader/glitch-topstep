@@ -1,7 +1,6 @@
 # Codex handoff
 
-> **Contributor onboarding moved to [`README.md`](../README.md)** (install, run, dev loop, push, safety).
-> This file retains historical implementation notes for Codex sessions.
+> **Canonical for this gateway repo** (historical implementation notes). Contributor onboarding is in [`README.md`](../README.md). A nested checkout at `.hermes-foundation2/docs/HANDOFF.md` is a profile worktree — not authoritative here.
 
 ## Current state
 

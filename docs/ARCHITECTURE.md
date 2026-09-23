@@ -1,5 +1,7 @@
 ﻿# Architecture
 
+> **Canonical for this gateway repo.** Runtime topology, evidence, and execution. Cognition/profile architecture lives in `GlitchTrader/glitch-topstep-hermes-profile`. A nested checkout at `.hermes-foundation2/docs/ARCHITECTURE.md` is a profile worktree — not authoritative here.
+
 ## Objective
 
 Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. It is not a port of NinjaTrader, Apex rules, replication, or a generic prop-firm compliance engine.

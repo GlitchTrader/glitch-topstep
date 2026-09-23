@@ -211,17 +211,21 @@ export class ExecutionCoordinator {
   }
 
   public handleWireIntent(input: unknown): Promise<ExecutionReceipt> {
-    const result = this.executionQueue.then(() => this.handleWireIntentSerial(input));
-    this.executionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return this.enqueue(() => this.handleWireIntentSerial(input));
   }
 
   /** Waits for work already queued to settle; new work queued after this call is not awaited. */
   public async drainExecutionQueue(): Promise<void> {
     await this.executionQueue;
+  }
+
+  private enqueue<T>(fn: () => T | Promise<T>): Promise<T> {
+    const result = this.executionQueue.then(fn);
+    this.executionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   public receiptForIntent(intentId: string): ExecutionReceipt | null {
@@ -939,12 +943,7 @@ export class ExecutionCoordinator {
    * no attributable protective order may remain working.
    */
   public sweepOrphanProtectiveOrders(snapshot: AccountVenueSnapshot): Promise<boolean> {
-    const result = this.executionQueue.then(() => this.sweepOrphanProtectiveOrdersSerial(snapshot));
-    this.executionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return this.enqueue(() => this.sweepOrphanProtectiveOrdersSerial(snapshot));
   }
 
   private async sweepOrphanProtectiveOrdersSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
@@ -1008,12 +1007,7 @@ export class ExecutionCoordinator {
    * cannot race a rearm. Defers while non-protective working orders or an open EXIT exist.
    */
   public rearmTrancheProtection(snapshot: AccountVenueSnapshot): Promise<boolean> {
-    const result = this.executionQueue.then(() => this.rearmTrancheProtectionSerial(snapshot));
-    this.executionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return this.enqueue(() => this.rearmTrancheProtectionSerial(snapshot));
   }
 
   private async rearmTrancheProtectionSerial(snapshot: AccountVenueSnapshot): Promise<boolean> {
@@ -1299,12 +1293,7 @@ export class ExecutionCoordinator {
    * — including one per restart — converge on the same venue state.
    */
   public tightenOwnedStopsAfterCaptureLock(): Promise<number> {
-    const result = this.executionQueue.then(() => this.tightenOwnedStopsAfterCaptureLockSerial());
-    this.executionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return this.enqueue(() => this.tightenOwnedStopsAfterCaptureLockSerial());
   }
 
   private async tightenOwnedStopsAfterCaptureLockSerial(): Promise<number> {
@@ -1436,7 +1425,7 @@ export class ExecutionCoordinator {
     snapshot: AccountVenueSnapshot,
     options: { afterRearmAttempt: boolean; now?: Date } = { afterRearmAttempt: true },
   ): Promise<UnprotectedFlattenResult> {
-    const result = this.executionQueue.then(() => runUnprotectedFlattenCycle({
+    return this.enqueue(() => runUnprotectedFlattenCycle({
       snapshot,
       store: this.store,
       api: this.api,
@@ -1451,11 +1440,6 @@ export class ExecutionCoordinator {
       invalidateIssuedPackets: this.invalidateIssuedPackets,
       now: options.now,
     }));
-    this.executionQueue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
   }
 
   private async cancelTrancheProtectionOrders(

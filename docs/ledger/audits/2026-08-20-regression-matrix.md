@@ -17,6 +17,6 @@
 | TS-AUDIT-12 safety supervisor | `tests/safety-supervisor.test.ts` | green on main |
 | TS-AUDIT-14 invariant metrics | `tests/invariant-metrics.test.ts` | green on main |
 | TS-AUDIT-13 soak gate | `tests/soak-evidence-gate.test.ts` | green on main |
-| TS-DATA-01 Phase D gate | `tests/data-phase-d-gate.test.ts` | green on main |
+| TS-DATA-01 Phase D gate | removed 2026-09-23 (orphan gate, never called) | deleted |
 
 CI entrypoint: `npm run check` (build + full test suite). Non-blocking soak/PRAC gates remain manual per TS-R1-04 doctrine.

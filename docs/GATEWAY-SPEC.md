@@ -97,7 +97,7 @@ Default `http://127.0.0.1:8790`. Sensitive routes require `Authorization: Bearer
 |----------|------|
 | `GET /health` | Liveness, streams, reconciliation, invariant metrics, recovery, safety supervisor |
 | `GET /packet` | Sanitized decision packet for Hermes (`glitch.direct.decision_packet.v2`) |
-| `POST /intents` | Intent admission (`glitch.intent.v3`, v2 compat) — rebuild-target name; the current live route is `POST /intent` (singular), unreconciled with this spec (see README.md) |
+| `POST /intent` | Intent admission (`glitch.intent.v3`, v2 compat) |
 | `GET /outcomes/feed` | **Sole canonical writer** of trade outcomes (`glitch.topstep.outcome_feed.v2`) |
 | `GET /execution/facts` | Immediate lifecycle facts per `intent_id` |
 | `GET /evidence` | Bounded ProjectX evidence for acceptance/debug |
@@ -307,7 +307,7 @@ Do not implement cognition, ranking, or strategy in any wave. Pair with profile 
 | [`AGENTS.md`](../AGENTS.md) | Repo map, forbidden stop lines, check before PR |
 | [`release/paired-contract.json`](../release/paired-contract.json) | Wire capabilities and versions |
 | [`docs/plans/2026-08-20-nt-adaptation-roadmap.md`](plans/2026-08-20-nt-adaptation-roadmap.md) | Wave order and frozen policies |
-| [`docs/plans/2026-08-25-complete-audit-implementation-plan.md`](plans/2026-08-25-complete-audit-implementation-plan.md) | P0 audit items |
+| [`docs/AUDIT-2026-08-31.md`](AUDIT-2026-08-31.md) | Last reconciled audit; archived plans are not current P0 |
 
 ---
 

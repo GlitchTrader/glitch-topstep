@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 /**
- * TS-REAUDIT-07: fail when a tracked orchestration file grows past its recorded baseline, and
- * fail when src/ has an import cycle. Growth isn't forbidden -- bump the number in
- * scripts/orchestration-size-baseline.json in the same commit to make the decision visible in
- * review, rather than letting these files grow silently forever.
+ * Fail when src/ has a new import cycle. Orchestration line counts are informational:
+ * the size baseline never blocked a defect, only a number that was always bumped up.
+ * Cycle detection stays a gate. Known cycles stay allowlisted until a dedicated fix.
  */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -11,8 +10,9 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const errors = [];
+const sizeNotes = [];
 
-// -- Size ratchet --------------------------------------------------------
+// -- Size metric (not a gate) --------------------------------------------
 
 const baselinePath = join(ROOT, "scripts/orchestration-size-baseline.json");
 const baseline = JSON.parse(readFileSync(baselinePath, "utf8"));
@@ -28,10 +28,8 @@ for (const [relPath, maxLines] of Object.entries(baseline)) {
   const absPath = join(ROOT, relPath);
   const lineCount = countLines(readFileSync(absPath, "utf8"));
   if (lineCount > maxLines) {
-    errors.push(
-      `orchestration_size_ratchet: ${relPath} grew to ${lineCount} lines, `
-      + `exceeds baseline ${maxLines}. Extract logic elsewhere, or if growth is deliberate for `
-      + `this change, bump the number in scripts/orchestration-size-baseline.json in this same commit.`,
+    sizeNotes.push(
+      `orchestration_size_metric: ${relPath} ${lineCount} lines (baseline ${maxLines}; informational)`,
     );
   }
 }
@@ -147,8 +145,11 @@ if (cycles.length > 0) {
   }
 }
 
+if (sizeNotes.length > 0) {
+  console.log(sizeNotes.join("\n"));
+}
 if (errors.length > 0) {
   console.error(`orchestration-size-ratchet failed:\n${errors.join("\n")}`);
   process.exit(1);
 }
-console.log(`orchestration-size-ratchet OK (${files.length} src files, no cycles, sizes within baseline)`);
+console.log(`orchestration-size-ratchet OK (${files.length} src files, no new import cycles)`);

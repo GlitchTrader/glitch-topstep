@@ -1,7 +1,7 @@
 {
   "schema_version": "2.0",
   "project": "glitch-topstep",
-  "updated": "2026-09-11T15:30:00Z",
+  "updated": "2026-09-23T16:20:00Z",
   "prompt_v17_2_pairing_2026_09_11": {
     "status": "paired_operational_shadow_only",
     "gateway_commit": "928ed96",

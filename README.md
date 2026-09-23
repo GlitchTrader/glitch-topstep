@@ -93,7 +93,7 @@ curl -H "Authorization: Bearer $env:GLITCH_LOCAL_TOKEN" http://127.0.0.1:8790/pa
 | `POST /intent` | bearer | Strict `glitch.intent.v3` (v2 compat) execution |
 | `POST /control`, `GET /control` | operator bearer | Flatten, pause, operator status |
 
-This table lists the routes this codebase actually serves today (`src/server/local-gateway.ts`). [`docs/GATEWAY-SPEC.md`](docs/GATEWAY-SPEC.md) describes a rebuild-target contract (`POST /intents`, plural) that has not been reconciled with the live route name yet — treat GATEWAY-SPEC's naming as proposed, not current.
+This table lists the routes this codebase actually serves today (`src/server/local-gateway.ts`). [`docs/GATEWAY-SPEC.md`](docs/GATEWAY-SPEC.md) matches these live names.
 
 ### Data stores
 

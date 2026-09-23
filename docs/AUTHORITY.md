@@ -1,5 +1,7 @@
 # Glitch Topstep authority contract
 
+> **Canonical for this gateway repo.** Glitch here is the Codex-owned execution system. Cognition/profile authority lives in `GlitchTrader/glitch-topstep-hermes-profile`. A nested checkout at `.hermes-foundation2/docs/` is a profile worktree — not this file's twin and not authoritative here.
+
 ## Purpose
 
 Glitch Topstep exists to equip an AI trading operator with truthful TopstepX/ProjectX evidence and reliable execution tools. It is not a deterministic strategy hidden behind Hermes.
@@ -120,3 +122,14 @@ Before adding a deterministic rule, ask:
 4. Would removing the rule merely allow Hermes to exercise judgment?
 
 If the answer to question 4 is yes while questions 1–3 are no, the rule belongs in cognition, not Glitch.
+
+## Infrastructure change test
+
+Before adding a gate, validation script, or audit document, ask:
+
+1. Does this layer catch a bug the existing layer genuinely misses — or only restates what it already covers?
+2. Does some place already compute this fact? If yes, call it; do not reimplement it.
+3. Who deletes this when the incident that created it is closed — and when?
+4. Does this change reduce or increase the number of places the same truth can drift?
+
+If the answer to question 1 is no, or question 2 is yes and the existing owner can be called, do not add the layer.
