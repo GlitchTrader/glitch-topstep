@@ -1,8 +1,6 @@
 import type { OrderInfo } from "../domain/models.js";
-
-/** ProjectX terminal order statuses — mirror venue-state applyOrder. */
-const TERMINAL_ORDER_STATUSES = new Set([2, 3, 4, 5]);
+import { isTerminalOrderStatus } from "../domain/provider-entity-status.js";
 
 export function isWorkingOrder(order: OrderInfo): boolean {
-  return !TERMINAL_ORDER_STATUSES.has(order.status);
+  return !isTerminalOrderStatus(order.status);
 }

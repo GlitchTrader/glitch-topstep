@@ -16,6 +16,7 @@ import type {
   ReplaySequenceGap,
 } from "../domain/provider-replay.js";
 import type { StoredProviderEvidenceEvent } from "../domain/provider-evidence.js";
+import { isFlatPosition, isTerminalOrderStatus } from "../domain/provider-entity-status.js";
 
 interface EvidenceRow {
   sequence: number | bigint;
@@ -37,7 +38,6 @@ const DEFAULT_BATCH_SIZE = 5_000;
 const DEFAULT_MAX_EVENTS = 1_000_000;
 const MAX_BATCH_SIZE = 10_000;
 const MAX_EVENTS = 5_000_000;
-const TERMINAL_ORDER_STATUSES = new Set([2, 3, 4, 5]);
 
 export class ProjectXEvidenceReplayService {
   private readonly database: DatabaseSync;
@@ -361,7 +361,7 @@ class ProjectXEvidenceReplayReducer {
   }
 
   private applyPosition(value: PositionInfo): void {
-    if (value.type === 0 || value.size === 0) {
+    if (isFlatPosition(value)) {
       this.positions.delete(value.id);
     } else {
       this.positions.set(value.id, value);
@@ -370,7 +370,7 @@ class ProjectXEvidenceReplayReducer {
 
   private applyOrder(value: OrderInfo): void {
     this.orderHistory.set(value.id, value);
-    if (TERMINAL_ORDER_STATUSES.has(value.status)) {
+    if (isTerminalOrderStatus(value.status)) {
       this.openOrders.delete(value.id);
     } else {
       this.openOrders.set(value.id, value);

@@ -10,9 +10,10 @@ import type {
   VenueStreamKind,
   VenueStreamState,
 } from "../domain/models.js";
+import { isFlatPosition, isTerminalOrderStatus } from "../domain/provider-entity-status.js";
 
 function instrumentLegLots(position: PositionInfo): number {
-  if (position.type === 0 || position.size === 0) {
+  if (isFlatPosition(position)) {
     return 0;
   }
   return Math.abs(position.size);
@@ -178,7 +179,7 @@ export class VenueStateStore {
 
   public applyPosition(position: PositionInfo, receivedAt = nowUtc()): void {
     this.positionSnapshotAt = receivedAt;
-    if (position.size === 0 || position.type === 0) {
+    if (isFlatPosition(position)) {
       this.positions.delete(position.id);
       return;
     }
@@ -187,7 +188,7 @@ export class VenueStateStore {
 
   public applyOrder(order: OrderInfo, receivedAt = nowUtc()): void {
     this.orderSnapshotAt = receivedAt;
-    if ([2, 3, 4, 5].includes(order.status)) {
+    if (isTerminalOrderStatus(order.status)) {
       this.orders.delete(order.id);
       return;
     }
