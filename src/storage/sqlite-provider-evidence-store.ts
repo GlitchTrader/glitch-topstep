@@ -49,7 +49,8 @@ export interface AppendIfChangedResult {
   event: StoredProviderEvidenceEvent | null;
 }
 
-const DEFAULT_MARKET_EVENT_RETENTION = 500_000;
+/** Headroom above the live ~505k market-event ceiling so boot/prune is not a full-table DELETE. */
+const DEFAULT_MARKET_EVENT_RETENTION = 600_000;
 const DEFAULT_MARKET_PRUNE_INTERVAL = 10_000;
 const DEFAULT_APPLIED_OUTBOX_RETENTION_HOURS = 168;
 const SECRET_KEY_FRAGMENTS = [
@@ -106,8 +107,12 @@ export class SqliteProviderEvidenceStore {
     this.database.exec("PRAGMA synchronous=NORMAL");
     this.database.exec("PRAGMA busy_timeout=5000");
     this.migrate();
-    this.pruneMarketEvents();
     this.refreshCountsFromDb();
+    // ponytail: only prune on open when already over the configured cap. The live
+    // 505k-row DB sits under the 600k default, so boot no longer does a full DELETE.
+    if (this.marketEventCount > this.marketEventRetention) {
+      this.pruneMarketEvents();
+    }
   }
 
   public close(): void {
