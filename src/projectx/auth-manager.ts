@@ -108,6 +108,10 @@ export class ProjectXAuthManager {
     return this.client.readCircuitStatus();
   }
 
+  public restConcurrencyStatus(): ReturnType<ProjectXApiClient["restConcurrencyStatus"]> {
+    return this.client.restConcurrencyStatus();
+  }
+
   public async ensureAuthenticated(): Promise<string> {
     if (this.refreshInFlight) {
       return this.refreshInFlight;

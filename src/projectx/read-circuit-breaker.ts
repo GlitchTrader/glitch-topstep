@@ -38,7 +38,12 @@ interface FamilyState {
   openUntilMs: number;
 }
 
-/** Per-endpoint-family breaker for idempotent reads; each family auto-clears after cooldown. */
+/**
+ * Per-endpoint-family breaker for idempotent reads; each family auto-clears after cooldown.
+ * Not a second RestConcurrencyGate: that caps in-flight count, this isolates failure storms
+ * so retrieveBars 429 cannot open the breaker for positions/orders. Do not fold into the
+ * concurrency gate until TS-STREAM-RECOVERY-01 soak proves flap is gone.
+ */
 export class ReadCircuitBreaker {
   private readonly families = new Map<string, FamilyState>();
 

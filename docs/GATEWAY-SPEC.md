@@ -110,7 +110,7 @@ Hermes must consume outcomes via the HTTP feed and maintain its own cursor. `GLI
 
 | Artifact | Schema |
 |----------|--------|
-| Health | `glitch.direct.health.v3` (2026-08-31: `health_alerts[].id` renamed to `alert_id` plus hysteresis fields; added `task_scheduler`, `persistence_bytes`, `heap_used_bytes`, `health_build_ms` — all additive except the rename, confirmed unconsumed by the paired profile) |
+| Health | `glitch.direct.health.v3` (2026-08-31: `health_alerts[].id` renamed to `alert_id` plus hysteresis fields; added `task_scheduler`, `persistence_bytes`, `heap_used_bytes`, `health_build_ms`, `rest_concurrency` — all additive except the rename, confirmed unconsumed by the paired profile) |
 | Runtime intent | `glitch.intent.v3` |
 | Decision packet | `glitch.direct.decision_packet.v2` |
 | Outcome feed | `glitch.topstep.outcome_feed.v2` |
@@ -222,7 +222,7 @@ Technical “can I open exposure?” has one owner: `buildExecutionGates` (`src/
 
 - In-process: SignalR auto-reconnect, `restartHub`, quote-silence and stuck-hub timeouts (~15s / ~90s).
 - Process fallback: `scripts/gateway-health-watchdog.ps1` — restart via `start.ps1 -SkipBuild` when degraded with quote stale + stuck streams or stale reconciliation ≥3 minutes (`src/observability/gateway-watchdog-policy.ts`).
-- ProjectX read circuit breaker: degrade explicitly. New exposure stays blocked while `state_complete=false` via `buildExecutionGates` / `validateEntryRisk` — the safety supervisor does not own this fact.
+- ProjectX read circuit breaker: degrade explicitly, isolated per endpoint family. It is not the REST in-flight cap (`RestConcurrencyGate` / `/health.rest_concurrency`). Do not merge them until stream soak. New exposure stays blocked while `state_complete=false` via `buildExecutionGates` / `validateEntryRisk`.
 - Protect existing exposure when Hermes is unavailable.
 - Session token (`POST /api/Auth/validate`) must be revalidated before its ~24h expiry (`POST /api/Auth/loginKey` has no separate refresh-token flow); a failed revalidation degrades `/health` explicitly rather than mutating ProjectX with a stale token.
 - ProjectX enforces per-endpoint rate limits: `50 req/30s` on `POST /api/History/retrieveBars`, `200 req/60s` on all other endpoints; excess returns `429`. History sync, REST reconciliation, and `/evidence` reads share this budget — track and back off explicitly rather than retrying blindly into `429`.
@@ -235,6 +235,7 @@ Technical “can I open exposure?” has one owner: `buildExecutionGates` (`src/
 - `execution_recovery` (blocking ambiguity, unresolved mutations)
 - `safety_supervisor` (observe-only; reports `protection_coverage` and `no_flatten_pending` only — execution-gate facts are not recomputed here, see `src/safety/safety-supervisor.ts`)
 - Invariant metrics: unprotected quantity/seconds, flatten pending, reconciliation age, evidence queue depth
+- `task_scheduler`, `rest_concurrency` (in-flight/waiting/max), `read_circuit_breaker` (per-family open state)
 
 Alert on `execution_recovery_blocking=true` or `failed_shutdown` lifecycle.
 

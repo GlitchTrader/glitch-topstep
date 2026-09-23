@@ -694,6 +694,7 @@ export class GlitchTopstepService {
           invariant_metrics: invariantMetrics,
           health_alerts: this.healthAlerts.evaluate(invariantMetrics),
           task_scheduler: this.taskScheduler.counts(),
+          rest_concurrency: this.authManager.restConcurrencyStatus(),
           read_circuit_breaker: this.authManager.readCircuitStatus(),
           recovery: this.marketHubRecovery.snapshot(),
           persistence_bytes: this.persistenceSizeBytes(),

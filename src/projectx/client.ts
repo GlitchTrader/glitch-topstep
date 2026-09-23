@@ -188,6 +188,10 @@ export class ProjectXApiClient {
     return this.readCircuit.status();
   }
 
+  public restConcurrencyStatus(): ReturnType<RestConcurrencyGate["snapshot"]> {
+    return this.restGate.snapshot();
+  }
+
   public async searchAccounts(onlyActiveAccounts = true): Promise<AccountInfo[]> {
     return (await this.searchAccountsCollection(onlyActiveAccounts)).items;
   }
