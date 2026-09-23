@@ -68,6 +68,9 @@ export class SqliteProviderEvidenceStore {
   private readonly marketPruneInterval: number;
   private readonly appliedOutboxRetentionHours: number;
   private marketEventsSincePrune = 0;
+  /** Maintained on insert/prune so /health never full-scans provider_events (505k+ rows). */
+  private eventCount = 0;
+  private marketEventCount = 0;
 
   public constructor(path: string, options: ProviderEvidenceStoreOptions = {}) {
     this.marketEventRetention = integerOption(
@@ -104,6 +107,7 @@ export class SqliteProviderEvidenceStore {
     this.database.exec("PRAGMA busy_timeout=5000");
     this.migrate();
     this.pruneMarketEvents();
+    this.refreshCountsFromDb();
   }
 
   public close(): void {
@@ -113,6 +117,7 @@ export class SqliteProviderEvidenceStore {
   public append(event: ProviderEvidenceEvent): StoredProviderEvidenceEvent {
     const prepared = prepareEvidence(event);
     const stored = this.insertPrepared(prepared);
+    this.noteInserted(event.source);
     this.maybePruneMarketEvent(event.source);
     return stored;
   }
@@ -137,6 +142,9 @@ export class SqliteProviderEvidenceStore {
       }
       return rows;
     });
+    for (const event of events) {
+      this.noteInserted(event.source);
+    }
     for (const event of events) {
       this.maybePruneMarketEvent(event.source);
     }
@@ -207,7 +215,7 @@ export class SqliteProviderEvidenceStore {
       throw new Error("provider_evidence_identity_key_invalid");
     }
     const prepared = prepareEvidence(event);
-    return this.inTransaction(() => {
+    const result = this.inTransaction(() => {
       const head = this.database.prepare(`
         SELECT content_hash, provider_timestamp_utc
         FROM provider_evidence_heads
@@ -246,6 +254,10 @@ export class SqliteProviderEvidenceStore {
       );
       return { appended: true, event: stored };
     });
+    if (result.appended) {
+      this.noteInserted(event.source);
+    }
+    return result;
   }
 
   public recent(limit = 100): StoredProviderEvidenceEvent[] {
@@ -487,24 +499,21 @@ export class SqliteProviderEvidenceStore {
   }
 
   public status(): ProviderEvidenceStatus {
+    // ponytail: O(1) counters + indexed MIN/MAX — never COUNT(*) on the hot /health path.
     const row = this.database.prepare(`
       SELECT
-        COUNT(*) AS event_count,
-        SUM(CASE WHEN source = 'projectx_market_stream' THEN 1 ELSE 0 END) AS market_event_count,
         MIN(sequence) AS earliest_sequence,
         MAX(sequence) AS latest_sequence,
         MAX(received_utc) AS latest_received_utc
       FROM provider_events
     `).get() as {
-      event_count: number | bigint;
-      market_event_count: number | bigint | null;
       earliest_sequence: number | bigint | null;
       latest_sequence: number | bigint | null;
       latest_received_utc: string | null;
     };
     return {
-      eventCount: Number(row.event_count),
-      marketEventCount: Number(row.market_event_count ?? 0),
+      eventCount: this.eventCount,
+      marketEventCount: this.marketEventCount,
       earliestSequence: row.earliest_sequence === null ? null : Number(row.earliest_sequence),
       latestSequence: row.latest_sequence === null ? null : Number(row.latest_sequence),
       latestReceivedUtc: row.latest_received_utc,
@@ -513,6 +522,20 @@ export class SqliteProviderEvidenceStore {
       maximumMarketEventsBetweenPrunes:
         this.marketEventRetention + this.marketPruneInterval - 1,
     };
+  }
+
+  private refreshCountsFromDb(): void {
+    const row = this.database.prepare(`
+      SELECT
+        COUNT(*) AS event_count,
+        SUM(CASE WHEN source = 'projectx_market_stream' THEN 1 ELSE 0 END) AS market_event_count
+      FROM provider_events
+    `).get() as {
+      event_count: number | bigint;
+      market_event_count: number | bigint | null;
+    };
+    this.eventCount = Number(row.event_count);
+    this.marketEventCount = Number(row.market_event_count ?? 0);
   }
 
   private insertPrepared(prepared: PreparedEvidence): StoredProviderEvidenceEvent {
@@ -556,6 +579,13 @@ export class SqliteProviderEvidenceStore {
     };
   }
 
+  private noteInserted(source: string): void {
+    this.eventCount += 1;
+    if (source === "projectx_market_stream") {
+      this.marketEventCount += 1;
+    }
+  }
+
   private maybePruneMarketEvent(source: string): void {
     if (source !== "projectx_market_stream") {
       return;
@@ -568,7 +598,7 @@ export class SqliteProviderEvidenceStore {
   }
 
   private pruneMarketEvents(): void {
-    this.database.prepare(`
+    const result = this.database.prepare(`
       DELETE FROM provider_events
       WHERE source = 'projectx_market_stream'
         AND sequence <= COALESCE((
@@ -579,6 +609,11 @@ export class SqliteProviderEvidenceStore {
           LIMIT 1 OFFSET ?
         ), 0)
     `).run(this.marketEventRetention);
+    const removed = Number(result.changes ?? 0);
+    if (removed > 0) {
+      this.eventCount = Math.max(0, this.eventCount - removed);
+      this.marketEventCount = Math.max(0, this.marketEventCount - removed);
+    }
   }
 
   private fromRow(row: EvidenceRow): StoredProviderEvidenceEvent {

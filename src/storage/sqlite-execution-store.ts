@@ -1080,7 +1080,10 @@ export class SqliteExecutionStore {
       }
       return;
     }
-    this.setMeta("unprotected_since_utc", null);
+    // ponytail: flat account — skip redundant null writes that hit SQLite on every /health.
+    if (this.meta("unprotected_since_utc")) {
+      this.setMeta("unprotected_since_utc", null);
+    }
   }
 
   private setMeta(key: string, value: string | null): void {
