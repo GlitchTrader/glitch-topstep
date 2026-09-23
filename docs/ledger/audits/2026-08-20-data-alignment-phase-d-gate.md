@@ -1,5 +1,7 @@
 # TS-DATA-01 Phase D — Metrics gate
 
+> **Deleted 2026-09-23.** `src/market/data-alignment-phase-d-gate.ts` was never called in production. Historical note only.
+
 **Date:** 2026-08-20  
 **Issue:** [#171](https://github.com/GlitchTrader/glitch-topstep/issues/171)
 

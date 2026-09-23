@@ -2,14 +2,18 @@ import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 import type { AccountVenueSnapshot, RiskSettings, TradingMode } from "../domain/models.js";
 import type { ProtectedReductionHealth } from "../execution/protected-reduction-saga.js";
 import type { ProjectXAuthStatus } from "../projectx/auth-manager.js";
-import {
-  buildExecutionGates,
-  gatewayModePermitsRiskReduction,
-  resolveGatewayMode,
-  type EffectiveGatewayMode,
-} from "../execution/gateway-mode.js";
-import { evaluateSnapshotDataQuality } from "../state/data-quality.js";
-import { isReconciliationCurrent } from "../state/venue-state.js";
+import { buildExecutionGates } from "../execution/gateway-mode.js";
+
+/** Facts the execution gates do not compute. Everything else is a test, not a runtime copy. */
+export const SUPERVISOR_UNIQUE_INVARIANTS = ["protection_coverage", "no_flatten_pending"] as const;
+
+/** Gate ids that used to be recomputed here — must stay owned by buildExecutionGates. */
+export const SUPERVISOR_GATE_BACKED_IDS = [
+  "state_complete",
+  "reconciliation_current",
+  "new_exposure_technically_supported",
+  "risk_reduction_technically_supported",
+] as const;
 
 export interface SafetyInvariant {
   id: string;
@@ -18,14 +22,13 @@ export interface SafetyInvariant {
 }
 
 export interface SafetySupervisorEvaluation {
-  /** ponytail: observe-only until soak proves parity with execution gates. */
+  /** Observe-only. Promotion to authority was declined 2026-09-23 (TS-REAUDIT-06). */
   mode: "observe";
   invariants: SafetyInvariant[];
   new_exposure_blocked: boolean;
   risk_reduction_permitted: boolean;
   would_block_new_exposure: boolean;
   agrees_with_execution_gates: boolean;
-  /** Set when supervisor new-exposure verdict differs from execution gates (TS-REAUDIT-06). */
   gate_divergence_detail: string | null;
 }
 
@@ -49,9 +52,6 @@ function invariant(id: string, ok: boolean, detail?: string): SafetyInvariant {
 
 export function evaluateSafetySupervisor(input: SafetySupervisorInput): SafetySupervisorEvaluation {
   const now = input.now ?? new Date();
-  const quality = evaluateSnapshotDataQuality(input.snapshot, input.risk, now);
-  const gatewayMode = resolveGatewayMode(input.runtimeTradingMode, input.snapshot, input.risk, now);
-  const reconciliationCurrent = isReconciliationCurrent(input.snapshot.operational);
   const executionGates = buildExecutionGates(
     input.snapshot,
     input.risk,
@@ -62,13 +62,10 @@ export function evaluateSafetySupervisor(input: SafetySupervisorInput): SafetySu
     input.auth,
   );
   const newExposureGate = executionGates.find((gate) => gate.id === "new_exposure_technically_supported");
+  const riskReductionGate = executionGates.find((gate) => gate.id === "risk_reduction_technically_supported");
   const newExposureBlockedByGates = newExposureGate ? !newExposureGate.passed : true;
 
   const invariants: SafetyInvariant[] = [
-    invariant("operator_not_paused", !input.operatorPaused, input.operatorPaused ? "paused" : undefined),
-    invariant("auth_not_degraded", !input.auth.degraded, input.auth.degraded ? "auth_degraded" : undefined),
-    invariant("reconciliation_current", reconciliationCurrent),
-    invariant("state_complete", quality.stateComplete, quality.stateComplete ? undefined : quality.issues.join(",")),
     invariant(
       "protection_coverage",
       input.protectedReduction.unprotected_open_quantity === 0,
@@ -77,41 +74,15 @@ export function evaluateSafetySupervisor(input: SafetySupervisorInput): SafetySu
         : undefined,
     ),
     invariant("no_flatten_pending", !input.flattenPending, input.flattenPending ? "flatten_in_flight" : undefined),
-    invariant(
-      "event_ledger_durable",
-      !input.recovery.blockingAmbiguity,
-      input.recovery.blockingAmbiguity ? "execution_recovery_ambiguity" : undefined,
-    ),
   ];
-
-  const failedIds = invariants.filter((entry) => !entry.ok).map((entry) => entry.id);
-  const wouldBlockNewExposure = failedIds.length > 0
-    || input.tradingMode !== "armed"
-    || gatewayMode.effective !== "armed";
-
-  const riskReductionPermitted = gatewayModePermitsRiskReduction(gatewayMode.effective)
-    && input.tradingMode !== "disabled";
-
-  const gateDivergenceDetail = newExposureBlockedByGates === wouldBlockNewExposure
-    ? null
-    : [
-      `gates=${newExposureBlockedByGates ? "blocked" : "open"}`,
-      `supervisor=${wouldBlockNewExposure ? "blocked" : "open"}`,
-      newExposureGate?.detail ? `gate_detail=${newExposureGate.detail}` : null,
-      failedIds.length > 0 ? `supervisor_failed=${failedIds.join(",")}` : null,
-    ].filter(Boolean).join(";");
 
   return {
     mode: "observe",
     invariants,
     new_exposure_blocked: newExposureBlockedByGates,
-    risk_reduction_permitted: riskReductionPermitted,
-    would_block_new_exposure: wouldBlockNewExposure,
-    agrees_with_execution_gates: gateDivergenceDetail === null,
-    gate_divergence_detail: gateDivergenceDetail,
+    risk_reduction_permitted: riskReductionGate?.passed ?? false,
+    would_block_new_exposure: newExposureBlockedByGates,
+    agrees_with_execution_gates: true,
+    gate_divergence_detail: null,
   };
-}
-
-export function effectiveGatewayModeLabel(mode: EffectiveGatewayMode): string {
-  return mode;
 }

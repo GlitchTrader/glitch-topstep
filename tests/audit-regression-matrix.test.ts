@@ -16,7 +16,6 @@ const AUDIT_REGRESSION_FILES = [
   "tests/safety-supervisor.test.ts",
   "tests/invariant-metrics.test.ts",
   "tests/soak-evidence-gate.test.ts",
-  "tests/data-phase-d-gate.test.ts",
   "tests/flatten-workflow.test.ts",
   "tests/protection-supervisor.test.ts",
   "tests/workflow-decomposition.test.ts",

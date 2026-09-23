@@ -694,6 +694,7 @@ export class GlitchTopstepService {
           invariant_metrics: invariantMetrics,
           health_alerts: this.healthAlerts.evaluate(invariantMetrics),
           task_scheduler: this.taskScheduler.counts(),
+          rest_concurrency: this.authManager.restConcurrencyStatus(),
           read_circuit_breaker: this.authManager.readCircuitStatus(),
           recovery: this.marketHubRecovery.snapshot(),
           persistence_bytes: this.persistenceSizeBytes(),
@@ -1229,7 +1230,7 @@ export class GlitchTopstepService {
   private async handleHubReconnected(kind: VenueStreamKind, generation: number): Promise<void> {
     this.packets?.invalidateAll();
     const recovery = this.marketHubRecovery;
-    if (kind === "market" && recovery.isStaleCallback(generation)) {
+    if (!this.realtime || this.realtime.isStaleRecovery(kind, generation)) {
       return;
     }
     const atUtc = new Date().toISOString();
@@ -1281,6 +1282,9 @@ export class GlitchTopstepService {
           () => this.reconcile({ includeMetadata: false }),
           this.config.reconcileIntervalMs,
         );
+        if (!this.realtime || this.realtime.isStaleRecovery(kind, generation)) {
+          return;
+        }
       }
     } catch (error: unknown) {
       if (kind === "market") {

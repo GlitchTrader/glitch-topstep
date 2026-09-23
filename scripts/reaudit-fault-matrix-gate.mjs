@@ -2,6 +2,8 @@
 /**
  * TS-REAUDIT-10: run automated fault-matrix proofs and emit JSON for release evidence.
  * Expects `npm run build` already completed (see package.json reaudit:fault-matrix).
+ * scripts/reaudit-fault-matrix-proofs.json is the run list. tests/reaudit-fault-matrix.test.ts
+ * is the scenario catalog — do not keep a third hand-copied file list. Proof schema stays v1.
  */
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

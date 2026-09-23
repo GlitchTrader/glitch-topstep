@@ -1,5 +1,7 @@
 ﻿# Architecture
 
+> **Canonical for this gateway repo.** Runtime topology, evidence, and execution. Cognition/profile architecture lives in `GlitchTrader/glitch-topstep-hermes-profile`. A nested checkout at `.hermes-foundation2/docs/ARCHITECTURE.md` is a profile worktree — not authoritative here.
+
 ## Objective
 
 Glitch Topstep is a Topstep-first AI trading system built directly on ProjectX. It is not a port of NinjaTrader, Apex rules, replication, or a generic prop-firm compliance engine.
@@ -165,6 +167,17 @@ Execution identity and provider telemetry use separate SQLite databases because 
 - REST, lifecycle, account, position, order, user-trade, and historical order/trade evidence retained;
 - only high-frequency `projectx_market_stream` events are bounded by configurable count retention;
 - sequence values remain monotonic across pruning and restart.
+
+`glitch-topstep-controls.sqlite`:
+
+- WAL, `synchronous=FULL` (same durability class as execution);
+- operator pause, mode, and flatten commands (`DurableControlStore`);
+- a third file today, not a weaker contract. Merge into `glitch-topstep.sqlite` only after a crash-coherence review.
+
+`trade-outcomes.sqlite`:
+
+- revision feed;
+- canonical completed outcomes (`GET /outcomes/feed`).
 
 The evidence API is authenticated and bounded:
 

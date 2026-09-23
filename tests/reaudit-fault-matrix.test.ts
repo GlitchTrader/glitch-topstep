@@ -133,14 +133,9 @@ describe("TS-REAUDIT-10 fault matrix registry", () => {
     assert.deepEqual(PROOF_CONFIG.profile?.proofs, ["tests/test_fault_injection.py"]);
   });
 
-  for (const row of REAUDIT_FAULT_MATRIX) {
-    it(`${row.id} declares proof file ${row.proof}`, () => {
-      if ("repo" in row && row.repo === "profile") {
-        assert.equal(row.proof, "tests/test_fault_injection.py");
-        return;
-      }
-      const path = join(ROOT, row.proof);
-      assert.ok(existsSync(path), `missing proof file for ${row.id}: ${row.proof}`);
-    });
-  }
+  it("every proofs.json gateway file exists on disk", () => {
+    for (const file of GATE_PROOF_FILES) {
+      assert.ok(existsSync(join(ROOT, file)), `proofs.json path missing: ${file}`);
+    }
+  });
 });

@@ -1,4 +1,10 @@
 /** ponytail: global REST gate — upgrade path is priority scheduler (PR-F). */
+export interface RestConcurrencySnapshot {
+  in_flight: number;
+  waiting: number;
+  max_concurrent: number;
+}
+
 export class RestConcurrencyGate {
   private inFlight = 0;
   private readonly waiters: Array<() => void> = [];
@@ -7,6 +13,14 @@ export class RestConcurrencyGate {
     if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) {
       throw new Error("rest_concurrency_invalid");
     }
+  }
+
+  public snapshot(): RestConcurrencySnapshot {
+    return {
+      in_flight: this.inFlight,
+      waiting: this.waiters.length,
+      max_concurrent: this.maxConcurrent,
+    };
   }
 
   public async run<T>(work: () => Promise<T>): Promise<T> {

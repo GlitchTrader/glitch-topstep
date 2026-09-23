@@ -1,6 +1,5 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { AccountVenueSnapshot, OrderInfo, PositionInfo, TradeIntent } from "../domain/models.js";
-import { GLITCH_TOPSTEP_OPERATOR_PROFILE, GLITCH_TOPSTEP_PROMPT_VERSION } from "../domain/operator.js";
 import { bindProtection } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
 import type { JsonlEventStore } from "../storage/jsonl-event-store.js";
@@ -12,6 +11,7 @@ import {
 import type { ProtectedReductionRecord } from "./protected-reduction-saga.js";
 import { evaluateProtectionHealth } from "./protection-supervisor.js";
 import type { ExecutionRecoveryApi } from "./recovery.js";
+import { buildSystemExitIntent, deterministicIntentId } from "./system-intent.js";
 
 export type UnprotectedFlattenTrigger =
   | "protection_status_failed"
@@ -61,11 +61,12 @@ export function unprotectedFlattenIntentId(
   contractId: string,
   entryIntentKey: string,
 ): string {
-  const hex = createHash("sha256")
-    .update(`unprotected-fail-closed-flatten:${accountId}:${contractId}:${entryIntentKey}`)
-    .digest("hex")
-    .slice(0, 12);
-  return `00000000-0000-4000-8000-${hex}`;
+  return deterministicIntentId(
+    "unprotected-fail-closed-flatten",
+    String(accountId),
+    contractId,
+    entryIntentKey,
+  );
 }
 
 /**
@@ -456,18 +457,13 @@ function buildUnprotectedFlattenIntent(
   trigger: UnprotectedFlattenTrigger,
   createdUtc: string,
 ): TradeIntent {
-  return {
-    schemaVersion: "glitch.intent.v2",
+  return buildSystemExitIntent({
     intentId: controlId,
     createdUtc,
     instrument,
     account: accountName,
-    operatorProfile: GLITCH_TOPSTEP_OPERATOR_PROFILE,
-    action: "EXIT",
-    confidence: 1,
     snapshotHash: `unprotected-flatten:${entryIntentIds.join(",")}`,
     modelVersion: "gateway-unprotected-flatten",
-    promptVersion: GLITCH_TOPSTEP_PROMPT_VERSION,
     reason: `unprotected_fail_closed_flatten:${trigger}`,
     decisionAudit: {
       bullCase: "Owned unprotected exposure must be flattened without Hermes.",
@@ -480,5 +476,5 @@ function buildUnprotectedFlattenIntent(
       changeCondition: "Venue position proves flat and unprotected_open_quantity=0.",
       finalChoice: "EXIT",
     },
-  };
+  });
 }

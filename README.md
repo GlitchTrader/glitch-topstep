@@ -93,7 +93,7 @@ curl -H "Authorization: Bearer $env:GLITCH_LOCAL_TOKEN" http://127.0.0.1:8790/pa
 | `POST /intent` | bearer | Strict `glitch.intent.v3` (v2 compat) execution |
 | `POST /control`, `GET /control` | operator bearer | Flatten, pause, operator status |
 
-This table lists the routes this codebase actually serves today (`src/server/local-gateway.ts`). [`docs/GATEWAY-SPEC.md`](docs/GATEWAY-SPEC.md) describes a rebuild-target contract (`POST /intents`, plural) that has not been reconciled with the live route name yet — treat GATEWAY-SPEC's naming as proposed, not current.
+This table lists the routes this codebase actually serves today (`src/server/local-gateway.ts`). [`docs/GATEWAY-SPEC.md`](docs/GATEWAY-SPEC.md) matches these live names.
 
 ### Data stores
 
@@ -130,7 +130,7 @@ The profile never receives ProjectX credentials.
 
 1. [`docs/AUTHORITY.md`](docs/AUTHORITY.md) — what Glitch may and may not enforce
 2. [`docs/PARITY.md`](docs/PARITY.md) — capability matrix and promotion rule
-3. [`docs/ledger/ledger.json`](docs/ledger/ledger.json) — canonical work queue (`TS-*` ids)
+3. [`docs/ledger/ledger.json`](docs/ledger/ledger.json) — current work queue (active `TS-*` items; history in `docs/ledger/archive/`)
 
 `docs/ROADMAP.md` is durable intent; the **ledger** is current task state.
 
@@ -165,7 +165,7 @@ gh pr create                        # or push main
 
 ### Suggested next work
 
-See [`docs/ledger/ledger.json`](docs/ledger/ledger.json) for the current, authoritative work queue — this README does not keep its own copy of ledger state, since a hardcoded snapshot here drifts stale by design as the ledger moves.
+See [`docs/ledger/ledger.json`](docs/ledger/ledger.json) for the current work queue (active items only). Historical items are in `docs/ledger/archive/`. This README does not keep its own copy of ledger state.
 
 ---
 

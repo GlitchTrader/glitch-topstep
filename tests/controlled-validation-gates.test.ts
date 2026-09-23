@@ -234,6 +234,23 @@ describe("assessBbo", () => {
     assert.equal(result.stale, true);
   });
 
+  it("fail-closes locked BBO through classifyQuoteState (not ask>bid)", () => {
+    const result = assessBbo(
+      {
+        quote: {
+          bestBid: 30943,
+          bestAsk: 30943,
+          timestamp: "2026-09-22T16:53:58.000Z",
+        },
+      },
+      {},
+      { capture_now_ms: captureNow, max_age_ms: 6_000 },
+    );
+    assert.equal(result.complete, false);
+    assert.equal(result.ambiguous, true);
+    assert.equal(result.reason, "bbo_geometry_invalid");
+  });
+
   it("fail-closes when BBO is absent", () => {
     const result = assessBbo({ quote: {} }, { market: {} }, { capture_now_ms: captureNow });
     assert.equal(result.complete, false);

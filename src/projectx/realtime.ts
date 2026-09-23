@@ -47,7 +47,7 @@ import {
   shouldForceStuckStreamRestart,
   shouldScheduleHubRestart,
 } from "./stream-supervisor.js";
-import { HubRecoveryController } from "./hub-recovery-controller.js";
+import { HubRecoveryController, type HubRecoveryPhase } from "./hub-recovery-controller.js";
 import type { ProjectXDiagnosticsSink, ProjectXStreamDiagnostic } from "./diagnostics.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 
@@ -364,14 +364,7 @@ export class ProjectXRealtimeClient {
       try {
         this.recordLifecycle(kind, "reconnecting", error);
         this.state.markStreamReconnecting(kind, error ?? "signalr_reconnecting");
-        if (kind === "market" && this.options.marketRecovery) {
-          const atUtc = new Date().toISOString();
-          this.recoveryGeneration.market = this.options.marketRecovery.beginAttempt(
-            "market",
-            "reconnecting",
-            atUtc,
-          );
-        }
+        this.beginHubRecovery(kind, "reconnecting");
       } catch (recordError) {
         this.payloadFault(kind, recordError);
       }
@@ -486,6 +479,25 @@ export class ProjectXRealtimeClient {
     }
   }
 
+  /** One increment path for both hubs. Market still mirrors HubRecoveryController. */
+  private beginHubRecovery(kind: VenueStreamKind, phase: HubRecoveryPhase): number {
+    if (kind === "market" && this.options.marketRecovery) {
+      const generation = this.options.marketRecovery.beginAttempt(
+        kind,
+        phase,
+        new Date().toISOString(),
+      );
+      this.recoveryGeneration.market = generation;
+      return generation;
+    }
+    this.recoveryGeneration[kind] += 1;
+    return this.recoveryGeneration[kind];
+  }
+
+  public isStaleRecovery(kind: VenueStreamKind, generation: number): boolean {
+    return generation !== this.recoveryGeneration[kind];
+  }
+
   private async restartHub(kind: VenueStreamKind): Promise<void> {
     if (!shouldScheduleHubRestart({
       stopped: this.stopped,
@@ -517,12 +529,7 @@ export class ProjectXRealtimeClient {
       return;
     }
     this.restartInFlight[kind] = true;
-    const generation = kind === "market" && this.options.marketRecovery
-      ? this.options.marketRecovery.beginAttempt("market", "suspect", new Date().toISOString())
-      : this.recoveryGeneration[kind];
-    if (kind === "market" && this.options.marketRecovery) {
-      this.recoveryGeneration.market = generation;
-    }
+    const generation = this.beginHubRecovery(kind, "suspect");
     try {
       this.state.markStreamConnecting(kind);
       await connection.stop().catch(() => undefined);

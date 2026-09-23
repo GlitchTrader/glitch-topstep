@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
 import type { StoredExecutionMutation } from "../domain/execution-state.js";
 import type { OrderInfo, PositionInfo, TradeIntent } from "../domain/models.js";
-import { GLITCH_TOPSTEP_OPERATOR_PROFILE, GLITCH_TOPSTEP_PROMPT_VERSION } from "../domain/operator.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import type { ExecutionRecoveryApi } from "./recovery.js";
+import { buildSystemExitIntent, deterministicIntentId, requiredInteger } from "./system-intent.js";
 
 export interface BoundedRecoveryFlattenResult {
   changed: boolean;
@@ -17,11 +16,7 @@ export interface BoundedRecoveryFlattenResult {
 }
 
 export function recoveryFlattenIntentId(entryIntentId: string): string {
-  const hex = createHash("sha256")
-    .update(`bounded-recovery-flatten:${entryIntentId}`)
-    .digest("hex")
-    .slice(0, 12);
-  return `00000000-0000-4000-8000-${hex}`;
+  return deterministicIntentId("bounded-recovery-flatten", entryIntentId);
 }
 
 export function provesBoundedRecoveryOwnership(
@@ -156,18 +151,13 @@ function buildRecoveryFlattenIntent(
   instrument: string,
   createdUtc: string,
 ): TradeIntent {
-  return {
-    schemaVersion: "glitch.intent.v2",
+  return buildSystemExitIntent({
     intentId: recoveryIntentId,
     createdUtc,
     instrument,
     account: accountName,
-    operatorProfile: GLITCH_TOPSTEP_OPERATOR_PROFILE,
-    action: "EXIT",
-    confidence: 1,
     snapshotHash: `recovery-flatten:${entryIntentId}`,
     modelVersion: "gateway-recovery",
-    promptVersion: GLITCH_TOPSTEP_PROMPT_VERSION,
     reason: `recovery_flatten_for:${entryIntentId}`,
     decisionAudit: {
       bullCase: "Owned unresolved exposure must be flattened without duplicate entry.",
@@ -180,7 +170,7 @@ function buildRecoveryFlattenIntent(
       changeCondition: "Provider position proves flat.",
       finalChoice: "EXIT",
     },
-  };
+  });
 }
 
 function dedupeOrders(orders: OrderInfo[]): OrderInfo[] {
@@ -206,11 +196,4 @@ function orderIdentityMatches(
     && order.side === expectedSide
     && order.size === expectedSize
     && order.type === expectedType;
-}
-
-function requiredInteger(value: unknown, name: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error(`stored_execution_request_invalid:${name}`);
-  }
-  return value;
 }

@@ -1,5 +1,7 @@
 # Operations
 
+> **Canonical for this gateway repo.** Local run, armed promotion, watchdog, break-glass. Profile operations live in `GlitchTrader/glitch-topstep-hermes-profile`. A nested checkout at `.hermes-foundation2/docs/OPERATIONS.md` is a profile worktree — not authoritative here.
+
 ## Deployment rule
 
 Run on the trader's personal local device. Do not deploy this Topstep adapter to a VPS, VPN, remote server, or centralized cloud executor.

@@ -8,6 +8,7 @@ import type { ProjectXApiClient } from "../projectx/client.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import { maybeKill } from "./kill-hook.js";
 import { attemptBoundedRecoveryFlattens } from "./recovery-flatten.js";
+import { requiredInteger } from "./system-intent.js";
 
 export interface ExecutionRecoveryApi {
   searchOrders(
@@ -498,11 +499,4 @@ function reconcileEntryMutation(
   }
 
   return { orderId: order.id, error: "" };
-}
-
-function requiredInteger(value: unknown, name: string): number {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error(`stored_execution_request_invalid:${name}`);
-  }
-  return value;
 }
