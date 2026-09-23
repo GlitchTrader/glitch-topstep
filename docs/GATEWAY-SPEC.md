@@ -217,7 +217,7 @@ Cadence hints for the paired state machine: flat decision every 5 minutes, posit
 
 - `data_quality.state_complete`, `issues`, stream operational state
 - `execution_recovery` (blocking ambiguity, unresolved mutations)
-- `safety_supervisor` (mode fields for invariant tracking; currently observe-only — it reports, it does not yet gate execution, see `src/safety/safety-supervisor.ts`)
+- `safety_supervisor` (observe-only; reports `protection_coverage` and `no_flatten_pending` only — execution-gate facts are not recomputed here, see `src/safety/safety-supervisor.ts`)
 - Invariant metrics: unprotected quantity/seconds, flatten pending, reconciliation age, evidence queue depth
 
 Alert on `execution_recovery_blocking=true` or `failed_shutdown` lifecycle.

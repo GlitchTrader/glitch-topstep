@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExecutionRecoveryStatus } from "../src/domain/execution-state.js";
-import { evaluateSafetySupervisor } from "../src/safety/safety-supervisor.js";
+import { buildExecutionGates } from "../src/execution/gateway-mode.js";
+import {
+  evaluateSafetySupervisor,
+  SUPERVISOR_GATE_BACKED_IDS,
+  SUPERVISOR_UNIQUE_INVARIANTS,
+} from "../src/safety/safety-supervisor.js";
 import { snapshot, testDailyEconomicsConfig, testSessionConfig } from "./fixtures.js";
 import type { AppConfig } from "../src/config.js";
 
@@ -132,4 +137,28 @@ test("TS-AUDIT-12 safety supervisor agrees with execution gates on healthy armed
   });
   assert.equal(evaluation.agrees_with_execution_gates, true);
   assert.equal(evaluation.risk_reduction_permitted, true);
+  assert.deepEqual(
+    evaluation.invariants.map((entry) => entry.id),
+    [...SUPERVISOR_UNIQUE_INVARIANTS],
+  );
+});
+
+test("supervisor does not recompute execution-gate facts; those ids live on buildExecutionGates", () => {
+  const venue = snapshot();
+  const now = new Date();
+  const gates = buildExecutionGates(
+    venue,
+    config().risk,
+    healthyRecovery(),
+    "armed",
+    3,
+    now,
+  );
+  const gateIds = new Set(gates.map((gate) => gate.id));
+  for (const id of SUPERVISOR_GATE_BACKED_IDS) {
+    assert.ok(gateIds.has(id), `missing execution gate ${id}`);
+  }
+  for (const id of SUPERVISOR_UNIQUE_INVARIANTS) {
+    assert.equal(gateIds.has(id), false, `unique supervisor fact ${id} must not be a duplicate gate`);
+  }
 });
