@@ -68,6 +68,8 @@ describe("hub recovery generation", () => {
     await settle();
 
     assert.deepEqual(generations, [1, 2]);
+    assert.equal(client.isStaleRecovery("user", 1), true);
+    assert.equal(client.isStaleRecovery("user", 2), false);
     await client.stop();
   });
 });

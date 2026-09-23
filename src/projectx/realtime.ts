@@ -494,6 +494,10 @@ export class ProjectXRealtimeClient {
     return this.recoveryGeneration[kind];
   }
 
+  public isStaleRecovery(kind: VenueStreamKind, generation: number): boolean {
+    return generation !== this.recoveryGeneration[kind];
+  }
+
   private async restartHub(kind: VenueStreamKind): Promise<void> {
     if (!shouldScheduleHubRestart({
       stopped: this.stopped,
