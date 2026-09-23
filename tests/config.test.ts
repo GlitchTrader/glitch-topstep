@@ -38,7 +38,7 @@ describe("configuration authority", () => {
     assert.equal(config.localGateway.host, "127.0.0.1");
     assert.equal(config.policy.authority, "operator_configured");
     assert.equal(config.policy.lossModel, "express_funded_eod");
-    assert.equal(config.providerEvidence.marketEventRetention, 500_000);
+    assert.equal(config.providerEvidence.marketEventRetention, 600_000);
     assert.equal(config.providerEvidence.marketPruneInterval, 10_000);
     assert.equal("requireSimulatedAccount" in config, false);
     assert.equal("maxRiskFractionOfBuffer" in config.risk, false);

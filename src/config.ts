@@ -262,7 +262,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
   const marketEventRetention = numberValue(
     environment,
     "GLITCH_PROVIDER_MARKET_EVENT_RETENTION",
-    500_000,
+    600_000,
     (value) => Number.isInteger(value) && value >= 10_000 && value <= 50_000_000,
   );
   const marketPruneInterval = numberValue(
