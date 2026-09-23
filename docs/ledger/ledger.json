@@ -2942,5 +2942,21 @@
       "No runtime, code, contract, prompt, execution state, outbox, receipt, position, recovery, database, lock, cache, credential, or operational status was changed by this entry.",
       "Documentation does not constitute implementation evidence or acceptance."
     ]
+  },
+  "administrative_reconciliation_2026_09_15": {
+    "status": "recorded",
+    "published_main_sha": "1b1761c3a0f2291bf323c270e71e339fa22e4f13",
+    "closed_without_merge": [
+      "https://github.com/GlitchTrader/glitch-topstep/pull/292"
+    ],
+    "incorporated_by": [
+      "https://github.com/GlitchTrader/glitch-topstep/pull/289",
+      "merge:92780bc72b8f36b5dd34508a49714fd3099cc022"
+    ],
+    "dependency_pr_255": {
+      "url": "https://github.com/GlitchTrader/glitch-topstep/pull/255",
+      "state": "merged"
+    },
+    "paired_contract_changed": false
   }
 }
