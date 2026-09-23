@@ -169,6 +169,7 @@ ProjectX order mutation
 | Store | Mode | Holds |
 |-------|------|--------|
 | `glitch-topstep.sqlite` | WAL, `synchronous=FULL` | Intents, issued packets, outbox, receipts — no auto-retention in hot path |
+| `glitch-topstep-controls.sqlite` | WAL, `synchronous=FULL` | Operator pause, mode, and flatten commands (`DurableControlStore`). Same durability class as execution; separate file today, not a weaker contract |
 | `projectx-evidence.sqlite` | WAL, `synchronous=NORMAL` | REST + stream evidence; bounded market-stream retention only |
 | `trade-outcomes.sqlite` | revision feed | Canonical completed outcomes |
 
@@ -190,6 +191,21 @@ From `release/paired-contract.json` → `distributed_contract.frozen_policies`:
 
 Cadence hints for the paired state machine: flat decision every 5 minutes, positioned management every 1 minute (profile-side; gateway enforces facts, not strategy).
 
+### New-exposure decision points
+
+Technical “can I open exposure?” has one owner: `buildExecutionGates` (`src/execution/gateway-mode.ts`). Other surfaces must call that owner or apply a *different* fact. Do not add a parallel quote/state/recon implementation.
+
+| Surface | Fact it owns | Blocks ENTER? |
+|---------|--------------|---------------|
+| `buildExecutionGates` | `state_complete`, `quote_stale`, `reconciliation_current`, `new_exposure_technically_supported`, `risk_reduction_technically_supported` | Packet and `/health` |
+| Daily-capture lock (TS-AUTH-02) | Frozen policy after the target is reached. Overlay on the packet (`daily_capture_locked`, strip `ENTER_*`); not a rewrite of the technical gates | Yes, until trading-day reset |
+| `evaluateIntentAdmissionEarly` | Operator pause, ledger durability, recovery ambiguity | Yes at `POST /intent` |
+| `validateEntryRisk` | Delivery-time identity, geometry, MLL, lease, and freshness via `evaluateSnapshotDataQuality` (same function the gates use). Re-checks the live snapshot because the packet can age. Also enforces the daily-capture lock | Yes at `POST /intent` |
+| `evaluateSafetySupervisor` | Observe-only: `protection_coverage`, `no_flatten_pending` | No |
+| `controlled-validation-gates` | Offline CLI on frozen JSON; calls production quote/recon helpers | No runtime |
+
+`daily_capture_locked` stays an overlay, not a fifth `buildExecutionGates` id: it is a frozen distributed policy, not a venue-state fact.
+
 ---
 
 ## Non-functional requirements
@@ -206,7 +222,7 @@ Cadence hints for the paired state machine: flat decision every 5 minutes, posit
 
 - In-process: SignalR auto-reconnect, `restartHub`, quote-silence and stuck-hub timeouts (~15s / ~90s).
 - Process fallback: `scripts/gateway-health-watchdog.ps1` — restart via `start.ps1 -SkipBuild` when degraded with quote stale + stuck streams or stale reconciliation ≥3 minutes (`src/observability/gateway-watchdog-policy.ts`).
-- ProjectX read circuit breaker: degrade explicitly; do not accept new exposure while `state_complete=false` when supervisor agrees.
+- ProjectX read circuit breaker: degrade explicitly. New exposure stays blocked while `state_complete=false` via `buildExecutionGates` / `validateEntryRisk` — the safety supervisor does not own this fact.
 - Protect existing exposure when Hermes is unavailable.
 - Session token (`POST /api/Auth/validate`) must be revalidated before its ~24h expiry (`POST /api/Auth/loginKey` has no separate refresh-token flow); a failed revalidation degrades `/health` explicitly rather than mutating ProjectX with a stale token.
 - ProjectX enforces per-endpoint rate limits: `50 req/30s` on `POST /api/History/retrieveBars`, `200 req/60s` on all other endpoints; excess returns `429`. History sync, REST reconciliation, and `/evidence` reads share this budget — track and back off explicitly rather than retrying blindly into `429`.

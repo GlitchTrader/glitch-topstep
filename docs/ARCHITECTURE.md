@@ -168,6 +168,17 @@ Execution identity and provider telemetry use separate SQLite databases because 
 - only high-frequency `projectx_market_stream` events are bounded by configurable count retention;
 - sequence values remain monotonic across pruning and restart.
 
+`glitch-topstep-controls.sqlite`:
+
+- WAL, `synchronous=FULL` (same durability class as execution);
+- operator pause, mode, and flatten commands (`DurableControlStore`);
+- a third file today, not a weaker contract. Merge into `glitch-topstep.sqlite` only after a crash-coherence review.
+
+`trade-outcomes.sqlite`:
+
+- revision feed;
+- canonical completed outcomes (`GET /outcomes/feed`).
+
 The evidence API is authenticated and bounded:
 
 ```text
