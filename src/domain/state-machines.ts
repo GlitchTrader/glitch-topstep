@@ -1,7 +1,5 @@
 export type LifecycleState = "starting" | "ready" | "draining" | "stopped" | "failed_startup" | "failed_shutdown";
 export type IntentAdmissionState = "received" | "validated" | "rejected" | "superseded";
-export type ExecutionSagaState = "prepared" | "submitting" | "submitted" | "accepted" | "partially_filled" | "filled" | "rejected" | "ambiguous";
-export type ProtectionSagaState = "unrequired" | "pending" | "proven" | "stop_only" | "rearming" | "failed";
 export type ReconciliationStateMachine = "idle" | "running" | "succeeded" | "failed";
 export type OutcomeFeedState = "pending" | "provisional" | "enriched" | "corrected";
 
@@ -57,30 +55,6 @@ export const INTENT_ADMISSION_TRANSITIONS: Readonly<
   superseded: [],
 };
 
-export const EXECUTION_SAGA_TRANSITIONS: Readonly<
-  Record<ExecutionSagaState, readonly ExecutionSagaState[]>
-> = {
-  prepared: ["submitting", "rejected"],
-  submitting: ["submitted", "rejected", "ambiguous"],
-  submitted: ["accepted", "rejected", "ambiguous"],
-  accepted: ["partially_filled", "filled", "rejected", "ambiguous"],
-  partially_filled: ["filled", "rejected", "ambiguous"],
-  filled: [],
-  rejected: [],
-  ambiguous: ["accepted", "submitted", "filled", "rejected"],
-};
-
-export const PROTECTION_SAGA_TRANSITIONS: Readonly<
-  Record<ProtectionSagaState, readonly ProtectionSagaState[]>
-> = {
-  unrequired: ["pending", "proven"],
-  pending: ["proven", "stop_only", "rearming", "failed"],
-  proven: ["rearming", "stop_only", "failed", "unrequired"],
-  stop_only: ["proven", "rearming", "failed"],
-  rearming: ["proven", "stop_only", "failed"],
-  failed: ["stop_only", "unrequired", "proven"],
-};
-
 export const RECONCILIATION_TRANSITIONS: Readonly<
   Record<ReconciliationStateMachine, readonly ReconciliationStateMachine[]>
 > = {
@@ -115,8 +89,6 @@ export const PROTECTED_REDUCTION_TRANSITIONS: Readonly<
 export const TRANSITION_GRAPHS = {
   lifecycle: LIFECYCLE_TRANSITIONS,
   intentAdmission: INTENT_ADMISSION_TRANSITIONS,
-  executionSaga: EXECUTION_SAGA_TRANSITIONS,
-  protectionSaga: PROTECTION_SAGA_TRANSITIONS,
   reconciliation: RECONCILIATION_TRANSITIONS,
   outcomeFeed: OUTCOME_FEED_TRANSITIONS,
   protectedReduction: PROTECTED_REDUCTION_TRANSITIONS,
@@ -151,26 +123,6 @@ export function transitionIntentAdmission(
   occurredUtc = new Date().toISOString(),
 ): StateTransition<IntentAdmissionState> {
   return transitionEntity(from, to, entityId, reason, INTENT_ADMISSION_TRANSITIONS, occurredUtc);
-}
-
-export function transitionExecutionSaga(
-  from: ExecutionSagaState | null,
-  to: ExecutionSagaState,
-  entityId: string,
-  reason: string,
-  occurredUtc = new Date().toISOString(),
-): StateTransition<ExecutionSagaState> {
-  return transitionEntity(from, to, entityId, reason, EXECUTION_SAGA_TRANSITIONS, occurredUtc);
-}
-
-export function transitionProtectionSaga(
-  from: ProtectionSagaState | null,
-  to: ProtectionSagaState,
-  entityId: string,
-  reason: string,
-  occurredUtc = new Date().toISOString(),
-): StateTransition<ProtectionSagaState> {
-  return transitionEntity(from, to, entityId, reason, PROTECTION_SAGA_TRANSITIONS, occurredUtc);
 }
 
 export function transitionReconciliation(

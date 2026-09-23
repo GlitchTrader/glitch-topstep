@@ -27,12 +27,12 @@ export const REAUDIT_FAULT_MATRIX = [
   },
   {
     id: "auth_exposure_gate",
-    proof: "tests/reaudit-phase1.test.ts",
+    proof: "tests/evidence-outbox-and-auth-gate.test.ts",
     scenario: "auth.degraded blocks new_exposure_technically_supported",
   },
   {
     id: "identity_outbox_stage",
-    proof: "tests/reaudit-phase1.test.ts",
+    proof: "tests/evidence-outbox-and-auth-gate.test.ts",
     scenario: "Identity staged to sqlite before queue apply",
   },
   {
@@ -67,7 +67,7 @@ export const REAUDIT_FAULT_MATRIX = [
   },
   {
     id: "audit_wave_abc_observability",
-    proof: "tests/audit-wave-abc.test.ts",
+    proof: "tests/log-sanitize-retry-health-alerts.test.ts",
     scenario: "Log sanitization, retry policy, and actionable health alerts",
   },
   {

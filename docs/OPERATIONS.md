@@ -77,7 +77,7 @@ Armed `EXIT` that reduces an open position without flattening it is admitted by 
 
 **Evidence fixtures:** `tests/fixtures/projectx/live/partial_exit_protection_transition.json` (SHORT) and `partial_exit_protection_transition_long.json` (LONG).
 
-Legacy `GLITCH_PARTIAL_EXIT_ACCEPTANCE=1` is no longer required for admission.
+Do not set `GLITCH_PARTIAL_EXIT_ACCEPTANCE`. It is ignored. Emergency rollback is only `GLITCH_PARTIAL_EXIT_FAIL_CLOSED=1`.
 
 ## Armed acknowledgement
 
@@ -122,15 +122,17 @@ Break-glass is only for restoring a broken production path when CI or review wou
 
 Never leave `enforce_admins` disabled overnight. Profile repo break-glass follows the same time box and audit note (`GlitchTrader/glitch-topstep-hermes-profile`).
 
-## Armed promotion gate (human + evidence)
+## Armed promotion (single checklist)
 
-Local `.env` flags alone are not a release. Promoting a pair to armed production requires:
+Local `.env` flags alone are not a release. This is the only pre-arm list — [`PARITY.md`](PARITY.md) records capability evidence, not a second ceremony.
 
-1. **Runtime ack** — `GLITCH_TRADING_MODE=armed` plus `GLITCH_ARMED_ACK=I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY` on the trader device.
-2. **GitHub Environment `armed-production`** — required reviewer, `can_admins_bypass=false`, protected branches only. Both `paired-release-candidate` (gateway) and `profile-release-candidate` (Hermes profile) use this environment.
-3. **Evidence** — workflow input `evidence_ref` must point at PRAC/shadow proof (docs path or issue URL). Empty evidence is rejected by process; the paired manifest records `prac_or_shadow_evidence_ref`.
-4. **Immutable pair** — run gateway `paired-release-candidate` with exact profile commit + `SHA256SUMS` hash + prompt version; artifacts include CycloneDX SBOM, `paired-release.json`, checksums, and provenance attestation.
-5. **Ledger** — attach artifact names + evidence ref to `docs/ledger/ledger.json` / issue #116 before claiming a new armed promotion.
+1. **Pair** — gateway `release/paired-contract.json` byte-identical to the profile copy; `preflight-pairing.py` green against the local gateway.
+2. **Runtime ack** — `GLITCH_TRADING_MODE=armed` plus `GLITCH_ARMED_ACK=I_UNDERSTAND_THIS_SCAFFOLD_IS_NOT_LIVE_READY` on the trader device.
+3. **GitHub Environment `armed-production`** — required reviewer, `can_admins_bypass=false`, protected branches only. Both `paired-release-candidate` (gateway) and `profile-release-candidate` (Hermes profile) use this environment.
+4. **Evidence** — workflow input `evidence_ref` must point at PRAC/shadow proof (docs path or issue URL). Empty evidence is rejected; the paired manifest records `prac_or_shadow_evidence_ref`.
+5. **Immutable pair** — run gateway `paired-release-candidate` with exact profile commit + `SHA256SUMS` hash + prompt version; artifacts include CycloneDX SBOM, `paired-release.json`, checksums, and provenance attestation.
+6. **Ledger** — attach artifact names + evidence ref to `docs/ledger/ledger.json` before claiming a new armed promotion.
+7. **Soak residual** — `TS-STREAM-RECOVERY-01` 72h PRAC soak is still open; do not treat stream/REST unification as a substitute.
 
 Dispatch example (gateway, from `main`):
 
@@ -238,16 +240,9 @@ Alert on any `execution_recovery_blocking=true` or `failed_shutdown` lifecycle s
 
 ## Armed promotion and rollback (TS-REAUDIT-12)
 
-**Pre-arm checklist**
+Use [Armed promotion (single checklist)](#armed-promotion-single-checklist) above. After the workflow succeeds:
 
-1. Gateway + profile paired manifest byte-identical (`release/paired-contract.json`, profile `compatibility.py`).
-2. All P0 REAUDIT ledger items `done`; fault matrix proof archived under `docs/evidence/`.
-3. PRAC soak with zero residual owned orders through flatten controls.
-4. `preflight-pairing.py` green against local gateway.
-
-**Promotion**
-
-1. Set `GLITCH_TRADING_MODE=armed` only after operator sign-off on evidence ref in `release/paired-release.json`.
+1. Set `GLITCH_TRADING_MODE=armed` only after operator sign-off on the evidence ref in `release/paired-release.json`.
 2. Record gateway commit + profile commit in both release manifests.
 3. Keep `GlitchTopstep_Gateway` (node `start.ps1`) as the sole gateway process — Hermes `gateway run` tasks stay disabled.
 

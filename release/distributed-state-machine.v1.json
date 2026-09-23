@@ -4,8 +4,6 @@
   "state_machines": {
     "lifecycle": "src/domain/state-machines.ts:LIFECYCLE_TRANSITIONS",
     "intent_admission": "src/domain/state-machines.ts:INTENT_ADMISSION_TRANSITIONS",
-    "execution_saga": "src/domain/state-machines.ts:EXECUTION_SAGA_TRANSITIONS",
-    "protection_saga": "src/domain/state-machines.ts:PROTECTION_SAGA_TRANSITIONS",
     "reconciliation": "src/domain/state-machines.ts:RECONCILIATION_TRANSITIONS",
     "outcome_feed": "src/domain/state-machines.ts:OUTCOME_FEED_TRANSITIONS",
     "protected_reduction": "src/domain/state-machines.ts:PROTECTED_REDUCTION_TRANSITIONS"

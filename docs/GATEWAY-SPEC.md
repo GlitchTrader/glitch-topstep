@@ -264,11 +264,7 @@ Prove via credentialed PRAC or equivalent:
 
 ### Armed promotion
 
-- Gateway + profile paired manifest byte-identical
-- P0 REAUDIT ledger items done; fault matrix proof archived
-- PRAC soak: zero residual owned orders through flatten controls
-- `preflight-pairing.py` green against local gateway
-- At least one protected round-trip (ENTER → fill → flat) before trusting learning/outcomes
+Ceremony lives only in [`OPERATIONS.md`](OPERATIONS.md) (single checklist). This section does not keep a second list. Residual: `TS-STREAM-RECOVERY-01` 72h soak is still open.
 
 ### Rollback
 
