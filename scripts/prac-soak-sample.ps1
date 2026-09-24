@@ -1,15 +1,63 @@
 # Append /health snapshots to a PRAC soak evidence directory (supervised sessions only).
 param(
-    [Parameter(Mandatory = $true)]
     [string]$EvidenceDir,
     [string]$GatewayUrl = "http://127.0.0.1:8790",
     [string]$Token = $env:GLITCH_LOCAL_TOKEN,
     [int]$IntervalSeconds = 300,
-    [int]$DurationHours = 72
+    [int]$DurationHours = 72,
+    [switch]$SelfCheck
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# /health v3 renamed health_alerts[].id -> alert_id (2026-08-31). StrictMode throws on missing .id.
+function Get-NoteProperty($obj, [string]$name) {
+    if ($null -eq $obj) { return $null }
+    $prop = $obj.PSObject.Properties[$name]
+    if ($null -eq $prop) { return $null }
+    return $prop.Value
+}
+
+function Get-HealthAlertIds($health) {
+    $alerts = Get-NoteProperty $health "health_alerts"
+    if ($null -eq $alerts) { return @() }
+    return @(
+        @($alerts) | ForEach-Object {
+            $id = Get-NoteProperty $_ "alert_id"
+            if ($null -eq $id) { $id = Get-NoteProperty $_ "id" }
+            $id
+        } | Where-Object { $_ }
+    )
+}
+
+if ($SelfCheck) {
+    $fake = [pscustomobject]@{
+        health_alerts = @(
+            [pscustomobject]@{ alert_id = "quote_stale" }
+            [pscustomobject]@{ id = "legacy" }
+        )
+        rest_concurrency = [pscustomobject]@{ in_flight = 2; waiting = 1 }
+        user_recovery = [pscustomobject]@{ generation = 4 }
+    }
+    $ids = @(Get-HealthAlertIds $fake)
+    if ($ids -notcontains "quote_stale" -or $ids -notcontains "legacy") {
+        throw "self-check: expected alert_id and legacy id, got $($ids -join ',')"
+    }
+    if ((Get-NoteProperty (Get-NoteProperty $fake "rest_concurrency") "in_flight") -ne 2) {
+        throw "self-check: rest_in_flight"
+    }
+    if ((Get-NoteProperty (Get-NoteProperty $fake "user_recovery") "generation") -ne 4) {
+        throw "self-check: user_recovery_generation"
+    }
+    if (@(Get-HealthAlertIds ([pscustomobject]@{})).Count -ne 0) {
+        throw "self-check: missing health_alerts must be empty"
+    }
+    Write-Host "prac-soak-sample self-check ok"
+    exit 0
+}
+
+if (-not $EvidenceDir) { throw "EvidenceDir is required unless -SelfCheck" }
 
 if (-not $Token) {
     $envFile = Join-Path (Join-Path $PSScriptRoot "..") ".env"
@@ -55,7 +103,10 @@ while ((Get-Date) -lt $deadline) {
             evidence_queue_depth = $health.provider_evidence_queue.physical_depth
             ambiguous_mutations = $health.execution_recovery.ambiguousMutations
             blocking_new_exposure = $health.execution_recovery.blockingNewExposure
-            alert_ids = @($health.health_alerts | ForEach-Object { $_.id })
+            alert_ids = @(Get-HealthAlertIds $health)
+            rest_in_flight = Get-NoteProperty (Get-NoteProperty $health "rest_concurrency") "in_flight"
+            rest_waiting = Get-NoteProperty (Get-NoteProperty $health "rest_concurrency") "waiting"
+            user_recovery_generation = Get-NoteProperty (Get-NoteProperty $health "user_recovery") "generation"
         }
         ($row | ConvertTo-Json -Compress) | Add-Content -Encoding utf8 $samplePath
         $sampleIndex++
