@@ -47,7 +47,11 @@ import {
   shouldForceStuckStreamRestart,
   shouldScheduleHubRestart,
 } from "./stream-supervisor.js";
-import { HubRecoveryController, type HubRecoveryPhase } from "./hub-recovery-controller.js";
+import {
+  HubRecoveryController,
+  type HubRecoveryPhase,
+  type HubRecoverySnapshot,
+} from "./hub-recovery-controller.js";
 import type { ProjectXDiagnosticsSink, ProjectXStreamDiagnostic } from "./diagnostics.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 
@@ -73,7 +77,6 @@ export interface ProjectXRealtimeOptions {
   stuckStreamMs?: number;
   hubStartTimeoutMs?: number;
   isMarketExpectedLive?: () => boolean;
-  marketRecovery?: HubRecoveryController;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   /** Test seam: lets a fake hub replace the SignalR transport without changing lifecycle wiring. */
@@ -114,9 +117,9 @@ export class ProjectXRealtimeClient {
     market: 0,
   };
   private marketLivenessStaleChecks = 0;
-  private readonly recoveryGeneration: Record<VenueStreamKind, number> = {
-    user: 0,
-    market: 0,
+  private readonly hubRecovery: Record<VenueStreamKind, HubRecoveryController> = {
+    user: new HubRecoveryController(),
+    market: new HubRecoveryController(),
   };
   private readonly quoteBboIncompleteLog = new RateLimitedQuoteBboIncompleteLog();
   private readonly quoteBboAssembler = new QuoteBboAssembler();
@@ -372,23 +375,19 @@ export class ProjectXRealtimeClient {
     });
     connection.onreconnected(() => {
       void (async () => {
-        const generation = this.recoveryGeneration[kind];
+        const generation = this.hubRecovery[kind].snapshot().generation;
         try {
-          if (kind === "market" && this.options.marketRecovery) {
-            this.options.marketRecovery.markProgress(
-              "resubscribing",
-              generation,
-              new Date().toISOString(),
-            );
-          }
+          this.hubRecovery[kind].markProgress(
+            "resubscribing",
+            generation,
+            new Date().toISOString(),
+          );
           await subscribe();
           this.recordLifecycle(kind, "reconnected_and_subscribed");
           this.state.markStreamConnected(kind);
           await this.options.onReconnected?.({ kind, generation });
         } catch (error) {
-          if (kind === "market" && this.options.marketRecovery) {
-            this.options.marketRecovery.fail(generation, new Date().toISOString());
-          }
+          this.hubRecovery[kind].fail(generation, new Date().toISOString());
           this.recordLifecycleSafely(kind, "reconnect_failed", error);
           this.state.markStreamDisconnected(kind, error);
           await this.options.onStateInvalidated?.();
@@ -479,23 +478,21 @@ export class ProjectXRealtimeClient {
     }
   }
 
-  /** One increment path for both hubs. Market still mirrors HubRecoveryController. */
+  /** One increment path for both hubs. Controllers live here, not in AppService. */
   private beginHubRecovery(kind: VenueStreamKind, phase: HubRecoveryPhase): number {
-    if (kind === "market" && this.options.marketRecovery) {
-      const generation = this.options.marketRecovery.beginAttempt(
-        kind,
-        phase,
-        new Date().toISOString(),
-      );
-      this.recoveryGeneration.market = generation;
-      return generation;
-    }
-    this.recoveryGeneration[kind] += 1;
-    return this.recoveryGeneration[kind];
+    return this.hubRecovery[kind].beginAttempt(kind, phase, new Date().toISOString());
   }
 
   public isStaleRecovery(kind: VenueStreamKind, generation: number): boolean {
-    return generation !== this.recoveryGeneration[kind];
+    return this.hubRecovery[kind].isStaleCallback(generation);
+  }
+
+  public hubRecoverySnapshot(kind: VenueStreamKind): HubRecoverySnapshot {
+    return this.hubRecovery[kind].snapshot();
+  }
+
+  public recoveryController(kind: VenueStreamKind): HubRecoveryController {
+    return this.hubRecovery[kind];
   }
 
   private async restartHub(kind: VenueStreamKind): Promise<void> {
@@ -537,13 +534,11 @@ export class ProjectXRealtimeClient {
       await withTimeout(
         (async () => {
           await connection.start();
-          if (kind === "market" && this.options.marketRecovery) {
-            this.options.marketRecovery.markProgress(
-              "resubscribing",
-              generation,
-              new Date().toISOString(),
-            );
-          }
+          this.hubRecovery[kind].markProgress(
+            "resubscribing",
+            generation,
+            new Date().toISOString(),
+          );
           await subscribe();
         })(),
         hubStartTimeoutMs,
@@ -554,9 +549,7 @@ export class ProjectXRealtimeClient {
       this.restartAttempts[kind] = 0;
       await this.options.onReconnected?.({ kind, generation });
     } catch (error) {
-      if (kind === "market" && this.options.marketRecovery) {
-        this.options.marketRecovery.fail(generation, new Date().toISOString());
-      }
+      this.hubRecovery[kind].fail(generation, new Date().toISOString());
       this.recordLifecycleSafely(kind, "restart_failed", error);
       this.state.markStreamDisconnected(kind, error);
       retry = !this.stopped;

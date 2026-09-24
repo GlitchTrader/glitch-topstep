@@ -22,6 +22,19 @@ export interface HubRecoverySnapshot {
 
 export const DEFAULT_HUB_RECOVERY_DEADLINE_MS = 120_000;
 
+export function idleHubRecoverySnapshot(): HubRecoverySnapshot {
+  return {
+    active: false,
+    kind: null,
+    phase: "connected",
+    started_at: null,
+    last_progress_at: null,
+    attempt: 0,
+    deadline_at: null,
+    generation: 0,
+  };
+}
+
 const ACTIVE_PHASES: ReadonlySet<HubRecoveryPhase> = new Set([
   "suspect",
   "reconnecting",

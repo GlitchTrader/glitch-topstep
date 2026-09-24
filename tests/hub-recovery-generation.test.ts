@@ -70,6 +70,41 @@ describe("hub recovery generation", () => {
     assert.deepEqual(generations, [1, 2]);
     assert.equal(client.isStaleRecovery("user", 1), true);
     assert.equal(client.isStaleRecovery("user", 2), false);
+    assert.equal(client.hubRecoverySnapshot("user").generation, 2);
+    assert.equal(client.hubRecoverySnapshot("market").generation, 0);
+    await client.stop();
+  });
+
+  it("keeps market and user recovery generations independent", async () => {
+    const hubs = new Map<VenueStreamKind, FakeHub>();
+    const client = new ProjectXRealtimeClient(
+      {
+        userHubUrl: "user",
+        marketHubUrl: "market",
+        token: () => "token",
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.U26",
+        evidence: { append: () => undefined },
+        sleep: async () => undefined,
+        connectionFactory: (kind) => {
+          const hub = new FakeHub();
+          hubs.set(kind, hub);
+          return hub;
+        },
+      },
+      new VenueStateStore(),
+    );
+
+    await client.start();
+    hubs.get("user")!.emitClose();
+    await settle();
+    hubs.get("market")!.emitClose();
+    await settle();
+
+    assert.equal(client.hubRecoverySnapshot("user").generation, 1);
+    assert.equal(client.hubRecoverySnapshot("market").generation, 1);
+    assert.equal(client.isStaleRecovery("user", 1), false);
+    assert.equal(client.isStaleRecovery("market", 1), false);
     await client.stop();
   });
 });
