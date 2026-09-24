@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { HubRecoveryController } from "../src/projectx/hub-recovery-controller.js";
+import { HubRecoveryController, idleHubRecoverySnapshot } from "../src/projectx/hub-recovery-controller.js";
 
 describe("HubRecoveryController", () => {
   it("tracks generation and ignores stale callbacks", () => {
@@ -16,6 +16,19 @@ describe("HubRecoveryController", () => {
     const snapshot = controller.snapshot();
     assert.equal(snapshot.active, false);
     assert.equal(snapshot.phase, "connected");
+  });
+
+  it("idle snapshot is inactive generation 0", () => {
+    assert.deepEqual(idleHubRecoverySnapshot(), {
+      active: false,
+      kind: null,
+      phase: "connected",
+      started_at: null,
+      last_progress_at: null,
+      attempt: 0,
+      deadline_at: null,
+      generation: 0,
+    });
   });
 
   it("reports deadline expiry", () => {

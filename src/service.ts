@@ -19,7 +19,7 @@ import {
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
 import { ProjectXRealtimeClient } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
-import { HubRecoveryController } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
+import { idleHubRecoverySnapshot } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -151,7 +151,6 @@ export class GlitchTopstepService {
   private readonly healthAlerts = new HealthAlertTracker();
   /** Coordinates the four periodic REST-bound timers below (TS-STREAM-RECOVERY-01 PR-F). */
   private readonly taskScheduler = new TaskScheduler({ maxConcurrent: 2 });
-  private readonly marketHubRecovery = new HubRecoveryController();
   private lastMetadataReconcileAt: string | null = null;
   /** Bounded jittered backoff on repeated reconcile failures (TS-STREAM-RECOVERY-01 PR-G). */
   private reconcileConsecutiveFailures = 0;
@@ -449,7 +448,6 @@ export class GlitchTopstepService {
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
         evidence: this.evidenceQueue, diagnostics: projectXConsoleDiagnostics,
-        marketRecovery: this.marketHubRecovery,
         onReconnected: async ({ kind, generation }) => {
           await this.handleHubReconnected(kind, generation);
         },
@@ -638,9 +636,10 @@ export class GlitchTopstepService {
           // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
           // first_last_fired_utc/thresholds/runbook_url (alert_id replaces id); added
           // task_scheduler, persistence_bytes, heap_used_bytes, health_build_ms,
-          // read_circuit_breaker. All additive except the health_alerts id->alert_id rename --
-          // confirmed no consumer in the paired profile reads health_alerts today
-          // (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
+          // read_circuit_breaker, user_recovery. All additive except the health_alerts
+          // id->alert_id rename -- confirmed no consumer in the paired profile reads
+          // health_alerts today (TS-STREAM-RECOVERY-01 PR-F/PR-H review).
+          // recovery remains the market hub snapshot (watchdog). user_recovery is observe-only.
           schema_version: "glitch.direct.health.v3",
           compatibility: GATEWAY_COMPATIBILITY,
           status:
@@ -696,7 +695,8 @@ export class GlitchTopstepService {
           task_scheduler: this.taskScheduler.counts(),
           rest_concurrency: this.authManager.restConcurrencyStatus(),
           read_circuit_breaker: this.authManager.readCircuitStatus(),
-          recovery: this.marketHubRecovery.snapshot(),
+          recovery: this.realtime?.hubRecoverySnapshot("market") ?? idleHubRecoverySnapshot(),
+          user_recovery: this.realtime?.hubRecoverySnapshot("user") ?? idleHubRecoverySnapshot(),
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
@@ -1229,14 +1229,11 @@ export class GlitchTopstepService {
 
   private async handleHubReconnected(kind: VenueStreamKind, generation: number): Promise<void> {
     this.packets?.invalidateAll();
-    const recovery = this.marketHubRecovery;
     if (!this.realtime || this.realtime.isStaleRecovery(kind, generation)) {
       return;
     }
-    const atUtc = new Date().toISOString();
-    if (kind === "market") {
-      recovery.markProgress("reconciling", generation, atUtc);
-    }
+    const recovery = this.realtime.recoveryController(kind);
+    recovery.markProgress("reconciling", generation, new Date().toISOString());
     try {
       if (kind === "market") {
         // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
@@ -1274,7 +1271,6 @@ export class GlitchTopstepService {
           () => this.historySync.sync(),
           this.historySyncIntervalMs,
         );
-        recovery.complete(generation, new Date().toISOString());
       } else {
         await this.taskScheduler.enqueue(
           "market_recovery",
@@ -1286,10 +1282,9 @@ export class GlitchTopstepService {
           return;
         }
       }
+      recovery.complete(generation, new Date().toISOString());
     } catch (error: unknown) {
-      if (kind === "market") {
-        recovery.fail(generation, new Date().toISOString());
-      }
+      recovery.fail(generation, new Date().toISOString());
       console.error("ProjectX recovery pipeline failed after reconnect", error);
       throw error;
     }

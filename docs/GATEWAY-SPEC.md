@@ -110,7 +110,7 @@ Hermes must consume outcomes via the HTTP feed and maintain its own cursor. `GLI
 
 | Artifact | Schema |
 |----------|--------|
-| Health | `glitch.direct.health.v3` (2026-08-31: `health_alerts[].id` renamed to `alert_id` plus hysteresis fields; added `task_scheduler`, `persistence_bytes`, `heap_used_bytes`, `health_build_ms`, `rest_concurrency` — all additive except the rename, confirmed unconsumed by the paired profile) |
+| Health | `glitch.direct.health.v3` (2026-08-31: `health_alerts[].id` renamed to `alert_id` plus hysteresis fields; added `task_scheduler`, `persistence_bytes`, `heap_used_bytes`, `health_build_ms`, `rest_concurrency`; later `user_recovery` — all additive except the rename, confirmed unconsumed by the paired profile). `recovery` stays the market hub snapshot for the watchdog. |
 | Runtime intent | `glitch.intent.v3` |
 | Decision packet | `glitch.direct.decision_packet.v2` |
 | Outcome feed | `glitch.topstep.outcome_feed.v2` |
@@ -236,6 +236,7 @@ Technical “can I open exposure?” has one owner: `buildExecutionGates` (`src/
 - `safety_supervisor` (observe-only; reports `protection_coverage` and `no_flatten_pending` only — execution-gate facts are not recomputed here, see `src/safety/safety-supervisor.ts`)
 - Invariant metrics: unprotected quantity/seconds, flatten pending, reconciliation age, evidence queue depth
 - `task_scheduler`, `rest_concurrency` (in-flight/waiting/max), `read_circuit_breaker` (per-family open state)
+- `recovery` (market hub; watchdog input) and `user_recovery` (observe-only, same snapshot shape)
 
 Alert on `execution_recovery_blocking=true` or `failed_shutdown` lifecycle.
 
