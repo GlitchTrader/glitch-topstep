@@ -74,7 +74,7 @@ export interface AppConfig {
   entrySubmissionLatchStaleMs: number;
   streamLivenessMs?: number;
   /** SignalR client log. Default Warning; Information only for a supervised close-diagnosis window. */
-  signalRLogLevel: "Trace" | "Debug" | "Information" | "Warning" | "Error" | "Critical" | "None";
+  signalRLogLevel?: "Trace" | "Debug" | "Information" | "Warning" | "Error" | "Critical" | "None";
 }
 
 const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);

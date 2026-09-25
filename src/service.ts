@@ -515,9 +515,6 @@ export class GlitchTopstepService {
     });
 
     this.historySyncTimer = setInterval(() => {
-      if (shouldSkipPeriodicBarsRead(this.authManager.readCircuitStatus())) {
-        return;
-      }
       this.taskScheduler.enqueue("history_sync", "history_sync", () => (
         this.historySync.sync().catch((error: unknown) => {
           console.error("ProjectX history synchronization failed", error);

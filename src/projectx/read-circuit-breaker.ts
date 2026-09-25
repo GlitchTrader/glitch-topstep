@@ -102,7 +102,7 @@ export class ReadCircuitBreaker {
   }
 }
 
-/** Periodic history/observation timers skip retrieveBars while the bars family is open. */
+/** Periodic observation timers skip retrieveBars while the bars family is open. */
 export function shouldSkipPeriodicBarsRead(
   circuit: Record<string, { open?: boolean } | undefined>,
 ): boolean {
