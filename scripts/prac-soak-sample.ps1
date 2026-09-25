@@ -41,6 +41,7 @@ if ($SelfCheck) {
         user_recovery = [pscustomobject]@{ generation = 4 }
         heap_used_bytes = 123456
         data_quality = [pscustomobject]@{ issues = @("quote_stale", "reconciliation_not_current") }
+        stream_last_event = [pscustomobject]@{ market = "reconnecting"; user = "liveness_restart" }
     }
     $ids = @(Get-HealthAlertIds $fake)
     if ($ids -notcontains "quote_stale" -or $ids -notcontains "legacy") {
@@ -58,6 +59,9 @@ if ($SelfCheck) {
     $issues = @(Get-NoteProperty (Get-NoteProperty $fake "data_quality") "issues")
     if ($issues -notcontains "quote_stale" -or $issues.Count -ne 2) {
         throw "self-check: data_quality.issues"
+    }
+    if ((Get-NoteProperty (Get-NoteProperty $fake "stream_last_event") "market") -ne "reconnecting") {
+        throw "self-check: stream_last_event.market"
     }
     if (@(Get-HealthAlertIds ([pscustomobject]@{})).Count -ne 0) {
         throw "self-check: missing health_alerts must be empty"
@@ -129,6 +133,8 @@ while ((Get-Date) -lt $deadline) {
             user_recovery_generation = Get-NoteProperty (Get-NoteProperty $health "user_recovery") "generation"
             heap_used_bytes = Get-NoteProperty $health "heap_used_bytes"
             data_quality_issues = @(Get-NoteProperty (Get-NoteProperty $health "data_quality") "issues")
+            market_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "market"
+            user_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "user"
         }
         ($row | ConvertTo-Json -Compress) | Add-Content -Encoding utf8 $samplePath
         $sampleIndex++

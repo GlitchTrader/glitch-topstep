@@ -71,13 +71,22 @@ export function logProjectXRestDiagnostic(
   logger[level]("ProjectX REST diagnostic", event);
 }
 
+const STREAM_STDERR_EVENTS = new Set([
+  "reconnecting",
+  "closed",
+  "liveness_restart",
+  "stuck_stream_restart",
+  "restart_failed",
+  "connect_failed",
+]);
+
 export const projectXConsoleDiagnostics: ProjectXDiagnosticsSink = {
   rest: (event) => logProjectXRestDiagnostic(event),
   stream: (event) => {
-    if (event.new_state === "connected" && !event.error_message) {
-      console.info("ProjectX stream diagnostic", event);
-    } else if (event.error_message || event.new_state === "disconnected") {
+    if (STREAM_STDERR_EVENTS.has(event.event) || event.error_message || event.new_state === "disconnected") {
       console.error("ProjectX stream diagnostic", event);
+    } else if (event.new_state === "connected" && !event.error_message) {
+      console.info("ProjectX stream diagnostic", event);
     } else {
       console.warn("ProjectX stream diagnostic", event);
     }

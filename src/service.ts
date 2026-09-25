@@ -459,6 +459,12 @@ export class GlitchTopstepService {
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
+          if (RecoveryPipelineGate.shouldSkipInvalidateReconcile({
+            pipelineRunning: this.recoveryPipeline.isRunning(),
+            hubRecoveryActive: this.isHubRecoveryStorm(),
+          })) {
+            return;
+          }
           try {
             await this.reconcile({ includeMetadata: false });
           } catch (error: unknown) {
@@ -703,6 +709,10 @@ export class GlitchTopstepService {
           read_circuit_breaker: this.authManager.readCircuitStatus(),
           recovery: this.realtime?.hubRecoverySnapshot("market") ?? idleHubRecoverySnapshot(),
           user_recovery: this.realtime?.hubRecoverySnapshot("user") ?? idleHubRecoverySnapshot(),
+          stream_last_event: {
+            market: this.realtime?.lastStreamLifecycleEvent("market") ?? null,
+            user: this.realtime?.lastStreamLifecycleEvent("user") ?? null,
+          },
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
@@ -1242,9 +1252,8 @@ export class GlitchTopstepService {
   }
 
   /**
-   * Shared reconnect pipeline for both hubs. Trailing debounce lives in RecoveryPipelineGate;
-   * this pass always runs the full REST sequence so a user-first coalesce cannot skip
-   * market observation/history after the other hub also dropped.
+   * Reconnect pays one cheap reconcile. History/observation/order_flow stay on their timers.
+   * onStateInvalidated must not fire a second reconcile while recovery is already active.
    */
   private async handleHubReconnected(): Promise<void> {
     this.packets?.invalidateAll();
@@ -1265,46 +1274,12 @@ export class GlitchTopstepService {
     if (marketSnap.active) {
       market.markProgress("reconciling", marketSnap.generation, now);
     }
-    const bothStale = (): boolean => {
-      const userDone = !userSnap.active || user.isStaleCallback(userSnap.generation);
-      const marketDone = !marketSnap.active || market.isStaleCallback(marketSnap.generation);
-      return userDone && marketDone;
-    };
     try {
-      // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
-      // into this recovery run instead of firing a redundant duplicate REST call
-      // (TS-STREAM-RECOVERY-01 PR-F).
       await this.taskScheduler.enqueue(
         "market_recovery",
         "reconcile",
         () => this.reconcile({ includeMetadata: false }),
         this.config.reconcileIntervalMs,
-      );
-      if (bothStale()) {
-        return;
-      }
-      await this.taskScheduler.enqueue(
-        "market_recovery",
-        "market_observation",
-        () => this.refreshMarketObservations(),
-        MARKET_OBSERVATION_REFRESH_MS,
-      );
-      await this.taskScheduler.enqueue(
-        "market_recovery",
-        "order_flow",
-        async () => {
-          await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
-        },
-        ORDER_FLOW_REFRESH_MS,
-      );
-      if (bothStale()) {
-        return;
-      }
-      await this.taskScheduler.enqueue(
-        "market_recovery",
-        "history_sync",
-        () => this.historySync.sync(),
-        this.historySyncIntervalMs,
       );
       const done = new Date().toISOString();
       if (userSnap.active) {

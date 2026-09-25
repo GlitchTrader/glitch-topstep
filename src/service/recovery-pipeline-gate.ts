@@ -10,6 +10,18 @@ export class RecoveryPipelineGate {
   private running: Promise<void> | null = null;
   private rerunRequested = false;
 
+  public isRunning(): boolean {
+    return this.running !== null;
+  }
+
+  /** Skip the onreconnecting raw reconcile — gate or hub recovery already owns REST. */
+  public static shouldSkipInvalidateReconcile(input: {
+    pipelineRunning: boolean;
+    hubRecoveryActive: boolean;
+  }): boolean {
+    return input.pipelineRunning || input.hubRecoveryActive;
+  }
+
   public run(execute: () => Promise<void>): Promise<void> {
     this.rerunRequested = true;
     if (this.running) {
