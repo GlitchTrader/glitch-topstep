@@ -66,8 +66,20 @@ export class HubRecoveryController {
     };
   }
 
-  /** Starts a recovery attempt; returns generation for stale-callback guards. */
+  /**
+   * Starts a recovery attempt; returns generation for stale-callback guards.
+   * ponytail: while already in an active phase, keep the current generation.
+   * Bumping it here makes isStaleCallback abort the in-flight pipeline and
+   * retrigger history_sync (TS-STREAM-RECOVERY-01 soak 2026-09-24).
+   * Ceiling: same-gen onReconnected can still enqueue another pipeline;
+   * items 2/3 (shared pipeline / starve history) are the upgrade.
+   */
   public beginAttempt(kind: VenueStreamKind, phase: HubRecoveryPhase, atUtc: string): number {
+    if (ACTIVE_PHASES.has(this.phase)) {
+      this.attempt += 1;
+      this.lastProgressAt = atUtc;
+      return this.recoveryGeneration;
+    }
     this.recoveryGeneration += 1;
     this.attempt += 1;
     this.kind = kind;
