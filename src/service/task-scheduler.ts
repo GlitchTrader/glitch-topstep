@@ -63,6 +63,11 @@ export interface TaskSchedulerOptions {
   maxConcurrent?: number;
   now?: () => number;
   onError?: (task: { id: string; priority: TaskPriority }, error: unknown) => void;
+  /**
+   * When true, overdue history_sync is not starvation-promoted (TS-STREAM-RECOVERY-01 item 3).
+   * Other overdue priorities still jump the queue. Injected from hub recovery active.
+   */
+  isStormActive?: () => boolean;
 }
 
 export class TaskScheduler {
@@ -74,12 +79,14 @@ export class TaskScheduler {
   private readonly maxConcurrent: number;
   private readonly now: () => number;
   private readonly onError: (task: { id: string; priority: TaskPriority }, error: unknown) => void;
+  private readonly isStormActive: (() => boolean) | undefined;
 
   public constructor(options: TaskSchedulerOptions = {}) {
     this.maxConcurrent = Math.max(1, options.maxConcurrent ?? 2);
     this.now = options.now ?? Date.now;
     this.onError = options.onError
       ?? ((task, error) => console.error(`scheduled task failed: ${task.id}`, error));
+    this.isStormActive = options.isStormActive;
   }
 
   public counts(): TaskSchedulerCounters {
@@ -168,15 +175,24 @@ export class TaskScheduler {
    * Priority order picks the next task, EXCEPT a task that has been waiting past its own
    * deadline always wins -- this is the starvation guard: a continuous stream of
    * `critical_reconcile` requests cannot indefinitely starve `history_sync`.
+   * During a hub-recovery storm, overdue history_sync stays unpromoted so retrieveBars
+   * cannot jump ahead of reconcile (TS-STREAM-RECOVERY-01 item 3).
    */
   private selectNext(): QueuedTask | null {
     if (this.queue.length === 0) {
       return null;
     }
     const nowMs = this.now();
-    const overdueIndex = this.queue.findIndex(
-      (task) => nowMs - task.enqueuedAtMs >= task.deadlineMs,
-    );
+    const storm = this.isStormActive?.() === true;
+    const overdueIndex = this.queue.findIndex((task) => {
+      if (nowMs - task.enqueuedAtMs < task.deadlineMs) {
+        return false;
+      }
+      if (storm && task.priority === "history_sync") {
+        return false;
+      }
+      return true;
+    });
     if (overdueIndex >= 0) {
       this.deferred += 1;
       return this.queue.splice(overdueIndex, 1)[0] ?? null;

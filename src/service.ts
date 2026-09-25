@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
-import type { OrderInfo, PositionInfo, AccountVenueSnapshot, VenueStreamKind } from "./domain/models.js";
+import type { OrderInfo, PositionInfo, AccountVenueSnapshot } from "./domain/models.js";
 import { ExecutionCoordinator } from "./execution/coordinator.js";
 import { shouldClearStaleEntrySubmissionLatch } from "./execution/entry-submission-latch.js";
 import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
@@ -71,6 +71,7 @@ import {
   GLITCH_TOPSTEP_PROMPT_VERSION,
 } from "./domain/operator.js";
 import { LifecycleSupervisor, runShutdownFailureRecovery } from "./service/lifecycle-supervisor.js";
+import { RecoveryPipelineGate } from "./service/recovery-pipeline-gate.js";
 import { TaskScheduler } from "./service/task-scheduler.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
 import { RuntimeScopeLock } from "./service/runtime-lock.js";
@@ -150,7 +151,12 @@ export class GlitchTopstepService {
   /** Persists across /health polls so hysteresis/dedup state (TS-REAUDIT-11) is real, not per-call. */
   private readonly healthAlerts = new HealthAlertTracker();
   /** Coordinates the four periodic REST-bound timers below (TS-STREAM-RECOVERY-01 PR-F). */
-  private readonly taskScheduler = new TaskScheduler({ maxConcurrent: 2 });
+  private readonly taskScheduler = new TaskScheduler({
+    maxConcurrent: 2,
+    isStormActive: () => this.isHubRecoveryStorm(),
+  });
+  /** One recovery REST pipeline for both hubs (TS-STREAM-RECOVERY-01 item 2). */
+  private readonly recoveryPipeline = new RecoveryPipelineGate();
   private lastMetadataReconcileAt: string | null = null;
   /** Bounded jittered backoff on repeated reconcile failures (TS-STREAM-RECOVERY-01 PR-G). */
   private reconcileConsecutiveFailures = 0;
@@ -448,8 +454,8 @@ export class GlitchTopstepService {
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
         evidence: this.evidenceQueue, diagnostics: projectXConsoleDiagnostics,
-        onReconnected: async ({ kind, generation }) => {
-          await this.handleHubReconnected(kind, generation);
+        onReconnected: async () => {
+          await this.recoveryPipeline.run(() => this.handleHubReconnected());
         },
         onStateInvalidated: async () => {
           this.packets?.invalidateAll();
@@ -1227,64 +1233,94 @@ export class GlitchTopstepService {
     }
   }
 
-  private async handleHubReconnected(kind: VenueStreamKind, generation: number): Promise<void> {
+  private isHubRecoveryStorm(): boolean {
+    if (!this.realtime) {
+      return false;
+    }
+    return this.realtime.hubRecoverySnapshot("user").active
+      || this.realtime.hubRecoverySnapshot("market").active;
+  }
+
+  /**
+   * Shared reconnect pipeline for both hubs. Trailing debounce lives in RecoveryPipelineGate;
+   * this pass always runs the full REST sequence so a user-first coalesce cannot skip
+   * market observation/history after the other hub also dropped.
+   */
+  private async handleHubReconnected(): Promise<void> {
     this.packets?.invalidateAll();
-    if (!this.realtime || this.realtime.isStaleRecovery(kind, generation)) {
+    if (!this.realtime) {
       return;
     }
-    const recovery = this.realtime.recoveryController(kind);
-    recovery.markProgress("reconciling", generation, new Date().toISOString());
+    const now = new Date().toISOString();
+    const user = this.realtime.recoveryController("user");
+    const market = this.realtime.recoveryController("market");
+    const userSnap = user.snapshot();
+    const marketSnap = market.snapshot();
+    if (!userSnap.active && !marketSnap.active) {
+      return;
+    }
+    if (userSnap.active) {
+      user.markProgress("reconciling", userSnap.generation, now);
+    }
+    if (marketSnap.active) {
+      market.markProgress("reconciling", marketSnap.generation, now);
+    }
+    const bothStale = (): boolean => {
+      const userDone = !userSnap.active || user.isStaleCallback(userSnap.generation);
+      const marketDone = !marketSnap.active || market.isStaleCallback(marketSnap.generation);
+      return userDone && marketDone;
+    };
     try {
-      if (kind === "market") {
-        // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
-        // into this recovery run instead of firing a redundant duplicate REST call
-        // (TS-STREAM-RECOVERY-01 PR-F).
-        await this.taskScheduler.enqueue(
-          "market_recovery",
-          "reconcile",
-          () => this.reconcile({ includeMetadata: false }),
-          this.config.reconcileIntervalMs,
-        );
-        if (recovery.isStaleCallback(generation)) {
-          return;
-        }
-        await this.taskScheduler.enqueue(
-          "market_recovery",
-          "market_observation",
-          () => this.refreshMarketObservations(),
-          MARKET_OBSERVATION_REFRESH_MS,
-        );
-        await this.taskScheduler.enqueue(
-          "market_recovery",
-          "order_flow",
-          async () => {
-            await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
-          },
-          ORDER_FLOW_REFRESH_MS,
-        );
-        if (recovery.isStaleCallback(generation)) {
-          return;
-        }
-        await this.taskScheduler.enqueue(
-          "market_recovery",
-          "history_sync",
-          () => this.historySync.sync(),
-          this.historySyncIntervalMs,
-        );
-      } else {
-        await this.taskScheduler.enqueue(
-          "market_recovery",
-          "reconcile",
-          () => this.reconcile({ includeMetadata: false }),
-          this.config.reconcileIntervalMs,
-        );
-        if (!this.realtime || this.realtime.isStaleRecovery(kind, generation)) {
-          return;
-        }
+      // Same task ids as the periodic timers below, so a concurrent periodic tick coalesces
+      // into this recovery run instead of firing a redundant duplicate REST call
+      // (TS-STREAM-RECOVERY-01 PR-F).
+      await this.taskScheduler.enqueue(
+        "market_recovery",
+        "reconcile",
+        () => this.reconcile({ includeMetadata: false }),
+        this.config.reconcileIntervalMs,
+      );
+      if (bothStale()) {
+        return;
       }
-      recovery.complete(generation, new Date().toISOString());
+      await this.taskScheduler.enqueue(
+        "market_recovery",
+        "market_observation",
+        () => this.refreshMarketObservations(),
+        MARKET_OBSERVATION_REFRESH_MS,
+      );
+      await this.taskScheduler.enqueue(
+        "market_recovery",
+        "order_flow",
+        async () => {
+          await Promise.all([...this.orderFlows.values()].map((service) => service.refresh()));
+        },
+        ORDER_FLOW_REFRESH_MS,
+      );
+      if (bothStale()) {
+        return;
+      }
+      await this.taskScheduler.enqueue(
+        "market_recovery",
+        "history_sync",
+        () => this.historySync.sync(),
+        this.historySyncIntervalMs,
+      );
+      const done = new Date().toISOString();
+      if (userSnap.active) {
+        user.complete(userSnap.generation, done);
+      }
+      if (marketSnap.active) {
+        market.complete(marketSnap.generation, done);
+      }
     } catch (error: unknown) {
-      recovery.fail(generation, new Date().toISOString());
+      const failed = new Date().toISOString();
+      if (userSnap.active) {
+        user.fail(userSnap.generation, failed);
+      }
+      if (marketSnap.active) {
+        market.fail(marketSnap.generation, failed);
+      }
       console.error("ProjectX recovery pipeline failed after reconnect", error);
       throw error;
     }

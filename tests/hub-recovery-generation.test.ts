@@ -35,7 +35,7 @@ async function settle(): Promise<void> {
 }
 
 describe("hub recovery generation", () => {
-  it("increments user-hub generation on each restartHub", async () => {
+  it("keeps user-hub generation across restartHub while recovery is still active", async () => {
     const generations: number[] = [];
     const hubs = new Map<VenueStreamKind, FakeHub>();
     const client = new ProjectXRealtimeClient(
@@ -67,11 +67,18 @@ describe("hub recovery generation", () => {
     hubs.get("user")!.emitClose();
     await settle();
 
-    assert.deepEqual(generations, [1, 2]);
-    assert.equal(client.isStaleRecovery("user", 1), true);
-    assert.equal(client.isStaleRecovery("user", 2), false);
-    assert.equal(client.hubRecoverySnapshot("user").generation, 2);
+    assert.deepEqual(generations, [1, 1]);
+    assert.equal(client.isStaleRecovery("user", 1), false);
+    assert.equal(client.hubRecoverySnapshot("user").generation, 1);
+    assert.equal(client.hubRecoverySnapshot("user").attempt, 2);
     assert.equal(client.hubRecoverySnapshot("market").generation, 0);
+
+    assert.equal(client.recoveryController("user").complete(1, "2026-09-24T22:48:00.000Z"), true);
+    hubs.get("user")!.emitClose();
+    await settle();
+    assert.deepEqual(generations, [1, 1, 2]);
+    assert.equal(client.isStaleRecovery("user", 1), true);
+    assert.equal(client.hubRecoverySnapshot("user").generation, 2);
     await client.stop();
   });
 
