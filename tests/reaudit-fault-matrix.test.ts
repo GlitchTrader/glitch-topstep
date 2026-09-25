@@ -86,6 +86,11 @@ export const REAUDIT_FAULT_MATRIX = [
     scenario: "Expired issued_packets pruned while recovery refs preserved",
   },
   {
+    id: "sqlite_disk_full_and_corrupt",
+    proof: "tests/sqlite-disk-fault.test.ts",
+    scenario: "ENOSPC/SQLITE_FULL and malformed sqlite are catchable; later write recovers",
+  },
+  {
     id: "rollback_rehearsal_manifest",
     proof: "scripts/rollback-rehearsal.mjs",
     scenario: "Paired manifest and operations runbook present for rollback rehearsal",

@@ -39,6 +39,8 @@ if ($SelfCheck) {
         )
         rest_concurrency = [pscustomobject]@{ in_flight = 2; waiting = 1 }
         user_recovery = [pscustomobject]@{ generation = 4 }
+        heap_used_bytes = 123456
+        data_quality = [pscustomobject]@{ issues = @("quote_stale", "reconciliation_not_current") }
     }
     $ids = @(Get-HealthAlertIds $fake)
     if ($ids -notcontains "quote_stale" -or $ids -notcontains "legacy") {
@@ -49,6 +51,13 @@ if ($SelfCheck) {
     }
     if ((Get-NoteProperty (Get-NoteProperty $fake "user_recovery") "generation") -ne 4) {
         throw "self-check: user_recovery_generation"
+    }
+    if ((Get-NoteProperty $fake "heap_used_bytes") -ne 123456) {
+        throw "self-check: heap_used_bytes"
+    }
+    $issues = @(Get-NoteProperty (Get-NoteProperty $fake "data_quality") "issues")
+    if ($issues -notcontains "quote_stale" -or $issues.Count -ne 2) {
+        throw "self-check: data_quality.issues"
     }
     if (@(Get-HealthAlertIds ([pscustomobject]@{})).Count -ne 0) {
         throw "self-check: missing health_alerts must be empty"
@@ -75,7 +84,18 @@ New-Item -ItemType Directory -Force -Path $out | Out-Null
 $samplePath = Join-Path $out "health-samples.jsonl"
 $headers = @{ Authorization = "Bearer $Token" }
 $deadline = (Get-Date).AddHours($DurationHours)
+$t0Path = Join-Path $out "t0.json"
+if (Test-Path $t0Path) {
+    $t0 = Get-Content $t0Path -Raw | ConvertFrom-Json
+    $planned = Get-NoteProperty $t0 "planned_end_utc"
+    if ($planned) {
+        $deadline = [datetimeoffset]::Parse([string]$planned).LocalDateTime
+    }
+}
 $sampleIndex = 0
+if (Test-Path $samplePath) {
+    $sampleIndex = @(Get-Content $samplePath).Count
+}
 
 Write-Host "PRAC soak sampler -> $samplePath every ${IntervalSeconds}s for ${DurationHours}h" -ForegroundColor Cyan
 Write-Host "Stop with Ctrl+C. Do not run unattended." -ForegroundColor Yellow
@@ -107,6 +127,8 @@ while ((Get-Date) -lt $deadline) {
             rest_in_flight = Get-NoteProperty (Get-NoteProperty $health "rest_concurrency") "in_flight"
             rest_waiting = Get-NoteProperty (Get-NoteProperty $health "rest_concurrency") "waiting"
             user_recovery_generation = Get-NoteProperty (Get-NoteProperty $health "user_recovery") "generation"
+            heap_used_bytes = Get-NoteProperty $health "heap_used_bytes"
+            data_quality_issues = @(Get-NoteProperty (Get-NoteProperty $health "data_quality") "issues")
         }
         ($row | ConvertTo-Json -Compress) | Add-Content -Encoding utf8 $samplePath
         $sampleIndex++
