@@ -52,12 +52,16 @@ export class ReadCircuitBreaker {
     private readonly cooldownMs = 30_000,
   ) {}
 
-  public assertAllows(path: string): void {
+  public isOpen(path: string): boolean {
     if (isMutationPath(path)) {
-      return;
+      return false;
     }
     const state = this.families.get(readEndpointFamily(path));
-    if (state && Date.now() < state.openUntilMs) {
+    return Boolean(state && Date.now() < state.openUntilMs);
+  }
+
+  public assertAllows(path: string): void {
+    if (this.isOpen(path)) {
       throw new ProjectXApiError("read_circuit_open", "ProjectX read circuit breaker is open");
     }
   }
@@ -96,4 +100,11 @@ export class ReadCircuitBreaker {
     }
     return result;
   }
+}
+
+/** Periodic history/observation timers skip retrieveBars while the bars family is open. */
+export function shouldSkipPeriodicBarsRead(
+  circuit: Record<string, { open?: boolean } | undefined>,
+): boolean {
+  return circuit.bars?.open === true;
 }

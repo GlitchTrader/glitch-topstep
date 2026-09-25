@@ -73,6 +73,8 @@ export interface AppConfig {
   packetMarketObservationRefreshBudgetMs?: number;
   entrySubmissionLatchStaleMs: number;
   streamLivenessMs?: number;
+  /** SignalR client log. Default Warning; Information only for a supervised close-diagnosis window. */
+  signalRLogLevel: "Trace" | "Debug" | "Information" | "Warning" | "Error" | "Critical" | "None";
 }
 
 const NUMERIC_LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1"]);
@@ -120,6 +122,20 @@ function required(environment: NodeJS.ProcessEnv, name: string): string {
 
 function optional(environment: NodeJS.ProcessEnv, name: string, fallback: string): string {
   return environment[name]?.trim() || fallback;
+}
+
+const SIGNALR_LOG_LEVELS = new Set([
+  "Trace", "Debug", "Information", "Warning", "Error", "Critical", "None",
+]);
+
+function signalRLogLevel(
+  environment: NodeJS.ProcessEnv,
+): AppConfig["signalRLogLevel"] {
+  const raw = optional(environment, "GLITCH_SIGNALR_LOG_LEVEL", "Warning");
+  if (!SIGNALR_LOG_LEVELS.has(raw)) {
+    throw new Error("GLITCH_SIGNALR_LOG_LEVEL must be Trace, Debug, Information, Warning, Error, Critical, or None");
+  }
+  return raw as AppConfig["signalRLogLevel"];
 }
 
 function loopbackHost(environment: NodeJS.ProcessEnv): string {
@@ -505,5 +521,6 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       15_000,
       (value) => Number.isInteger(value) && value >= 5_000,
     ),
+    signalRLogLevel: signalRLogLevel(environment),
   };
 }

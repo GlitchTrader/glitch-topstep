@@ -18,7 +18,7 @@ import {
 } from "./projectx/evidence-write-queue.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
-import { ProjectXRealtimeClient } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
+import { ProjectXRealtimeClient, signalRLogLevelFromName } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
 import { idleHubRecoverySnapshot } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
@@ -85,6 +85,7 @@ import {
   projectXAuthBackoffDelayMs,
   type ProjectXAuthStatus,
 } from "./projectx/auth-manager.js";
+import { shouldSkipPeriodicBarsRead } from "./projectx/read-circuit-breaker.js";
 import { resolveInstrumentUniverse, type InstrumentUniverse } from "./domain/instrument-universe.js";
 import { MultiInstrumentMarketDataPlane } from "./market/multi-instrument-data-plane.js";
 import { observationAgeMs, PACKET_OBSERVATION_STALE_MS } from "./market/candidate-freshness.js";
@@ -454,6 +455,7 @@ export class GlitchTopstepService {
           .filter((candidate) => multi.depthAllowlist.includes(candidate.instrument))
           .map((candidate) => candidate.contract_id),
         evidence: this.evidenceQueue, diagnostics: projectXConsoleDiagnostics,
+        logLevel: signalRLogLevelFromName(this.config.signalRLogLevel),
         onReconnected: async () => {
           await this.recoveryPipeline.run(() => this.handleHubReconnected());
         },
@@ -513,6 +515,9 @@ export class GlitchTopstepService {
     });
 
     this.historySyncTimer = setInterval(() => {
+      if (shouldSkipPeriodicBarsRead(this.authManager.readCircuitStatus())) {
+        return;
+      }
       this.taskScheduler.enqueue("history_sync", "history_sync", () => (
         this.historySync.sync().catch((error: unknown) => {
           console.error("ProjectX history synchronization failed", error);
@@ -528,6 +533,9 @@ export class GlitchTopstepService {
     // stale packet already fails to resolve. Invalidating here only killed packets a client
     // was still holding.
     this.marketObservationTimer = setInterval(() => {
+      if (shouldSkipPeriodicBarsRead(this.authManager.readCircuitStatus())) {
+        return;
+      }
       // The scheduler already logs failures via its onError handler; this timer doesn't need
       // the result, but must still handle the returned promise's rejection itself or it becomes
       // an unhandled rejection (a caller that DOES need the result, e.g. handleHubReconnected,
