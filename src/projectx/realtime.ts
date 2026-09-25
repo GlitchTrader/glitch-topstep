@@ -145,7 +145,7 @@ export class ProjectXRealtimeClient {
     const build = (kind: VenueStreamKind, url: string): SignalRConnection => (
       options.connectionFactory?.(kind, url) ?? new HubConnectionBuilder()
         .withUrl(url, signalROptions)
-        .configureLogging(options.logLevel ?? LogLevel.Warning)
+        .configureLogging(options.logLevel ?? signalRLogLevelFromName(undefined))
         .withAutomaticReconnect(reconnectPolicy)
         .build()
     );
@@ -736,6 +736,24 @@ function lifecycleState(eventType: string, current: string): string {
     return "disconnected";
   }
   return current;
+}
+
+const SIGNALR_LOG_LEVELS = {
+  Trace: LogLevel.Trace,
+  Debug: LogLevel.Debug,
+  Information: LogLevel.Information,
+  Warning: LogLevel.Warning,
+  Error: LogLevel.Error,
+  Critical: LogLevel.Critical,
+  None: LogLevel.None,
+} as const;
+
+/** Default stays Warning. Information is the Sunday-open close diagnosis switch. */
+export function signalRLogLevelFromName(name: string | undefined): LogLevel {
+  if (!name) {
+    return LogLevel.Warning;
+  }
+  return SIGNALR_LOG_LEVELS[name as keyof typeof SIGNALR_LOG_LEVELS] ?? LogLevel.Warning;
 }
 
 function closeCode(error: unknown): string | number | null {

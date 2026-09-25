@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { LogLevel } from "@microsoft/signalr";
 import { loadConfig, parseDotEnv } from "../src/config.js";
+import { signalRLogLevelFromName } from "../src/projectx/realtime.js";
 
 function environment(): NodeJS.ProcessEnv {
   return {
@@ -43,6 +45,18 @@ describe("configuration authority", () => {
     assert.equal("requireSimulatedAccount" in config, false);
     assert.equal("maxRiskFractionOfBuffer" in config.risk, false);
     assert.equal("entryWindowOpen" in config.policy, false);
+    assert.equal(config.signalRLogLevel, "Warning");
+  });
+
+  it("accepts GLITCH_SIGNALR_LOG_LEVEL Information and rejects unknown names", () => {
+    const info = loadConfig({ ...environment(), GLITCH_SIGNALR_LOG_LEVEL: "Information" });
+    assert.equal(info.signalRLogLevel, "Information");
+    assert.throws(
+      () => loadConfig({ ...environment(), GLITCH_SIGNALR_LOG_LEVEL: "verbose" }),
+      /GLITCH_SIGNALR_LOG_LEVEL/,
+    );
+    assert.equal(signalRLogLevelFromName("Information"), LogLevel.Information);
+    assert.equal(signalRLogLevelFromName(undefined), LogLevel.Warning);
   });
 
   it("accepts only numeric loopback hosts for the local gateway", () => {

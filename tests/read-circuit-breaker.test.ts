@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ProjectXApiError } from "../src/projectx/client.js";
-import { ReadCircuitBreaker, readEndpointFamily } from "../src/projectx/read-circuit-breaker.js";
+import { ReadCircuitBreaker, readEndpointFamily, shouldSkipPeriodicBarsRead } from "../src/projectx/read-circuit-breaker.js";
 
 describe("readEndpointFamily", () => {
   it("groups the tightly-rate-limited bars endpoint on its own", () => {
@@ -88,6 +88,21 @@ describe("ReadCircuitBreaker (TS-AUDIT31-PX-01: isolated per endpoint family)", 
     assert.throws(() => breaker.assertAllows("/api/History/retrieveBars"), ProjectXApiError);
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.doesNotThrow(() => breaker.assertAllows("/api/History/retrieveBars"));
+  });
+
+  it("isOpen matches assertAllows without throwing", () => {
+    const breaker = new ReadCircuitBreaker(1, 30_000);
+    assert.equal(breaker.isOpen("/api/History/retrieveBars"), false);
+    breaker.recordFailure("/api/History/retrieveBars");
+    assert.equal(breaker.isOpen("/api/History/retrieveBars"), true);
+    assert.equal(breaker.isOpen("/api/Position/searchOpen"), false);
+  });
+
+  it("skips periodic bars reads only while the bars family is open", () => {
+    assert.equal(shouldSkipPeriodicBarsRead({}), false);
+    assert.equal(shouldSkipPeriodicBarsRead({ orders: { open: true } }), false);
+    assert.equal(shouldSkipPeriodicBarsRead({ bars: { open: false } }), false);
+    assert.equal(shouldSkipPeriodicBarsRead({ bars: { open: true } }), true);
   });
 
   it("recordSuccess clears an open family's failure streak without waiting for cooldown", () => {
