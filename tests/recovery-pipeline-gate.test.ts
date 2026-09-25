@@ -51,6 +51,21 @@ describe("RecoveryPipelineGate (TS-STREAM-RECOVERY-01 item 2)", () => {
     assert.deepEqual(order, ["pass-1-start", "pass-1-end", "pass-2-start", "pass-2-end"]);
   });
 
+  it("skips invalidate reconcile while hub recovery or the gate is already running", () => {
+    assert.equal(RecoveryPipelineGate.shouldSkipInvalidateReconcile({
+      pipelineRunning: false,
+      hubRecoveryActive: false,
+    }), false);
+    assert.equal(RecoveryPipelineGate.shouldSkipInvalidateReconcile({
+      pipelineRunning: true,
+      hubRecoveryActive: false,
+    }), true);
+    assert.equal(RecoveryPipelineGate.shouldSkipInvalidateReconcile({
+      pipelineRunning: false,
+      hubRecoveryActive: true,
+    }), true);
+  });
+
   it("sequential runs after idle each execute once", async () => {
     const gate = new RecoveryPipelineGate();
     let runs = 0;

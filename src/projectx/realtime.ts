@@ -124,6 +124,10 @@ export class ProjectXRealtimeClient {
   private readonly quoteBboIncompleteLog = new RateLimitedQuoteBboIncompleteLog();
   private readonly quoteBboAssembler = new QuoteBboAssembler();
   private readonly reconnectCounts: Record<VenueStreamKind, number> = { user: 0, market: 0 };
+  private readonly lastStreamEvent: Record<VenueStreamKind, string | null> = {
+    user: null,
+    market: null,
+  };
 
   public constructor(
     private readonly options: ProjectXRealtimeOptions,
@@ -495,6 +499,10 @@ export class ProjectXRealtimeClient {
     return this.hubRecovery[kind];
   }
 
+  public lastStreamLifecycleEvent(kind: VenueStreamKind): string | null {
+    return this.lastStreamEvent[kind];
+  }
+
   private async restartHub(kind: VenueStreamKind): Promise<void> {
     if (!shouldScheduleHubRestart({
       stopped: this.stopped,
@@ -615,6 +623,7 @@ export class ProjectXRealtimeClient {
     const lastEventAgeMs = current.lastEventAt
       ? Math.max(0, Date.now() - Date.parse(current.lastEventAt))
       : null;
+    this.lastStreamEvent[kind] = eventType;
     if (eventType === "reconnecting" || eventType === "closed" || eventType === "restart_failed") {
       this.reconnectCounts[kind] += 1;
     }
