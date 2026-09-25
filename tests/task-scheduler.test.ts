@@ -80,6 +80,56 @@ describe("TaskScheduler (TS-STREAM-RECOVERY-01 PR-F)", () => {
     assert.equal(runs, 1, "the second enqueue with the same id must be coalesced");
   });
 
+  it("does not starvation-promote overdue history_sync while a hub-recovery storm is active", async () => {
+    let nowMs = 0;
+    const scheduler = new TaskScheduler({
+      maxConcurrent: 1,
+      now: () => nowMs,
+      isStormActive: () => true,
+    });
+    const order: string[] = [];
+    const occupyGate = deferred();
+    scheduler.enqueue("history_sync", "occupy", async () => {
+      await occupyGate.promise;
+    });
+    scheduler.enqueue("history_sync", "starved", async () => {
+      order.push("starved");
+    }, 100);
+    nowMs = 200;
+    scheduler.enqueue("critical_reconcile", "newcomer", async () => {
+      order.push("newcomer");
+    });
+    occupyGate.resolve();
+    await scheduler.waitForIdle();
+    assert.deepEqual(order, ["newcomer", "starved"]);
+    assert.equal(scheduler.counts().deferred, 0);
+  });
+
+  it("still starvation-promotes overdue non-history work during a storm", async () => {
+    let nowMs = 0;
+    const scheduler = new TaskScheduler({
+      maxConcurrent: 1,
+      now: () => nowMs,
+      isStormActive: () => true,
+    });
+    const order: string[] = [];
+    const occupyGate = deferred();
+    scheduler.enqueue("history_sync", "occupy", async () => {
+      await occupyGate.promise;
+    });
+    scheduler.enqueue("order_flow", "starved", async () => {
+      order.push("starved");
+    }, 100);
+    nowMs = 200;
+    scheduler.enqueue("critical_reconcile", "newcomer", async () => {
+      order.push("newcomer");
+    });
+    occupyGate.resolve();
+    await scheduler.waitForIdle();
+    assert.deepEqual(order, ["starved", "newcomer"]);
+    assert.equal(scheduler.counts().deferred, 1);
+  });
+
   it("promotes a task past its deadline ahead of nominally higher-priority newcomers (starvation guard)", async () => {
     let nowMs = 0;
     const scheduler = new TaskScheduler({ maxConcurrent: 1, now: () => nowMs });
