@@ -226,18 +226,39 @@ describe("ProjectXApiClient", () => {
   });
 
   it("releases a REST slot quickly for reconcile when storm retrieveBars hangs", { timeout: 15_000 }, async () => {
+    let barsInFlight = false;
+    let retrieveBarsCalls = 0;
     mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("/api/Auth/loginKey")) {
         return new Response(JSON.stringify(loginEnvelope), { status: 200 });
       }
       if (url.includes("/api/History/retrieveBars")) {
-        await new Promise<never>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () => {
+        retrieveBarsCalls += 1;
+        barsInFlight = true;
+        const signal = init?.signal;
+        await new Promise<void>((_resolve, reject) => {
+          const watchdog = setTimeout(() => {
+            reject(new Error("storm retrieveBars was not aborted"));
+          }, 15_000);
+          const fail = (error: Error) => {
+            clearTimeout(watchdog);
+            reject(error);
+          };
+          const onAbort = () => {
             const error = new Error("The operation was aborted");
             error.name = "TimeoutError";
-            reject(error);
-          });
+            fail(error);
+          };
+          if (!signal) {
+            fail(new Error("missing abort signal"));
+            return;
+          }
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
         });
       }
       if (url.includes("/api/Position/searchOpen")) {
@@ -272,11 +293,16 @@ describe("ProjectXApiClient", () => {
       limit: 1,
       includePartialBar: false,
     });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const waitStart = Date.now();
+    while (!barsInFlight && Date.now() - waitStart < 1_000) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(barsInFlight, true);
     const startedMs = Date.now();
     const positions = await client.searchOpenPositions(101);
     assert.deepEqual(positions, []);
     assert.ok(Date.now() - startedMs < 8_000);
     await assert.rejects(bars);
+    assert.equal(retrieveBarsCalls, 1);
   });
 });
