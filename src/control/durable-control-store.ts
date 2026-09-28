@@ -34,6 +34,12 @@ export interface StoredControlCommand extends ControlCommand {
 export class DurableControlStore {
   private readonly database: DatabaseSync;
   private readonly writeLatency = new SqliteWriteLatencyTracker();
+  private healthCache: {
+    status: Record<ControlStatus, number>;
+    hasPendingFlatten: boolean;
+    oldestPendingFlattenCreatedUtc: string | null;
+  } | null = null;
+  private healthCacheStale = true;
 
   public constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -70,6 +76,63 @@ export class DurableControlStore {
     return this.writeLatency.metrics();
   }
 
+  /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
+  public refreshHealthCache(): void {
+    const status = this.status();
+    const oldestRow = this.database.prepare(`
+      SELECT MIN(created_utc) AS oldest
+      FROM control_commands
+      WHERE status IN ('pending', 'applying')
+        AND json_extract(payload_json, '$.action') = 'flatten'
+    `).get() as { oldest: string | null } | undefined;
+    const pendingRow = this.database.prepare(`
+      SELECT 1 AS present
+      FROM control_commands
+      WHERE status IN ('pending', 'applying')
+        AND json_extract(payload_json, '$.action') = 'flatten'
+      LIMIT 1
+    `).get() as { present: number } | undefined;
+    this.healthCache = {
+      status,
+      hasPendingFlatten: Boolean(pendingRow),
+      oldestPendingFlattenCreatedUtc: oldestRow?.oldest ?? null,
+    };
+    this.healthCacheStale = false;
+  }
+
+  public isHealthCacheStale(): boolean {
+    return this.healthCacheStale;
+  }
+
+  public isHealthCacheWarmed(): boolean {
+    return this.healthCache !== null;
+  }
+
+  /** Health-only: never opens SQLite. */
+  public peekStatus(): Record<ControlStatus, number> {
+    return this.healthCache?.status ?? {
+      pending: 0,
+      applying: 0,
+      completed: 0,
+      rejected: 0,
+      failed: 0,
+    };
+  }
+
+  /** Health-only: never opens SQLite. */
+  public peekHasPendingFlatten(): boolean {
+    return this.healthCache?.hasPendingFlatten ?? false;
+  }
+
+  /** Health-only: never opens SQLite. */
+  public peekOldestPendingFlattenAgeMs(nowMs = Date.now()): number | null {
+    const oldest = this.healthCache?.oldestPendingFlattenCreatedUtc;
+    if (!oldest) {
+      return null;
+    }
+    return Math.max(0, nowMs - Date.parse(oldest));
+  }
+
   public submit(command: ControlCommand, nowUtc = new Date().toISOString()): StoredControlCommand {
     validateControlCommand(command);
     const payloadJson = JSON.stringify(command);
@@ -98,6 +161,7 @@ export class DurableControlStore {
         nowUtc,
       );
     });
+    this.healthCacheStale = true;
     return this.get(command.control_id)!;
   }
 
@@ -118,6 +182,7 @@ export class DurableControlStore {
     } finally {
       this.writeLatency.observe(startedMs);
     }
+    this.healthCacheStale = true;
     return this.get(controlId)!;
   }
 
@@ -134,6 +199,7 @@ export class DurableControlStore {
     } finally {
       this.writeLatency.observe(startedMs);
     }
+    this.healthCacheStale = true;
     return changes === 1 ? this.get(controlId) : null;
   }
 

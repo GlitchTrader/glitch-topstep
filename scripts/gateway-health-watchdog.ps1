@@ -49,6 +49,41 @@ function Get-Health {
     }
 }
 
+# Unauthenticated /health is liveness-only (no SQLite stores). Distinguishes wedged handler from dead process.
+function Get-Liveness {
+    try {
+        return Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 2
+    } catch {
+        return $null
+    }
+}
+
+function Format-SqliteWriteLatency {
+    param($Health)
+    if ($null -eq $Health -or $null -eq $Health.sqlite_write_latency) {
+        return "sqlite_write_latency=unavailable"
+    }
+    $sw = $Health.sqlite_write_latency
+    $execMax = $sw.execution.max_write_latency_ms
+    $ctrlMax = $sw.control.max_write_latency_ms
+    $outMax = $sw.outcome_feed.max_write_latency_ms
+    $evidMax = $sw.evidence_queue.max_write_latency_ms
+    $build = $Health.health_build_ms
+    return "health_build_ms=$build exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax"
+}
+
+function Write-HealthUnreachableProbe {
+    param([string]$Token)
+    $liveness = Get-Liveness
+    $livenessPart = if ($null -eq $liveness) {
+        "liveness=unreachable"
+    } else {
+        "liveness=ok status=$([string]$liveness.status)"
+    }
+    # Auth /health already failed; record that write-latency telemetry could not be sampled this tick.
+    Write-WatchdogLog "health_unreachable auth_health=timeout $livenessPart sqlite_write_latency=unavailable note=telemetry_blocked_by_health_stall"
+}
+
 # Keep in sync with src/observability/gateway-watchdog-policy.ts (tests/gateway-watchdog-policy.test.ts).
 function Test-RecoveryProgressFresh {
     param($Recovery, $Now)
@@ -154,6 +189,9 @@ try {
     $token = Read-LocalToken
     $health = Get-Health -Token $token
     $now = [DateTimeOffset]::UtcNow
+    if ($null -eq $health) {
+        Write-HealthUnreachableProbe -Token $token
+    }
     $cause = Get-WatchdogRestartCause -Health $health
     $dead = Test-WatchdogRecoveryNeeded -Health $health
 
@@ -175,7 +213,8 @@ try {
         $state.first_dead_utc = $null
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
         $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
-        Write-WatchdogLog "ok status=$status cause=$cause"
+        $latency = Format-SqliteWriteLatency -Health $health
+        Write-WatchdogLog "ok status=$status cause=$cause $latency"
         exit 0
     }
 

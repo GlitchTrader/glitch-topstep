@@ -142,6 +142,32 @@ export class TradeOutcomeStore {
     };
   }
 
+  /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
+  public refreshHealthCache(): void {
+    this.feed.refreshHealthCache();
+  }
+
+  public isHealthCacheStale(): boolean {
+    return this.feed.isHealthCacheStale();
+  }
+
+  public isHealthCacheWarmed(): boolean {
+    return this.feed.isHealthCacheWarmed();
+  }
+
+  /** Health-only: memory fields + cached feed status; never opens SQLite. */
+  public peekStatus(): TradeOutcomeStoreStatus {
+    return {
+      pending: this.pending.size,
+      last_write_error: this.lastWriteError,
+      export_backlog: this.exportBacklog,
+      export_failures: this.exportFailures,
+      last_export_error: this.lastExportError,
+      quarantine: this.quarantine,
+      feed: this.feed.peekStatus(),
+    };
+  }
+
   public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
     return this.feed.writeLatencyMetrics();
   }
