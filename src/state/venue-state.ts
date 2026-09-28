@@ -95,8 +95,16 @@ interface Timed<T> {
   receivedAt: string;
 }
 
+/** Same default as GLITCH_MAX_QUOTE_AGE_MS / risk.maxQuoteAgeMs. */
+export const DEFAULT_MAX_QUOTE_AGE_MS = 5_000;
+
 function nowUtc(): string {
   return new Date().toISOString();
+}
+
+function quoteUsableForPnl(quote: QuoteInfo, nowMs: number, maxQuoteAgeMs: number): boolean {
+  const ageMs = nowMs - Date.parse(quote.timestamp);
+  return Number.isFinite(ageMs) && ageMs <= maxQuoteAgeMs;
 }
 
 function initialStream(generation: number): VenueOperationalStatus["userStream"] {
@@ -125,6 +133,7 @@ export class VenueStateStore {
   private positionSnapshotAt = new Date(0).toISOString();
   private orderSnapshotAt = new Date(0).toISOString();
   private generation = 1;
+  private maxQuoteAgeMs = DEFAULT_MAX_QUOTE_AGE_MS;
   private evidenceBacklogDegraded = false;
   private userStream = initialStream(this.generation);
   private marketStream = initialStream(this.generation);
@@ -199,6 +208,10 @@ export class VenueStateStore {
     this.quotes.set(quote.contractId, { value: quote, receivedAt });
   }
 
+  public setMaxQuoteAgeMs(maxQuoteAgeMs: number): void {
+    this.maxQuoteAgeMs = maxQuoteAgeMs;
+  }
+
   public lastQuoteReceivedAt(contractId: string): string | null {
     return this.quotes.get(contractId)?.receivedAt ?? null;
   }
@@ -263,11 +276,11 @@ export class VenueStateStore {
   }
 
   /**
-   * Incomplete BBO (missing bestBid/bestAsk): drop quote evidence so quote_state/eligibility
-   * block new exposure without faking a SignalR gap or invalidating reconciliation proof.
+   * Incomplete BBO (missing bestBid/bestAsk): keep last complete quote so
+   * quote_missing vs quote_stale stays honest. PnL ignores stale marks
+   * (same ceiling as quote_stale) — delete is not the safety mechanism.
    */
-  public markQuoteBboIncomplete(contractId: string, error?: unknown, at = nowUtc()): void {
-    this.quotes.delete(contractId);
+  public markQuoteBboIncomplete(_contractId: string, error?: unknown, at = nowUtc()): void {
     this.quoteBboIncompleteTotal += 1;
     this.quoteBboIncompleteLastAt = at;
     this.quoteBboIncompleteLastError = this.errorText(error ?? "quote_bbo_incomplete");
@@ -337,7 +350,7 @@ export class VenueStateStore {
     };
   }
 
-  public buildSnapshot(accountId: number, contractId: string): AccountVenueSnapshot {
+  public buildSnapshot(accountId: number, contractId: string, now: Date = new Date()): AccountVenueSnapshot {
     const account = this.accounts.get(accountId);
     const contract = this.contracts.get(contractId);
     if (!account) {
@@ -347,6 +360,7 @@ export class VenueStateStore {
       throw new Error(`contract_not_loaded:${contractId}`);
     }
 
+    const nowMs = now.getTime();
     const quote = this.quotes.get(contractId)?.value ?? null;
     const positions = [...this.positions.values()]
       .map((entry) => entry.value)
@@ -367,6 +381,10 @@ export class VenueStateStore {
       const positionQuote = this.quotes.get(position.contractId)?.value;
       if (!positionQuote) {
         positionDataIssues.add(`position_quote_missing:${position.contractId}`);
+        return sum;
+      }
+      if (!quoteUsableForPnl(positionQuote, nowMs, this.maxQuoteAgeMs)) {
+        positionDataIssues.add(`position_quote_stale:${position.contractId}`);
         return sum;
       }
       const pointValue = positionContract.tickValue / positionContract.tickSize;

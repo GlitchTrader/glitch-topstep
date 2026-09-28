@@ -55,7 +55,7 @@ function readyState(): VenueStateStore {
 
 describe("venue state truth", () => {
   it("computes conservative PnL only when streams and reconciliation agree", () => {
-    const snapshot = readyState().buildSnapshot(1, "MNQ");
+    const snapshot = readyState().buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.unrealizedPnl, 40);
     assert.equal(snapshot.conservativeEquity, 140);
     assert.equal(snapshot.stateComplete, true);
@@ -65,36 +65,36 @@ describe("venue state truth", () => {
   it("invalidates completeness during reconnect until current reconciliation lands", () => {
     const state = readyState();
     state.markStreamReconnecting("market", new Error("lost"));
-    let snapshot = state.buildSnapshot(1, "MNQ");
+    let snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.stateComplete, false);
     assert.ok(snapshot.stateIssues.includes("market_stream_reconnecting"));
 
     state.markStreamConnected("market");
     state.markStreamEvent("market");
-    snapshot = state.buildSnapshot(1, "MNQ");
+    snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.ok(snapshot.stateIssues.includes("reconciliation_not_current"));
 
     state.markReconciliationStarted();
     state.markReconciliationSucceeded();
-    assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
+    assert.equal(state.buildSnapshot(1, "MNQ", new Date(stamp)).stateComplete, true);
   });
 
   it("keeps evidence backlog visible while the persistence queue is shedding", () => {
     const state = readyState();
     state.markEvidenceBacklog(true);
     state.markStreamEvent("market");
-    const degraded = state.buildSnapshot(1, "MNQ");
+    const degraded = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(degraded.stateComplete, false);
     assert.ok(degraded.stateIssues.includes("provider_evidence_backlog"));
 
     state.markEvidenceBacklog(false);
-    assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
+    assert.equal(state.buildSnapshot(1, "MNQ", new Date(stamp)).stateComplete, true);
   });
 
   it("stays current while a reconciliation cycle is in flight", () => {
     const state = readyState();
     state.markReconciliationStarted();
-    const snapshot = state.buildSnapshot(1, "MNQ");
+    const snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.ok(!snapshot.stateIssues.includes("reconciliation_not_current"));
     assert.equal(snapshot.operational.reconciliation.state, "running");
   });
@@ -125,7 +125,7 @@ describe("venue state truth", () => {
     state.replacePositions([], freshAt);
     state.replaceOrders([], freshAt);
 
-    const snapshot = state.buildSnapshot(1, "MNQ");
+    const snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.capturedAt, freshAt);
   });
 
@@ -133,7 +133,7 @@ describe("venue state truth", () => {
     const state = readyState();
     const generationBefore = state.operationalStatus().generation;
     state.markPayloadFault("user", new Error("contract mismatch"));
-    const snapshot = state.buildSnapshot(1, "MNQ");
+    const snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.stateComplete, false);
     assert.equal(snapshot.operational.userStream.state, "degraded");
     assert.match(snapshot.operational.userStream.lastError ?? "", /contract mismatch/);
@@ -172,7 +172,7 @@ describe("venue state truth", () => {
       },
     ], stamp);
 
-    let snapshot = state.buildSnapshot(1, "MNQ");
+    let snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.stateComplete, false);
     assert.ok(snapshot.stateIssues.includes("position_quote_missing:MES"));
     assert.equal(snapshot.unrealizedPnl, 40);
@@ -189,7 +189,7 @@ describe("venue state truth", () => {
       volume: 2_000,
       timestamp: stamp,
     }, stamp);
-    snapshot = state.buildSnapshot(1, "MNQ");
+    snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.stateComplete, true);
     assert.equal(snapshot.unrealizedPnl, 35);
     assert.equal(snapshot.conservativeEquity, 135);
@@ -229,7 +229,7 @@ describe("venue state truth", () => {
 
     const state = readyState();
     state.replacePositions(positions, stamp);
-    const snapshot = state.buildSnapshot(1, "MNQ");
+    const snapshot = state.buildSnapshot(1, "MNQ", new Date(stamp));
     assert.equal(snapshot.instrumentOpenContracts, 1);
     assert.equal(snapshot.totalOpenContracts, 1);
   });

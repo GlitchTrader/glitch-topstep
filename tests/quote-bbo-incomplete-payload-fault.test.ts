@@ -89,7 +89,7 @@ function validQuote(overrides: Partial<{
 }
 
 describe("quote BBO incomplete payload fault (no generation thrash)", () => {
-  it("one incomplete BBO clears quote, blocks exposure, keeps generation and reconciliation", () => {
+  it("one incomplete BBO keeps last complete quote, generation and reconciliation", () => {
     const state = readyState();
     const before = state.operationalStatus().generation;
     assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
@@ -101,12 +101,12 @@ describe("quote BBO incomplete payload fault (no generation thrash)", () => {
     assert.equal(state.operationalStatus().generation, before);
     assert.equal(isReconciliationCurrent(snap.operational), true);
     assert.ok(!snap.stateIssues.includes("reconciliation_not_current"));
-    assert.ok(snap.stateIssues.includes("quote_missing"));
+    assert.ok(!snap.stateIssues.includes("quote_missing"));
+    assert.ok(snap.quote);
     assert.equal(snap.operational.marketStream.state, "connected");
-    assert.equal(snap.stateComplete, false);
-    assert.equal(quality.quoteState, "invalid");
-    assert.equal(quality.executionEligibility, "blocked_invalid");
-    assert.equal(quality.riskReductionEligibility, "eligible");
+    assert.equal(snap.stateComplete, true);
+    assert.equal(quality.quoteState, "normal");
+    assert.equal(quality.executionEligibility, "eligible");
     assert.equal(snap.totalOpenContracts, 0);
     assert.equal(snap.openOrders.length, 0);
   });
@@ -133,8 +133,9 @@ describe("quote BBO incomplete payload fault (no generation thrash)", () => {
     assert.equal(state.quoteBboIncompleteTelemetry().total, 1_000);
     assert.equal(isReconciliationCurrent(after), true);
     assert.ok(!snap.stateIssues.includes("reconciliation_not_current"));
-    assert.ok(snap.stateIssues.includes("quote_missing"));
-    assert.equal(snap.stateComplete, false);
+    assert.ok(!snap.stateIssues.includes("quote_missing"));
+    assert.ok(snap.quote);
+    assert.equal(snap.stateComplete, true);
     // Bounded: telemetry is counters only — heap growth must stay well under a pathological Map thrash.
     assert.ok(
       heapAfter - heapBefore < 32 * 1024 * 1024,
@@ -146,7 +147,7 @@ describe("quote BBO incomplete payload fault (no generation thrash)", () => {
     const state = readyState();
     const before = state.operationalStatus().generation;
     state.markQuoteBboIncomplete("MNQ", new Error("quote_bbo_incomplete"), stamp);
-    assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, false);
+    assert.equal(state.buildSnapshot(1, "MNQ").stateComplete, true);
 
     state.applyQuote(validQuote({ timestamp: "2026-09-09T18:00:01Z" }), "2026-09-09T18:00:01Z");
     state.markStreamEvent("market", "2026-09-09T18:00:01Z");
@@ -229,7 +230,7 @@ describe("quote BBO incomplete payload fault (no generation thrash)", () => {
     assert.equal(state.operationalStatus().generation, before);
     assert.equal(isReconciliationCurrent(snap.operational), true);
     assert.ok(!snap.stateIssues.includes("reconciliation_not_current"));
-    assert.equal(snap.stateComplete, false);
+    assert.equal(snap.stateComplete, true);
   });
 
   it("generic markPayloadFault does not bump generation", () => {
