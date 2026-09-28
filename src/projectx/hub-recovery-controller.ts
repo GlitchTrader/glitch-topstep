@@ -55,7 +55,7 @@ export class HubRecoveryController {
 
   public snapshot(): HubRecoverySnapshot {
     return {
-      active: ACTIVE_PHASES.has(this.phase),
+      active: ACTIVE_PHASES.has(this.phase) || this.phase === "failed",
       kind: this.kind,
       phase: this.phase,
       started_at: this.startedAt,
@@ -68,24 +68,27 @@ export class HubRecoveryController {
 
   /**
    * Starts a recovery attempt; returns generation for stale-callback guards.
-   * ponytail: while already in an active phase, keep the current generation.
-   * Bumping it here makes isStaleCallback abort the in-flight pipeline and
-   * retrigger history_sync (TS-STREAM-RECOVERY-01 soak 2026-09-24).
-   * Same-gen onReconnected is coalesced by RecoveryPipelineGate (item 2).
+   * ponytail: retry of the same drop (active or failed) must not reset the
+   * watchdog clock — lastProgressAt only moves via markProgress. A new drop
+   * begins only from connected. Ceiling: same-gen callbacks after fail can
+   * still land until the next connected cycle; markProgress rejects failed.
    */
   public beginAttempt(kind: VenueStreamKind, phase: HubRecoveryPhase, atUtc: string): number {
-    if (ACTIVE_PHASES.has(this.phase)) {
+    if (this.phase === "connected") {
+      this.recoveryGeneration += 1;
       this.attempt += 1;
+      this.kind = kind;
+      this.phase = phase;
+      this.startedAt = atUtc;
       this.lastProgressAt = atUtc;
+      this.deadlineAt = new Date(Date.parse(atUtc) + this.deadlineMs).toISOString();
       return this.recoveryGeneration;
     }
-    this.recoveryGeneration += 1;
     this.attempt += 1;
-    this.kind = kind;
-    this.phase = phase;
-    this.startedAt = atUtc;
-    this.lastProgressAt = atUtc;
-    this.deadlineAt = new Date(Date.parse(atUtc) + this.deadlineMs).toISOString();
+    if (this.phase === "failed") {
+      this.kind = kind;
+      this.phase = phase;
+    }
     return this.recoveryGeneration;
   }
 
@@ -95,6 +98,9 @@ export class HubRecoveryController {
     atUtc: string,
   ): boolean {
     if (this.isStaleCallback(expectedGeneration)) {
+      return false;
+    }
+    if (this.phase === "failed" || this.phase === "connected") {
       return false;
     }
     this.phase = phase;
@@ -115,12 +121,11 @@ export class HubRecoveryController {
     return true;
   }
 
-  public fail(expectedGeneration: number, atUtc: string): boolean {
+  public fail(expectedGeneration: number, _atUtc: string): boolean {
     if (this.isStaleCallback(expectedGeneration)) {
       return false;
     }
     this.phase = "failed";
-    this.lastProgressAt = atUtc;
     return true;
   }
 

@@ -32,7 +32,7 @@ export type TaskPriority =
   | "order_flow"
   | "history_sync";
 
-const PRIORITY_ORDER: readonly TaskPriority[] = [
+export const PRIORITY_ORDER: readonly TaskPriority[] = [
   "critical_reconcile",
   "market_recovery",
   "market_observation",

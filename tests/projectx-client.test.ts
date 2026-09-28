@@ -224,4 +224,59 @@ describe("ProjectXApiClient", () => {
     logProjectXRestDiagnostic({ ...diagnostics[0]!, error_class: "server_error" }, logger);
     assert.deepEqual(levels, ["info", "error", "warn"]);
   });
+
+  it("releases a REST slot quickly for reconcile when storm retrieveBars hangs", { timeout: 15_000 }, async () => {
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/Auth/loginKey")) {
+        return new Response(JSON.stringify(loginEnvelope), { status: 200 });
+      }
+      if (url.includes("/api/History/retrieveBars")) {
+        await new Promise<never>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const error = new Error("The operation was aborted");
+            error.name = "TimeoutError";
+            reject(error);
+          });
+        });
+      }
+      if (url.includes("/api/Position/searchOpen")) {
+        return new Response(JSON.stringify({
+          success: true,
+          errorCode: 0,
+          errorMessage: null,
+          positions: [],
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+
+    const client = new ProjectXApiClient({
+      apiUrl: "https://api.example.com",
+      username: "user",
+      apiKey: "key",
+      requestTimeoutMs: 15_000,
+      rateLimitRetryMs: [0, 5_000, 15_000, 30_000],
+      maxConcurrentRest: 1,
+      operationDeadlineMs: 60_000,
+      isStormActive: () => true,
+    });
+    await client.login();
+    const bars = client.retrieveBars({
+      contractId: "MNQ",
+      live: true,
+      startTime: "2026-01-01T00:00:00Z",
+      endTime: "2026-01-01T01:00:00Z",
+      unit: 2,
+      unitNumber: 1,
+      limit: 1,
+      includePartialBar: false,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const startedMs = Date.now();
+    const positions = await client.searchOpenPositions(101);
+    assert.deepEqual(positions, []);
+    assert.ok(Date.now() - startedMs < 8_000);
+    await assert.rejects(bars);
+  });
 });

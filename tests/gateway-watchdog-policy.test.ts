@@ -112,4 +112,56 @@ describe("gateway watchdog recovery policy", () => {
       recovery,
     }), "recovery_stalled_past_deadline");
   });
+
+  it("restarts a suspect/failed retry loop once clocks go stale", () => {
+    const now = Date.now();
+    const started = new Date(now - 8 * 60 * 1000).toISOString();
+    const recovery = {
+      active: true,
+      kind: "market",
+      phase: "suspect",
+      started_at: started,
+      last_progress_at: started,
+      attempt: 45,
+      deadline_at: new Date(now - 6 * 60 * 1000).toISOString(),
+      generation: 1,
+    };
+    assert.equal(isRecoveryProgressFresh(recovery, now), false);
+    assert.equal(
+      shouldWatchdogRestartGateway({
+        status: "degraded",
+        data_quality: { issues: ["quote_stale", "market_stream_disconnected"] },
+        recovery,
+      }),
+      true,
+    );
+  });
+
+  it("does not restart while recovery has real phase progress inside grace", () => {
+    const now = Date.now();
+    const recovery = {
+      active: true,
+      kind: "market",
+      phase: "resubscribing",
+      started_at: new Date(now - 180_000).toISOString(),
+      last_progress_at: new Date(now - 20_000).toISOString(),
+      attempt: 2,
+      deadline_at: new Date(now - 60_000).toISOString(),
+      generation: 1,
+    };
+    assert.equal(isRecoveryProgressFresh(recovery, now), true);
+    assert.equal(
+      shouldWatchdogRestartGateway({
+        status: "degraded",
+        data_quality: { issues: ["quote_stale", "market_stream_reconnecting"] },
+        recovery,
+      }),
+      false,
+    );
+    assert.equal(watchdogRestartCause({
+      status: "degraded",
+      data_quality: { issues: ["quote_stale", "market_stream_reconnecting"] },
+      recovery,
+    }), "recovery_progress_fresh");
+  });
 });
