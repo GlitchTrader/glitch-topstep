@@ -382,12 +382,12 @@ export class ProjectXRealtimeClient {
       void (async () => {
         const generation = this.hubRecovery[kind].snapshot().generation;
         try {
+          await subscribe();
           this.hubRecovery[kind].markProgress(
             "resubscribing",
             generation,
             new Date().toISOString(),
           );
-          await subscribe();
           this.recordLifecycle(kind, "reconnected_and_subscribed");
           this.state.markStreamConnected(kind);
           await this.options.onReconnected?.({ kind, generation });
@@ -569,12 +569,12 @@ export class ProjectXRealtimeClient {
       await withTimeout(
         (async () => {
           await connection.start();
+          await subscribe();
           this.hubRecovery[kind].markProgress(
             "resubscribing",
             generation,
             new Date().toISOString(),
           );
-          await subscribe();
         })(),
         hubStartTimeoutMs,
         `${kind}_hub_start_timeout`,
