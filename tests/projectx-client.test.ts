@@ -224,4 +224,85 @@ describe("ProjectXApiClient", () => {
     logProjectXRestDiagnostic({ ...diagnostics[0]!, error_class: "server_error" }, logger);
     assert.deepEqual(levels, ["info", "error", "warn"]);
   });
+
+  it("releases a REST slot quickly for reconcile when storm retrieveBars hangs", { timeout: 15_000 }, async () => {
+    let barsInFlight = false;
+    let retrieveBarsCalls = 0;
+    mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/Auth/loginKey")) {
+        return new Response(JSON.stringify(loginEnvelope), { status: 200 });
+      }
+      if (url.includes("/api/History/retrieveBars")) {
+        retrieveBarsCalls += 1;
+        barsInFlight = true;
+        const signal = init?.signal;
+        await new Promise<void>((_resolve, reject) => {
+          const watchdog = setTimeout(() => {
+            reject(new Error("storm retrieveBars was not aborted"));
+          }, 15_000);
+          const fail = (error: Error) => {
+            clearTimeout(watchdog);
+            reject(error);
+          };
+          const onAbort = () => {
+            const error = new Error("The operation was aborted");
+            error.name = "TimeoutError";
+            fail(error);
+          };
+          if (!signal) {
+            fail(new Error("missing abort signal"));
+            return;
+          }
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener("abort", onAbort, { once: true });
+        });
+      }
+      if (url.includes("/api/Position/searchOpen")) {
+        return new Response(JSON.stringify({
+          success: true,
+          errorCode: 0,
+          errorMessage: null,
+          positions: [],
+        }), { status: 200 });
+      }
+      throw new Error(`unexpected ${url}`);
+    });
+
+    const client = new ProjectXApiClient({
+      apiUrl: "https://api.example.com",
+      username: "user",
+      apiKey: "key",
+      requestTimeoutMs: 15_000,
+      rateLimitRetryMs: [0, 5_000, 15_000, 30_000],
+      maxConcurrentRest: 1,
+      operationDeadlineMs: 60_000,
+      isStormActive: () => true,
+    });
+    await client.login();
+    const bars = client.retrieveBars({
+      contractId: "MNQ",
+      live: true,
+      startTime: "2026-01-01T00:00:00Z",
+      endTime: "2026-01-01T01:00:00Z",
+      unit: 2,
+      unitNumber: 1,
+      limit: 1,
+      includePartialBar: false,
+    });
+    const waitStart = Date.now();
+    while (!barsInFlight && Date.now() - waitStart < 1_000) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.equal(barsInFlight, true);
+    const startedMs = Date.now();
+    const positions = await client.searchOpenPositions(101);
+    assert.deepEqual(positions, []);
+    assert.ok(Date.now() - startedMs < 8_000);
+    await assert.rejects(bars);
+    assert.equal(retrieveBarsCalls, 1);
+  });
 });

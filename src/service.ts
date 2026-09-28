@@ -182,6 +182,7 @@ export class GlitchTopstepService {
       username: config.projectX.username,
       apiKey: config.projectX.apiKey,
       diagnostics: projectXConsoleDiagnostics, diagnosticContext: () => projectXDiagnosticContext(this.state, this.config),
+      isStormActive: () => this.isHubRecoveryStorm(),
     });
     this.api = this.authManager.authenticatedClient();
     this.ledger = new JsonlEventStore(config.dataDir);

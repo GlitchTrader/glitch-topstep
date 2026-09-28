@@ -24,6 +24,7 @@ import {
   parseRetryAfterMs,
   shouldRetryPost,
 } from "./retry-policy.js";
+import type { TaskPriority } from "../service/task-scheduler.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 import { randomUUID } from "node:crypto";
 import type {
@@ -45,6 +46,8 @@ export interface ProjectXClientOptions {
   diagnostics?: ProjectXDiagnosticsSink;
   diagnosticContext?: () => ProjectXDiagnosticContext;
   sessionCorrelation?: string;
+  /** Hub recovery storm: shorten background retrieveBars so reconcile can take a REST slot. */
+  isStormActive?: () => boolean;
 }
 
 export interface PlaceOrderRequest {
@@ -103,6 +106,29 @@ interface ApiEnvelope {
 export interface RestCollection<T> {
   items: T[];
   envelope: ApiEnvelope;
+}
+
+const RETRIEVE_BARS_PATH = "/api/History/retrieveBars";
+
+/** ponytail: storm retrieveBars abort; ceiling is one hung fetch, not the 60s retry budget. */
+export const STORM_RETRIEVE_BARS_DEADLINE_MS = 5_000;
+
+function restPriorityForPath(path: string): TaskPriority {
+  if (
+    path === "/api/Account/search"
+    || path === "/api/Position/searchOpen"
+    || path === "/api/Order/searchOpen"
+    || isMutationPath(path)
+  ) {
+    return "critical_reconcile";
+  }
+  if (path === "/api/Trade/search") {
+    return "order_flow";
+  }
+  if (path === RETRIEVE_BARS_PATH) {
+    return "history_sync";
+  }
+  return "market_observation";
 }
 
 export class ProjectXApiClient {
@@ -298,10 +324,15 @@ export class ProjectXApiClient {
 
   private async post(path: string, body: unknown, authenticated = true): Promise<unknown> {
     let lastError: unknown;
-    const maxAttempts = Math.max(1, this.rateLimitRetryMs.length);
+    const stormBars = path === RETRIEVE_BARS_PATH && this.options.isStormActive?.() === true;
+    const deadlineMs = stormBars ? STORM_RETRIEVE_BARS_DEADLINE_MS : this.operationDeadlineMs;
+    const maxAttempts = stormBars ? 1 : Math.max(1, this.rateLimitRetryMs.length);
+    const requestTimeoutMs = stormBars
+      ? Math.min(this.requestTimeoutMs, STORM_RETRIEVE_BARS_DEADLINE_MS)
+      : this.requestTimeoutMs;
     const startedMs = Date.now();
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      if (Date.now() - startedMs >= this.operationDeadlineMs) {
+      if (Date.now() - startedMs >= deadlineMs) {
         this.recordRestDiagnostic(path, startedMs, attempt + 1, new ProjectXApiError(
           "operation_deadline_exceeded",
           `ProjectX ${path} exceeded operation deadline`,
@@ -313,7 +344,10 @@ export class ProjectXApiClient {
       }
       const attemptStartedMs = Date.now();
       try {
-        const result = await this.restGate.run(() => this.postOnce(path, body, authenticated));
+        const result = await this.restGate.run(
+          () => this.postOnce(path, body, authenticated, requestTimeoutMs),
+          restPriorityForPath(path),
+        );
         this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, null, false, null);
         return result;
       } catch (error: unknown) {
@@ -396,7 +430,12 @@ export class ProjectXApiClient {
     });
   }
 
-  private async postOnce(path: string, body: unknown, authenticated = true): Promise<unknown> {
+  private async postOnce(
+    path: string,
+    body: unknown,
+    authenticated = true,
+    requestTimeoutMs = this.requestTimeoutMs,
+  ): Promise<unknown> {
     if (!isMutationPath(path)) {
       this.readCircuit.assertAllows(path);
     }
@@ -412,7 +451,7 @@ export class ProjectXApiClient {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.requestTimeoutMs),
+      signal: AbortSignal.timeout(requestTimeoutMs),
     });
     const text = await readLimitedResponseText(response).catch((error: unknown) => {
       if (error instanceof ResponseTooLargeError) {
