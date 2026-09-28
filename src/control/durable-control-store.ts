@@ -3,6 +3,10 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { TradingMode } from "../domain/models.js";
+import {
+  SqliteWriteLatencyTracker,
+  type SqliteWriteLatencyMetrics,
+} from "../storage/sqlite-write-latency.js";
 
 export type ControlAction = "pause" | "resume" | "set_mode" | "flatten";
 export type ControlStatus = "pending" | "applying" | "completed" | "rejected" | "failed";
@@ -29,6 +33,7 @@ export interface StoredControlCommand extends ControlCommand {
 
 export class DurableControlStore {
   private readonly database: DatabaseSync;
+  private readonly writeLatency = new SqliteWriteLatencyTracker();
 
   public constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -59,6 +64,10 @@ export class DurableControlStore {
 
   public close(): void {
     this.database.close();
+  }
+
+  public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
+    return this.writeLatency.metrics();
   }
 
   public submit(command: ControlCommand, nowUtc = new Date().toISOString()): StoredControlCommand {
@@ -98,22 +107,34 @@ export class DurableControlStore {
     detail: string | null = null,
     nowUtc = new Date().toISOString(),
   ): StoredControlCommand {
-    const result = this.database.prepare(`
-      UPDATE control_commands SET status = ?, detail = ?, updated_utc = ? WHERE control_id = ?
-    `).run(status, detail, nowUtc, controlId);
-    if (Number(result.changes) !== 1) {
-      throw new Error("control_not_found");
+    const startedMs = performance.now();
+    try {
+      const result = this.database.prepare(`
+        UPDATE control_commands SET status = ?, detail = ?, updated_utc = ? WHERE control_id = ?
+      `).run(status, detail, nowUtc, controlId);
+      if (Number(result.changes) !== 1) {
+        throw new Error("control_not_found");
+      }
+    } finally {
+      this.writeLatency.observe(startedMs);
     }
     return this.get(controlId)!;
   }
 
   public claimPending(controlId: string, nowUtc = new Date().toISOString()): StoredControlCommand | null {
-    const result = this.database.prepare(`
-      UPDATE control_commands
-      SET status = 'applying', updated_utc = ?
-      WHERE control_id = ? AND status = 'pending'
-    `).run(nowUtc, controlId);
-    return Number(result.changes) === 1 ? this.get(controlId) : null;
+    const startedMs = performance.now();
+    let changes = 0;
+    try {
+      const result = this.database.prepare(`
+        UPDATE control_commands
+        SET status = 'applying', updated_utc = ?
+        WHERE control_id = ? AND status = 'pending'
+      `).run(nowUtc, controlId);
+      changes = Number(result.changes);
+    } finally {
+      this.writeLatency.observe(startedMs);
+    }
+    return changes === 1 ? this.get(controlId) : null;
   }
 
   public effectiveState(accountId: number, contractId: string): { paused: boolean; mode: TradingMode | null } {
@@ -204,6 +225,7 @@ export class DurableControlStore {
   }
 
   private inTransaction<T>(action: () => T): T {
+    const startedMs = performance.now();
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const result = action();
@@ -212,6 +234,8 @@ export class DurableControlStore {
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
+    } finally {
+      this.writeLatency.observe(startedMs);
     }
   }
 }

@@ -4,6 +4,10 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { applySqliteMigration } from "./sqlite-migration.js";
 import { inSqliteTransaction } from "./sqlite-transaction.js";
+import {
+  SqliteWriteLatencyTracker,
+  type SqliteWriteLatencyMetrics,
+} from "./sqlite-write-latency.js";
 import type {
   ExecutionMutationState,
   ExecutionOperation,
@@ -50,6 +54,7 @@ interface SqlRow {
 
 export class SqliteExecutionStore {
   private readonly database: DatabaseSync;
+  private readonly writeLatency = new SqliteWriteLatencyTracker();
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -65,6 +70,10 @@ export class SqliteExecutionStore {
 
   public close(): void {
     this.database.close();
+  }
+
+  public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
+    return this.writeLatency.metrics();
   }
 
   public recordIssuedPacket(packet: DirectDecisionPacket): void {
@@ -1087,14 +1096,24 @@ export class SqliteExecutionStore {
   }
 
   private setMeta(key: string, value: string | null): void {
-    this.database.prepare(`
-      INSERT INTO runtime_meta(key, value) VALUES (?, ?)
-      ON CONFLICT(key) DO UPDATE SET value = excluded.value
-    `).run(key, value);
+    const startedMs = performance.now();
+    try {
+      this.database.prepare(`
+        INSERT INTO runtime_meta(key, value) VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(key, value);
+    } finally {
+      this.writeLatency.observe(startedMs);
+    }
   }
 
   private inTransaction<T>(action: () => T): T {
-    return inSqliteTransaction(this.database, action);
+    const startedMs = performance.now();
+    try {
+      return inSqliteTransaction(this.database, action);
+    } finally {
+      this.writeLatency.observe(startedMs);
+    }
   }
 
   private parseJson<T>(value: unknown, name: string): T {

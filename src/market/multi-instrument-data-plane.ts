@@ -65,6 +65,7 @@ export class MultiInstrumentMarketDataPlane {
     private readonly liveMarketData = true,
     now: () => Date = () => new Date(),
     sleep?: (ms: number) => Promise<void>,
+    private readonly isStormActive: () => boolean = () => false,
   ) {
     this.scheduler = new RateAwareScheduler(requestsPerMinute, () => now().getTime(), sleep);
     const scheduledApi = {
@@ -219,9 +220,47 @@ export class MultiInstrumentMarketDataPlane {
     contractIds: string[],
     scheduleOptions: HistoryScheduleOptions,
   ): Promise<MarketObservationState[]> {
+    if (this.isStormActive()) {
+      return this.refreshContractsDuringStorm(contractIds, scheduleOptions);
+    }
     return Promise.all(contractIds.map((contractId) => (
       this.observations.get(contractId)!.refresh(scheduleOptions)
     )));
   }
 
+  /**
+   * During hub recovery: serialize timeframes and prefer the operated contract.
+   * Explicit tradeoff: non-operated instruments stay older until the operated one is healthy again.
+   */
+  private async refreshContractsDuringStorm(
+    contractIds: string[],
+    scheduleOptions: HistoryScheduleOptions,
+  ): Promise<MarketObservationState[]> {
+    const serialOptions: HistoryScheduleOptions = {
+      ...scheduleOptions,
+      serializeTimeframes: true,
+    };
+    const operatedFirst = [
+      ...contractIds.filter((id) => id === this.selectedContractId),
+      ...contractIds.filter((id) => id !== this.selectedContractId),
+    ];
+    const results: MarketObservationState[] = [];
+    for (const contractId of operatedFirst) {
+      if (contractId !== this.selectedContractId) {
+        const operated = this.observations.get(this.selectedContractId)?.current();
+        if (!operated || !isOperatedObservationHealthy(operated)) {
+          break;
+        }
+      }
+      results.push(await this.observations.get(contractId)!.refresh(serialOptions));
+    }
+    return results;
+  }
+
+}
+
+function isOperatedObservationHealthy(state: MarketObservationState): boolean {
+  return state.last_error === null
+    && state.observation !== null
+    && state.last_succeeded_utc !== null;
 }

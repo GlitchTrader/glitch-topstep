@@ -6,6 +6,7 @@ import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 const MAX_HOT_OUTCOMES = 2_048;
 import { quarantineCorruptTail, writeFileAtomic, type QuarantineRecord } from "./atomic-file.js";
 import { SqliteOutcomeFeed, type OutcomeFeedStatus, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
+import type { SqliteWriteLatencyMetrics } from "./sqlite-write-latency.js";
 
 export interface TradeOutcomeStoreStatus {
   pending: number;
@@ -139,6 +140,10 @@ export class TradeOutcomeStore {
       quarantine: this.quarantine,
       feed: this.feed.status(),
     };
+  }
+
+  public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
+    return this.feed.writeLatencyMetrics();
   }
 
   public async close(): Promise<void> {

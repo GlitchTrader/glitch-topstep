@@ -9,6 +9,8 @@ export type HistorySchedulePriority = "background" | "packet";
 export interface HistoryScheduleOptions {
   minHeadroom?: number;
   priority?: HistorySchedulePriority;
+  /** During hub recovery storm: fetch timeframes one-by-one instead of Promise.all. */
+  serializeTimeframes?: boolean;
 }
 
 export interface RateAwareSchedulerStatus {

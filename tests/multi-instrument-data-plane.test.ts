@@ -292,4 +292,64 @@ describe("TS-MULTI-02 multi-instrument market data plane", () => {
     assert.equal(finalClose, newerClose);
     assert.ok(finalClose > 10_000);
   });
+
+  it("during hub recovery storm refreshes operated contract serially before others", async () => {
+    const universe = resolveInstrumentUniverse(["MNQ", "MES", "MCL"], AVAILABLE);
+    const time = clock();
+    const order: string[] = [];
+    const dataPlane = new MultiInstrumentMarketDataPlane(
+      {
+        retrieveBars: async (request) => {
+          order.push(`${request.contractId}:${request.unitNumber}`);
+          return bars(request.contractId, request.unitNumber);
+        },
+      },
+      universe,
+      60,
+      "CON.F.US.MNQ.U26",
+      false,
+      time.now,
+      time.sleep,
+      () => true,
+    );
+
+    await dataPlane.refreshAll();
+    const mnqCalls = order.filter((entry) => entry.startsWith("CON.F.US.MNQ.U26:"));
+    assert.deepEqual(mnqCalls, [
+      "CON.F.US.MNQ.U26:1",
+      "CON.F.US.MNQ.U26:5",
+      "CON.F.US.MNQ.U26:15",
+      "CON.F.US.MNQ.U26:60",
+    ]);
+    assert.equal(order[0], "CON.F.US.MNQ.U26:1");
+    assert.ok(order.some((entry) => entry.startsWith("CON.F.US.MES.U26:")));
+  });
+
+  it("during storm skips non-operated refresh while operated observation is unhealthy", async () => {
+    const universe = resolveInstrumentUniverse(["MNQ", "MES"], AVAILABLE);
+    const time = clock();
+    const order: string[] = [];
+    const dataPlane = new MultiInstrumentMarketDataPlane(
+      {
+        retrieveBars: async (request) => {
+          order.push(`${request.contractId}:${request.unitNumber}`);
+          if (request.contractId === "CON.F.US.MNQ.U26") {
+            throw new Error("storm_bars_failed");
+          }
+          return bars(request.contractId, request.unitNumber);
+        },
+      },
+      universe,
+      60,
+      "CON.F.US.MNQ.U26",
+      false,
+      time.now,
+      time.sleep,
+      () => true,
+    );
+
+    await dataPlane.refreshAll();
+    assert.ok(order.every((entry) => entry.startsWith("CON.F.US.MNQ.U26:")));
+    assert.equal(order.filter((entry) => entry.startsWith("CON.F.US.MES.U26:")).length, 0);
+  });
 });

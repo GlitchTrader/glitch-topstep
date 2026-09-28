@@ -111,7 +111,7 @@ export class ProjectXMarketObservationService {
       this.state = { ...this.state, last_attempt_utc: now.toISOString() };
     }
     try {
-      const entries = await Promise.all(TIMEFRAMES.map(async (timeframe) => {
+      const fetchTimeframe = async (timeframe: MarketObservationTimeframeMinutes) => {
         const requestStarted = this.now();
         let bars: BarInfo[];
         try {
@@ -158,7 +158,16 @@ export class ProjectXMarketObservationService {
           error: null,
         });
         return [timeframe, bars.map(toCanonicalMarketBar)] as const;
-      }));
+      };
+      const entries = scheduleOptions.serializeTimeframes
+        ? await (async () => {
+          const out: Array<Awaited<ReturnType<typeof fetchTimeframe>>> = [];
+          for (const timeframe of TIMEFRAMES) {
+            out.push(await fetchTimeframe(timeframe));
+          }
+          return out;
+        })()
+        : await Promise.all(TIMEFRAMES.map((timeframe) => fetchTimeframe(timeframe)));
       if (sequence === this.refreshSequence) {
         this.state = {
           last_attempt_utc: now.toISOString(),

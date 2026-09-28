@@ -3,6 +3,10 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
+import {
+  SqliteWriteLatencyTracker,
+  type SqliteWriteLatencyMetrics,
+} from "./sqlite-write-latency.js";
 
 export type OutcomeRevisionStatus = "provisional" | "enriched" | "corrected";
 
@@ -36,6 +40,7 @@ export interface OutcomeFeedStatus {
 
 export class SqliteOutcomeFeed {
   private readonly database: DatabaseSync;
+  private readonly writeLatency = new SqliteWriteLatencyTracker();
   private integrityCache: OutcomeFeedStatus["integrity"] | null = null;
   private integrityErrorCache: string | null = null;
   private integrityCheckedAtMs = 0;
@@ -74,6 +79,10 @@ export class SqliteOutcomeFeed {
     this.database.close();
   }
 
+  public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
+    return this.writeLatency.metrics();
+  }
+
   public publish(
     outcome: TradeOutcomeV1,
     status: OutcomeRevisionStatus,
@@ -104,6 +113,7 @@ export class SqliteOutcomeFeed {
       };
     }
     const revision = Number(existing?.revision ?? 0) + 1;
+    const startedMs = performance.now();
     this.database.exec("BEGIN IMMEDIATE");
     try {
       const inserted = this.database.prepare(`
@@ -148,6 +158,8 @@ export class SqliteOutcomeFeed {
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
+    } finally {
+      this.writeLatency.observe(startedMs);
     }
   }
 

@@ -329,6 +329,9 @@ export class GlitchTopstepService {
       multi.historyRequestsPerMinute,
       contract.id,
       this.config.scope.liveMarketData,
+      () => new Date(),
+      undefined,
+      () => this.isHubRecoveryStorm(),
     );
     this.orderFlows = new Map(this.instrumentUniverse.contracts.map((candidate) => [
       candidate.contract_id,
@@ -733,6 +736,16 @@ export class GlitchTopstepService {
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
+          sqlite_write_latency: {
+            execution: this.executionStore.writeLatencyMetrics(),
+            control: this.controlStore.writeLatencyMetrics(),
+            outcome_feed: this.tradeOutcomeStore.writeLatencyMetrics(),
+            evidence_queue: {
+              last_write_latency_ms: this.evidenceQueue.metrics().last_write_latency_ms,
+              max_write_latency_ms: this.evidenceQueue.metrics().max_write_latency_ms,
+              write_count: this.evidenceQueue.metrics().persisted,
+            },
+          },
         };
       },
       snapshot,
