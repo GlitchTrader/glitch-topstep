@@ -176,6 +176,7 @@ export class GlitchTopstepService {
 
   public constructor(private readonly config: AppConfig) {
     this.runtimeTradingMode = config.tradingMode;
+    this.state.setMaxQuoteAgeMs(config.risk.maxQuoteAgeMs);
     this.runtimeLock = new RuntimeScopeLock(config.dataDir, config.scope.accountId);
     this.authManager = new ProjectXAuthManager({
       apiUrl: config.projectX.apiUrl,
