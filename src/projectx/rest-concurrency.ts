@@ -7,6 +7,13 @@ export interface RestConcurrencySnapshot {
   max_concurrent: number;
 }
 
+export class RestGateAcquireTimeoutError extends Error {
+  public constructor(message = "rest_gate_acquire_timeout") {
+    super(message);
+    this.name = "RestGateAcquireTimeoutError";
+  }
+}
+
 interface RestWaiter {
   priority: TaskPriority;
   start: () => void;
@@ -33,8 +40,9 @@ export class RestConcurrencyGate {
   public async run<T>(
     work: () => Promise<T>,
     priority: TaskPriority = "history_sync",
+    options?: { acquireTimeoutMs?: number },
   ): Promise<T> {
-    await this.acquire(priority);
+    await this.acquire(priority, options?.acquireTimeoutMs);
     try {
       return await work();
     } finally {
@@ -42,19 +50,42 @@ export class RestConcurrencyGate {
     }
   }
 
-  private acquire(priority: TaskPriority): Promise<void> {
+  private acquire(priority: TaskPriority, acquireTimeoutMs?: number): Promise<void> {
     if (this.inFlight < this.maxConcurrent) {
       this.inFlight += 1;
       return Promise.resolve();
     }
-    return new Promise<void>((resolve) => {
-      this.waiters.push({
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const waiter: RestWaiter = {
         priority,
         start: () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          if (timer !== undefined) {
+            clearTimeout(timer);
+          }
           this.inFlight += 1;
           resolve();
         },
-      });
+      };
+      this.waiters.push(waiter);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (acquireTimeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          const index = this.waiters.indexOf(waiter);
+          if (index >= 0) {
+            this.waiters.splice(index, 1);
+          }
+          reject(new RestGateAcquireTimeoutError());
+        }, Math.max(0, acquireTimeoutMs));
+      }
     });
   }
 

@@ -17,7 +17,7 @@ import {
 } from "./schemas.js";
 import { readLimitedResponseText, ResponseTooLargeError } from "./response-limit.js";
 import { ReadCircuitBreaker } from "./read-circuit-breaker.js";
-import { RestConcurrencyGate } from "./rest-concurrency.js";
+import { RestConcurrencyGate, RestGateAcquireTimeoutError } from "./rest-concurrency.js";
 import {
   isMutationPath,
   operationRetryDelayMs,
@@ -344,14 +344,31 @@ export class ProjectXApiClient {
       }
       const attemptStartedMs = Date.now();
       try {
+        const remainingMs = deadlineMs - (Date.now() - startedMs);
+        if (remainingMs <= 0) {
+          throw new ProjectXApiError(
+            "operation_deadline_exceeded",
+            `ProjectX ${path} exceeded operation deadline`,
+          );
+        }
         const result = await this.restGate.run(
           () => this.postOnce(path, body, authenticated, requestTimeoutMs),
           restPriorityForPath(path),
+          stormBars ? { acquireTimeoutMs: remainingMs } : undefined,
         );
         this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, null, false, null);
         return result;
       } catch (error: unknown) {
-        lastError = error;
+        lastError = error instanceof RestGateAcquireTimeoutError
+          ? new ProjectXApiError(
+            "operation_deadline_exceeded",
+            `ProjectX ${path} exceeded operation deadline waiting for REST gate`,
+          )
+          : error;
+        if (error instanceof RestGateAcquireTimeoutError) {
+          this.recordRestDiagnostic(path, attemptStartedMs, attempt + 1, lastError, false, null);
+          throw lastError;
+        }
         if (!isMutationPath(path)) {
           this.readCircuit.recordFailure(path);
         }

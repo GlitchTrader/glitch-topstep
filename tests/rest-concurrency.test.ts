@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RestConcurrencyGate } from "../src/projectx/rest-concurrency.js";
+import { RestConcurrencyGate, RestGateAcquireTimeoutError } from "../src/projectx/rest-concurrency.js";
 
 test("RestConcurrencyGate snapshot reports in-flight and waiters", async () => {
   const gate = new RestConcurrencyGate(1);
@@ -41,4 +41,24 @@ test("RestConcurrencyGate wakes critical_reconcile ahead of queued retrieveBars"
   releaseHold();
   await Promise.all([hold, bars, reconcile]);
   assert.deepEqual(order, ["hold", "reconcile", "bars"]);
+});
+
+test("RestConcurrencyGate acquireTimeoutMs rejects waiter without consuming a slot", async () => {
+  const gate = new RestConcurrencyGate(1);
+  let releaseHold!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseHold = resolve;
+  });
+  const hold = gate.run(async () => {
+    await held;
+  });
+  await Promise.resolve();
+  await assert.rejects(
+    () => gate.run(async () => undefined, "history_sync", { acquireTimeoutMs: 20 }),
+    (error: unknown) => error instanceof RestGateAcquireTimeoutError,
+  );
+  assert.deepEqual(gate.snapshot(), { in_flight: 1, waiting: 0, max_concurrent: 1 });
+  releaseHold();
+  await hold;
+  assert.deepEqual(gate.snapshot(), { in_flight: 0, waiting: 0, max_concurrent: 1 });
 });
