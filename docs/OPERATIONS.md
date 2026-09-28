@@ -259,6 +259,8 @@ In-process: SignalR auto-reconnect + `restartHub` with a hub-start timeout; mark
 
 Process fallback: `scripts/gateway-health-watchdog.ps1` polls `/health` and restarts via `start.ps1 -SkipBuild` when `degraded` with `quote_stale` plus stuck streams (`connecting` / `disconnected` / `reconnecting`) or `reconciliation_not_current` for ≥3 minutes. Policy: `src/observability/gateway-watchdog-policy.ts`. Register with `powershell -File scripts/install-gateway-watchdog.ps1` (task launches via hidden `wscript` wrapper; logs to `data/gateway-watchdog.log`).
 
+**Required after every `start.ps1` / deploy:** scheduled task `GlitchTopstep_GatewayWatchdog` must be `Ready` or `Running`. `start.ps1` refuses to launch if the task is missing or `Disabled`. Confirm with `Get-ScheduledTask -TaskName GlitchTopstep_GatewayWatchdog`. The #323 recovery clock has no reader without this task.
+
 **Rollback**
 
 1. `GLITCH_TRADING_MODE=shadow` (or stop gateway) — blocks new exposure immediately.

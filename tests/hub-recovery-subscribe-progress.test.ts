@@ -1,24 +1,35 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { VenueStreamKind } from "../src/domain/models.js";
+import {
+  isRecoveryProgressFresh,
+  shouldWatchdogRestartGateway,
+  WATCHDOG_RECOVERY_PROGRESS_GRACE_MS,
+} from "../src/observability/gateway-watchdog-policy.js";
 import { ProjectXRealtimeClient, type SignalRConnection } from "../src/projectx/realtime.js";
-import { isProviderBarLagPublishing } from "../src/projectx/stream-supervisor.js";
 import { VenueStateStore } from "../src/state/venue-state.js";
 
 class FakeHub implements SignalRConnection {
   public startCount = 0;
+  public subscribeShouldFail = false;
   private readonly closeHandlers: Array<(error?: Error) => void> = [];
+  private readonly reconnectedHandlers: Array<(connectionId?: string) => void> = [];
 
   public async start(): Promise<void> {
     this.startCount += 1;
   }
   public async stop(): Promise<void> {}
   public async invoke(): Promise<unknown> {
+    if (this.subscribeShouldFail) {
+      throw new Error("subscribe_failed");
+    }
     return undefined;
   }
   public on(): void {}
   public onreconnecting(): void {}
-  public onreconnected(): void {}
+  public onreconnected(handler: (connectionId?: string) => void): void {
+    this.reconnectedHandlers.push(handler);
+  }
   public onclose(handler: (error?: Error) => void): void {
     this.closeHandlers.push(handler);
   }
@@ -27,18 +38,22 @@ class FakeHub implements SignalRConnection {
       handler(new Error("transport_closed"));
     }
   }
+  public emitReconnected(): void {
+    for (const handler of this.reconnectedHandlers) {
+      handler("conn-1");
+    }
+  }
 }
 
-async function settle(): Promise<void> {
-  for (let index = 0; index < 20; index += 1) {
+async function settle(rounds = 25): Promise<void> {
+  for (let index = 0; index < rounds; index += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
 
-describe("market hub handshake from 1m bar lag", () => {
-  it("does not restart the market hub on close while bars are stale, then handshakes when publishing resumes", async () => {
+describe("hub recovery progress after subscribe", () => {
+  it("does not advance last_progress_at when start succeeds and subscribe fails", async () => {
     const hubs = new Map<VenueStreamKind, FakeHub>();
-    let publishing = false;
     const client = new ProjectXRealtimeClient(
       {
         userHubUrl: "user",
@@ -47,8 +62,10 @@ describe("market hub handshake from 1m bar lag", () => {
         accountId: 101,
         contractId: "CON.F.US.MNQ.Z26",
         evidence: { append: () => undefined },
-        sleep: async () => undefined,
-        isMarketExpectedLive: () => publishing,
+        sleep: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        },
+        hubStartTimeoutMs: 200,
         connectionFactory: (kind) => {
           const hub = new FakeHub();
           hubs.set(kind, hub);
@@ -60,21 +77,55 @@ describe("market hub handshake from 1m bar lag", () => {
 
     await client.start();
     const market = hubs.get("market")!;
-    assert.equal(market.startCount, 1);
+    const t0 = "2026-09-28T14:36:29.000Z";
+    const gen = client.recoveryController("market").beginAttempt("market", "suspect", t0);
+    assert.equal(gen, 1);
+    assert.equal(client.hubRecoverySnapshot("market").last_progress_at, t0);
 
+    market.subscribeShouldFail = true;
     market.emitClose();
-    await settle();
-    assert.equal(market.startCount, 1, "weekend/holiday stale bars must not force market restartHub");
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await client.stop();
 
-    publishing = true;
-    client.notifyMarketDataResumed();
-    await settle();
-    assert.equal(market.startCount, 2, "closed→open bar lag drop must handshake the market hub");
+    const snap = client.hubRecoverySnapshot("market");
+    assert.equal(snap.last_progress_at, t0);
+    assert.ok(market.startCount >= 2);
+    const t0Ms = Date.parse(t0);
+    assert.equal(isRecoveryProgressFresh(snap, t0Ms + WATCHDOG_RECOVERY_PROGRESS_GRACE_MS - 1), true);
+    assert.equal(isRecoveryProgressFresh(snap, t0Ms + WATCHDOG_RECOVERY_PROGRESS_GRACE_MS), false);
+  });
 
+  it("does not advance last_progress_at on SignalR onreconnected when subscribe fails", async () => {
+    const hubs = new Map<VenueStreamKind, FakeHub>();
+    const client = new ProjectXRealtimeClient(
+      {
+        userHubUrl: "user",
+        marketHubUrl: "market",
+        token: () => "token",
+        accountId: 101,
+        contractId: "CON.F.US.MNQ.Z26",
+        evidence: { append: () => undefined },
+        sleep: async () => undefined,
+        connectionFactory: (kind) => {
+          const hub = new FakeHub();
+          hubs.set(kind, hub);
+          return hub;
+        },
+      },
+      new VenueStateStore(),
+    );
+
+    await client.start();
+    const t0 = "2026-09-28T14:36:29.000Z";
+    client.recoveryController("user").beginAttempt("user", "reconnecting", t0);
+    hubs.get("user")!.subscribeShouldFail = true;
+    hubs.get("user")!.emitReconnected();
+    await settle();
+    assert.equal(client.hubRecoverySnapshot("user").last_progress_at, t0);
     await client.stop();
   });
 
-  it("still restarts the market hub on close while bars are publishing", async () => {
+  it("marks resubscribing progress after a complete handshake", async () => {
     const hubs = new Map<VenueStreamKind, FakeHub>();
     const client = new ProjectXRealtimeClient(
       {
@@ -85,7 +136,6 @@ describe("market hub handshake from 1m bar lag", () => {
         contractId: "CON.F.US.MNQ.Z26",
         evidence: { append: () => undefined },
         sleep: async () => undefined,
-        isMarketExpectedLive: () => true,
         connectionFactory: (kind) => {
           const hub = new FakeHub();
           hubs.set(kind, hub);
@@ -96,73 +146,21 @@ describe("market hub handshake from 1m bar lag", () => {
     );
 
     await client.start();
-    const market = hubs.get("market")!;
-    assert.equal(market.startCount, 1);
-    market.emitClose();
+    const t0 = "2026-09-28T14:36:29.000Z";
+    client.recoveryController("market").beginAttempt("market", "reconnecting", t0);
+    hubs.get("market")!.emitReconnected();
     await settle();
-    assert.ok(market.startCount >= 2, "live venue + dead hub must still restartHub");
-    await client.stop();
-  });
-
-  it("does not restart the market hub on close when 1m bar lag is a large finite close", async () => {
-    const hubs = new Map<VenueStreamKind, FakeHub>();
-    const client = new ProjectXRealtimeClient(
-      {
-        userHubUrl: "user",
-        marketHubUrl: "market",
-        token: () => "token",
-        accountId: 101,
-        contractId: "CON.F.US.MNQ.Z26",
-        evidence: { append: () => undefined },
-        sleep: async () => undefined,
-        isMarketExpectedLive: () => isProviderBarLagPublishing(48 * 60 * 60_000),
-        connectionFactory: (kind) => {
-          const hub = new FakeHub();
-          hubs.set(kind, hub);
-          return hub;
-        },
-      },
-      new VenueStateStore(),
+    const snap = client.hubRecoverySnapshot("market");
+    assert.equal(snap.phase, "resubscribing");
+    assert.notEqual(snap.last_progress_at, t0);
+    assert.equal(
+      shouldWatchdogRestartGateway({
+        status: "degraded",
+        data_quality: { issues: ["quote_stale", "market_stream_reconnecting"] },
+        recovery: snap,
+      }),
+      false,
     );
-
-    await client.start();
-    const market = hubs.get("market")!;
-    assert.equal(market.startCount, 1);
-    market.emitClose();
-    await settle();
-    market.emitClose();
-    await settle();
-    assert.equal(market.startCount, 1, "hours of bar lag must abort market restartHub without flapping");
-    await client.stop();
-  });
-
-  it("still restarts the market hub on close when 1m bar lag is unknown", async () => {
-    const hubs = new Map<VenueStreamKind, FakeHub>();
-    const client = new ProjectXRealtimeClient(
-      {
-        userHubUrl: "user",
-        marketHubUrl: "market",
-        token: () => "token",
-        accountId: 101,
-        contractId: "CON.F.US.MNQ.Z26",
-        evidence: { append: () => undefined },
-        sleep: async () => undefined,
-        isMarketExpectedLive: () => isProviderBarLagPublishing(null),
-        connectionFactory: (kind) => {
-          const hub = new FakeHub();
-          hubs.set(kind, hub);
-          return hub;
-        },
-      },
-      new VenueStateStore(),
-    );
-
-    await client.start();
-    const market = hubs.get("market")!;
-    assert.equal(market.startCount, 1);
-    market.emitClose();
-    await settle();
-    assert.ok(market.startCount >= 2, "null bar lag must not abort market restartHub");
     await client.stop();
   });
 });

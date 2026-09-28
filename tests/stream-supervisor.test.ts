@@ -178,15 +178,15 @@ describe("SignalR stream supervisor", () => {
     );
   });
 
-  it("treats 1m bar lag as publishing only while the venue is still printing bars", () => {
-    assert.equal(isProviderBarLagPublishing(null), false);
+  it("treats 1m bar lag as publishing while unknown or still printing, not when lag is a large finite close", () => {
+    assert.equal(isProviderBarLagPublishing(null), true);
     assert.equal(isProviderBarLagPublishing(5_000), true);
     assert.equal(isProviderBarLagPublishing(DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS - 1), true);
     assert.equal(isProviderBarLagPublishing(DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS), false);
     assert.equal(isProviderBarLagPublishing(48 * 60 * 60_000), false);
   });
 
-  it("detects closed-to-open as large bar lag becoming small, not the first sample", () => {
+  it("detects closed-to-open as large bar lag becoming small, not the first sample or unknown current lag", () => {
     assert.equal(didProviderBarPublishingResume({
       previousLagMs: null,
       currentLagMs: 4_000,
@@ -195,6 +195,10 @@ describe("SignalR stream supervisor", () => {
       previousLagMs: 36 * 60 * 60_000,
       currentLagMs: 4_000,
     }), true);
+    assert.equal(didProviderBarPublishingResume({
+      previousLagMs: 36 * 60 * 60_000,
+      currentLagMs: null,
+    }), false);
     assert.equal(didProviderBarPublishingResume({
       previousLagMs: 4_000,
       currentLagMs: 5_000,

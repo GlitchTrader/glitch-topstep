@@ -71,6 +71,20 @@ if ($dotenvValues["GLITCH_TRADING_MODE"] -ne "shadow" -or $env:GLITCH_TRADING_MO
     throw "Refusing start: effective GLITCH_TRADING_MODE must be shadow and must come from the canonical .env."
 }
 
+function Assert-GatewayWatchdogReady {
+    $taskName = "GlitchTopstep_GatewayWatchdog"
+    $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (-not $task) {
+        throw "Refusing start: scheduled task '$taskName' is missing. Register with powershell -File scripts/install-gateway-watchdog.ps1"
+    }
+    $state = [string]$task.State
+    if ($state -ne "Ready" -and $state -ne "Running") {
+        throw "Refusing start: scheduled task '$taskName' is $state. Enable it or re-run scripts/install-gateway-watchdog.ps1"
+    }
+}
+
+Assert-GatewayWatchdogReady
+
 if (-not (Test-Path "node_modules")) {
     npm install
 }

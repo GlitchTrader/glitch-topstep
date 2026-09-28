@@ -15,6 +15,7 @@ export const DEFAULT_STUCK_STREAM_MS = 90_000;
 /**
  * 1m retrieveBars (incl. partial) plus the 60s observation timer: lag below this
  * means the venue is still publishing bars. Weekend/holiday lag is hours.
+ * null lag is unknown (REST miss) — treat as publishing so hub retry continues.
  * Not a calendar — derived from latest_1m_bar vs now (same series as provider_bar_lag_ms).
  */
 export const DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS = 180_000;
@@ -45,22 +46,24 @@ export function hubLivenessWorstCaseMs(
   return livenessMs + (debounceFailures - 1) * checkIntervalMs;
 }
 
-/** Venue still printing 1m bars (REST), independent of SignalR hub liveness. */
+/** Venue still printing 1m bars (REST), independent of SignalR hub liveness.
+ * null = observation unknown (REST congested) — keep trying hub restart. */
 export function isProviderBarLagPublishing(
   providerBarLagMs: number | null,
   maxPublishingLagMs = DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS,
 ): boolean {
-  return providerBarLagMs !== null && providerBarLagMs < maxPublishingLagMs;
+  return providerBarLagMs === null || providerBarLagMs < maxPublishingLagMs;
 }
 
-/** Large (or unknown) bar lag → small: exchange just resumed publishing. First sample is not a resume. */
+/** Large finite bar lag → small: exchange just resumed publishing. First sample and unknown current lag are not a resume. */
 export function didProviderBarPublishingResume(input: {
   previousLagMs: number | null;
   currentLagMs: number | null;
   maxPublishingLagMs?: number;
 }): boolean {
   const maxLagMs = input.maxPublishingLagMs ?? DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS;
-  if (input.previousLagMs === null) {
+  // ponytail: null current is REST-unknown, not "venue reopened" — handshake stays on restartHub retry.
+  if (input.previousLagMs === null || input.currentLagMs === null) {
     return false;
   }
   return !isProviderBarLagPublishing(input.previousLagMs, maxLagMs)
