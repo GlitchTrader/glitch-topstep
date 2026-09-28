@@ -7,6 +7,9 @@ import {
   DEFAULT_STUCK_STREAM_MS,
   hubLivenessWorstCaseMs,
   isHubMarketEventStale,
+  isProviderBarLagPublishing,
+  didProviderBarPublishingResume,
+  DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS,
   livenessCheckIntervalMs,
   nextSignalRReconnectDelayMs,
   shouldForceMarketLivenessRestart,
@@ -78,7 +81,7 @@ describe("SignalR stream supervisor", () => {
     );
   });
 
-  it("does not force restart during maintenance, while hub events are fresh, or on first stale check", () => {
+  it("does not force restart when bars are not publishing, while hub events are fresh, or on first stale check", () => {
     const nowMs = Date.parse("2026-08-13T21:13:00.000Z");
     assert.equal(
       shouldForceMarketLivenessRestart({
@@ -173,6 +176,33 @@ describe("SignalR stream supervisor", () => {
       }),
       false,
     );
+  });
+
+  it("treats 1m bar lag as publishing only while the venue is still printing bars", () => {
+    assert.equal(isProviderBarLagPublishing(null), false);
+    assert.equal(isProviderBarLagPublishing(5_000), true);
+    assert.equal(isProviderBarLagPublishing(DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS - 1), true);
+    assert.equal(isProviderBarLagPublishing(DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS), false);
+    assert.equal(isProviderBarLagPublishing(48 * 60 * 60_000), false);
+  });
+
+  it("detects closed-to-open as large bar lag becoming small, not the first sample", () => {
+    assert.equal(didProviderBarPublishingResume({
+      previousLagMs: null,
+      currentLagMs: 4_000,
+    }), false);
+    assert.equal(didProviderBarPublishingResume({
+      previousLagMs: 36 * 60 * 60_000,
+      currentLagMs: 4_000,
+    }), true);
+    assert.equal(didProviderBarPublishingResume({
+      previousLagMs: 4_000,
+      currentLagMs: 5_000,
+    }), false);
+    assert.equal(didProviderBarPublishingResume({
+      previousLagMs: 36 * 60 * 60_000,
+      currentLagMs: 36 * 60 * 60_000 + 60_000,
+    }), false);
   });
 
   it("forces stuck connecting/disconnected/reconnecting restart after the stuck window", () => {

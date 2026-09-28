@@ -10,6 +10,7 @@ import { trancheLifecycleFact } from "./execution/lifecycle-facts.js";
 import { recoverExecutionMutations } from "./execution/recovery.js";
 import { DecisionPacketService } from "./hermes/packet-service.js";
 import { ProjectXMarketObservationService } from "./market/projectx-observation-service.js";
+import { latest1mBarAgeMs } from "./market/candidate-freshness.js";
 import { ProjectXOrderFlowService } from "./market/projectx-order-flow-service.js";
 import { ProjectXApiClient, ProjectXApiError } from "./projectx/client.js";
 import {
@@ -18,8 +19,13 @@ import {
 } from "./projectx/evidence-write-queue.js";
 import { ProjectXHistorySyncService } from "./projectx/history-sync.js";
 import { ProviderRestSnapshotRecorder } from "./projectx/provider-event-recorder.js";
-import { ProjectXRealtimeClient, signalRLogLevelFromName } from "./projectx/realtime.js"; import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
-import { idleHubRecoverySnapshot } from "./projectx/hub-recovery-controller.js"; import { resolveTopstepSession, resolveTradingDayId } from "./policy/session-calendar.js";
+import { ProjectXRealtimeClient, signalRLogLevelFromName } from "./projectx/realtime.js";
+import { projectXConsoleDiagnostics, projectXDiagnosticContext } from "./projectx/diagnostics.js";
+import {
+  didProviderBarPublishingResume,
+  isProviderBarLagPublishing,
+} from "./projectx/stream-supervisor.js";
+import { idleHubRecoverySnapshot } from "./projectx/hub-recovery-controller.js"; import { resolveTradingDayId } from "./policy/session-calendar.js";
 import {
   buildReconnectProof,
   snapshotReconnectPhase,
@@ -125,6 +131,7 @@ export class GlitchTopstepService {
   private readonly marketObservation: ProjectXMarketObservationService;
   private instrumentUniverse: InstrumentUniverse | null = null;
   private scannerMarketData: MultiInstrumentMarketDataPlane | null = null;
+  private lastProviderBarLagMs: number | null = null;
   private orderFlow: ProjectXOrderFlowService | null = null;
   private orderFlows = new Map<string, ProjectXOrderFlowService>();
   private realtime: ProjectXRealtimeClient | null = null;
@@ -477,7 +484,9 @@ export class GlitchTopstepService {
           this.handleStreamPositionBeforeApply(position, receivedUtc);
         },
         livenessMs: this.config.streamLivenessMs,
-        isMarketExpectedLive: () => resolveTopstepSession(this.config.session).phase !== "maintenance",
+        isMarketExpectedLive: () => isProviderBarLagPublishing(
+          latest1mBarAgeMs(this.currentMarketObservation(), Date.now()),
+        ),
       },
       this.state,
     );
@@ -531,6 +540,7 @@ export class GlitchTopstepService {
     // was still holding.
     this.marketObservationTimer = setInterval(() => {
       if (shouldSkipPeriodicBarsRead(this.authManager.readCircuitStatus())) {
+        this.noteProviderBarLagForHubLiveness();
         return;
       }
       // The scheduler already logs failures via its onError handler; this timer doesn't need
@@ -977,7 +987,22 @@ export class GlitchTopstepService {
   }
 
   private refreshMarketObservations(): Promise<unknown> {
-    return this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
+    const run = this.scannerMarketData?.refreshAll() ?? this.marketObservation.refresh();
+    return run.then((result) => {
+      this.noteProviderBarLagForHubLiveness();
+      return result;
+    });
+  }
+
+  private noteProviderBarLagForHubLiveness(): void {
+    const currentLagMs = latest1mBarAgeMs(this.currentMarketObservation(), Date.now());
+    if (didProviderBarPublishingResume({
+      previousLagMs: this.lastProviderBarLagMs,
+      currentLagMs,
+    })) {
+      this.realtime?.notifyMarketDataResumed();
+    }
+    this.lastProviderBarLagMs = currentLagMs;
   }
 
   /** ponytail: token-bucket packet refresh; parallel per contract; background timer unchanged. */
