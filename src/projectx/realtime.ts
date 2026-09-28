@@ -76,6 +76,7 @@ export interface ProjectXRealtimeOptions {
   livenessMs?: number;
   stuckStreamMs?: number;
   hubStartTimeoutMs?: number;
+  /** True when 1m retrieveBars lag says the venue is publishing. Not a session calendar. */
   isMarketExpectedLive?: () => boolean;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -409,6 +410,12 @@ export class ProjectXRealtimeClient {
         void this.options.onStateInvalidated?.();
         return;
       }
+      // Market hub: do not handshake-storm while retrieveBars says the venue is not publishing.
+      // Resume is notifyMarketDataResumed() when 1m bar lag drops.
+      if (kind === "market" && !this.isMarketPublishing()) {
+        void this.options.onStateInvalidated?.();
+        return;
+      }
       // Automatic reconnect exhausted or close skipped the retry loop — start the hub again.
       void this.restartHub(kind);
     });
@@ -447,7 +454,7 @@ export class ProjectXRealtimeClient {
 
     if (shouldForceMarketLivenessRestart({
       stopped: this.stopped,
-      expectedLive: this.options.isMarketExpectedLive?.() ?? true,
+      expectedLive: this.isMarketPublishing(),
       streamState: market.state,
       lastHubEventAt,
       connectedSinceUtc: market.lastChangedAt,
@@ -459,7 +466,7 @@ export class ProjectXRealtimeClient {
       this.marketLivenessStaleChecks = 0;
       this.recordLifecycleSafely("market", "liveness_restart");
       void this.restartHub("market");
-    } else if (shouldForceStuckStreamRestart({
+    } else if (this.isMarketPublishing() && shouldForceStuckStreamRestart({
       stopped: this.stopped,
       streamState: market.state,
       lastChangedAt: market.lastChangedAt,
@@ -482,6 +489,10 @@ export class ProjectXRealtimeClient {
     }
   }
 
+  private isMarketPublishing(): boolean {
+    return this.options.isMarketExpectedLive?.() ?? true;
+  }
+
   /** One increment path for both hubs. Controllers live here, not in AppService. */
   private beginHubRecovery(kind: VenueStreamKind, phase: HubRecoveryPhase): number {
     return this.hubRecovery[kind].beginAttempt(kind, phase, new Date().toISOString());
@@ -501,6 +512,19 @@ export class ProjectXRealtimeClient {
 
   public lastStreamLifecycleEvent(kind: VenueStreamKind): string | null {
     return this.lastStreamEvent[kind];
+  }
+
+  /**
+   * Bar lag just dropped from "not publishing" to "publishing".
+   * Do not wait for the 5s liveness tick: handshake the market hub now.
+   */
+  public notifyMarketDataResumed(): void {
+    this.marketLivenessStaleChecks = DEFAULT_HUB_LIVENESS_DEBOUNCE_FAILURES;
+    this.checkStreamLiveness();
+    const market = this.state.operationalStatus().marketStream;
+    if (market.state !== "connected" && market.state !== "degraded") {
+      void this.restartHub("market");
+    }
   }
 
   private async restartHub(kind: VenueStreamKind): Promise<void> {
@@ -525,6 +549,9 @@ export class ProjectXRealtimeClient {
       await sleep(delay);
     }
     if (this.stopped) {
+      return;
+    }
+    if (kind === "market" && !this.isMarketPublishing()) {
       return;
     }
     if (!shouldScheduleHubRestart({
@@ -560,7 +587,7 @@ export class ProjectXRealtimeClient {
       this.hubRecovery[kind].fail(generation, new Date().toISOString());
       this.recordLifecycleSafely(kind, "restart_failed", error);
       this.state.markStreamDisconnected(kind, error);
-      retry = !this.stopped;
+      retry = !this.stopped && (kind !== "market" || this.isMarketPublishing());
     } finally {
       this.restartInFlight[kind] = false;
     }

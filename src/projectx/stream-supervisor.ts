@@ -12,6 +12,12 @@ export const DEFAULT_HUB_START_TIMEOUT_MS = 45_000;
  * Must exceed the longest reconnect sleep (60s) plus one start attempt.
  */
 export const DEFAULT_STUCK_STREAM_MS = 90_000;
+/**
+ * 1m retrieveBars (incl. partial) plus the 60s observation timer: lag below this
+ * means the venue is still publishing bars. Weekend/holiday lag is hours.
+ * Not a calendar — derived from latest_1m_bar vs now (same series as provider_bar_lag_ms).
+ */
+export const DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS = 180_000;
 
 export function nextSignalRReconnectDelayMs(previousRetryCount: number): number {
   const last = SIGNALR_RECONNECT_DELAYS_MS.length - 1;
@@ -37,6 +43,28 @@ export function hubLivenessWorstCaseMs(
   checkIntervalMs = DEFAULT_LIVENESS_CHECK_INTERVAL_MS,
 ): number {
   return livenessMs + (debounceFailures - 1) * checkIntervalMs;
+}
+
+/** Venue still printing 1m bars (REST), independent of SignalR hub liveness. */
+export function isProviderBarLagPublishing(
+  providerBarLagMs: number | null,
+  maxPublishingLagMs = DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS,
+): boolean {
+  return providerBarLagMs !== null && providerBarLagMs < maxPublishingLagMs;
+}
+
+/** Large (or unknown) bar lag → small: exchange just resumed publishing. First sample is not a resume. */
+export function didProviderBarPublishingResume(input: {
+  previousLagMs: number | null;
+  currentLagMs: number | null;
+  maxPublishingLagMs?: number;
+}): boolean {
+  const maxLagMs = input.maxPublishingLagMs ?? DEFAULT_PROVIDER_BAR_PUBLISHING_LAG_MS;
+  if (input.previousLagMs === null) {
+    return false;
+  }
+  return !isProviderBarLagPublishing(input.previousLagMs, maxLagMs)
+    && isProviderBarLagPublishing(input.currentLagMs, maxLagMs);
 }
 
 /** Hub alive: any quote, trade, or depth on the market stream (not quote-only). */
