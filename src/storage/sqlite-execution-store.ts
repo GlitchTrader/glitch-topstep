@@ -55,6 +55,8 @@ interface SqlRow {
 export class SqliteExecutionStore {
   private readonly database: DatabaseSync;
   private readonly writeLatency = new SqliteWriteLatencyTracker();
+  private cachedRecoveryStatus: ExecutionRecoveryStatus | null = null;
+  private cachedUnprotectedSinceUtc: string | null | undefined = undefined;
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -498,7 +500,7 @@ export class SqliteExecutionStore {
     const blockingAmbiguity = ambiguousMutations > 0;
     const entrySubmissionPending = this.entrySubmissionIntentId() !== null;
     const unprotectedFlattenBlock = this.meta("unprotected_flatten_block") !== null;
-    return {
+    const status: ExecutionRecoveryStatus = {
       blockingAmbiguity,
       entrySubmissionPending,
       blockingNewExposure: blockingAmbiguity || entrySubmissionPending || unprotectedFlattenBlock,
@@ -507,6 +509,13 @@ export class SqliteExecutionStore {
       lastRecoveryUtc,
       lastRecoveryError,
     };
+    this.cachedRecoveryStatus = status;
+    return status;
+  }
+
+  /** Health-only: never opens SQLite; falls back to a live read only before first refresh. */
+  public peekRecoveryStatus(): ExecutionRecoveryStatus {
+    return this.cachedRecoveryStatus ?? this.recoveryStatus();
   }
 
   public setUnprotectedFlattenBlock(reason: string, atUtc: string): void {
@@ -1082,6 +1091,16 @@ export class SqliteExecutionStore {
     return this.meta("unprotected_since_utc");
   }
 
+  /** Health-only mirror of unprotectedSinceUtc without opening SQLite after first warm. */
+  public peekUnprotectedSinceUtc(): string | null {
+    if (this.cachedUnprotectedSinceUtc !== undefined) {
+      return this.cachedUnprotectedSinceUtc;
+    }
+    const value = this.unprotectedSinceUtc();
+    this.cachedUnprotectedSinceUtc = value;
+    return value;
+  }
+
   public updateUnprotectedSince(unprotectedQty: number, atUtc: string): void {
     if (unprotectedQty > 0) {
       if (!this.meta("unprotected_since_utc")) {
@@ -1102,6 +1121,10 @@ export class SqliteExecutionStore {
         INSERT INTO runtime_meta(key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(key, value);
+      this.cachedRecoveryStatus = null;
+      if (key === "unprotected_since_utc") {
+        this.cachedUnprotectedSinceUtc = value;
+      }
     } finally {
       this.writeLatency.observe(startedMs);
     }
@@ -1110,7 +1133,9 @@ export class SqliteExecutionStore {
   private inTransaction<T>(action: () => T): T {
     const startedMs = performance.now();
     try {
-      return inSqliteTransaction(this.database, action);
+      const result = inSqliteTransaction(this.database, action);
+      this.cachedRecoveryStatus = null;
+      return result;
     } finally {
       this.writeLatency.observe(startedMs);
     }

@@ -603,7 +603,7 @@ export class GlitchTopstepService {
           quoteSource: "projectx_quote_stream",
           observationSucceededUtc: marketObservation?.last_succeeded_utc ?? null,
         });
-        const executionRecovery = this.executionStore.recoveryStatus();
+        const executionRecovery = this.executionStore.peekRecoveryStatus();
         const providerHistory = this.historySync.currentStatus();
         const orderFlow = this.orderFlow?.current() ?? {
           last_attempt_utc: null,
@@ -622,7 +622,6 @@ export class GlitchTopstepService {
           : "disabled";
         const eventLedger = this.ledger.status();
         const outcomeFeed = this.tradeOutcomeStore.status();
-        this.maybePruneAppliedEvidenceOutbox(recordedAt.getTime());
         const protectedReduction = this.coordinator?.protectedReductionHealth(current) ?? {
           active_state: null,
           active_reduction_id: null,
@@ -631,10 +630,6 @@ export class GlitchTopstepService {
           ambiguous_age_ms: null,
           fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
         };
-        this.executionStore.updateUnprotectedSince(
-          protectedReduction.unprotected_open_quantity,
-          recordedAt.toISOString(),
-        );
         const authStatus = this.authStatus();
         const flattenPending = this.controlStore.hasPendingFlatten();
         const controlCounts = this.controlStore.status();
@@ -659,7 +654,7 @@ export class GlitchTopstepService {
           recovery: executionRecovery,
           controlCounts,
           flattenPendingAgeMs: this.controlStore.oldestPendingFlattenAgeMs(recordedAt.getTime()),
-          unprotectedSinceUtc: this.executionStore.unprotectedSinceUtc(),
+          unprotectedSinceUtc: this.executionStore.peekUnprotectedSinceUtc(),
           restSnapshotCache: this.restEvidenceRecorder.cacheMetrics(),
           supervisorGateDivergence: !safetySupervisor.agrees_with_execution_gates,
           now: recordedAt,
@@ -1452,6 +1447,18 @@ export class GlitchTopstepService {
         this.lastMetadataReconcileAt = new Date().toISOString();
       }
       await this.completePendingFlattenControls();
+      const snapshot = this.state.buildSnapshot(
+        this.config.scope.accountId,
+        this.config.scope.contractId,
+      );
+      const protectedReduction = this.coordinator?.protectedReductionHealth(snapshot);
+      this.executionStore.updateUnprotectedSince(
+        protectedReduction?.unprotected_open_quantity ?? 0,
+        new Date().toISOString(),
+      );
+      // Refresh recovery cache off the /health path so peekRecoveryStatus stays current.
+      this.executionStore.recoveryStatus();
+      this.maybePruneAppliedEvidenceOutbox(Date.now());
       this.reconcileConsecutiveFailures = 0;
       this.nextReconcileAttemptAtMs = 0;
     } catch (error) {
