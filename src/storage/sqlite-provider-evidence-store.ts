@@ -72,6 +72,9 @@ export class SqliteProviderEvidenceStore {
   /** Maintained on insert/prune so /health never full-scans provider_events (505k+ rows). */
   private eventCount = 0;
   private marketEventCount = 0;
+  /** Health-only cache; heated by reconcile refreshHealthCache. */
+  private healthStatusCache: ProviderEvidenceStatus | null = null;
+  private healthCacheStale = true;
 
   public constructor(path: string, options: ProviderEvidenceStoreOptions = {}) {
     this.marketEventRetention = integerOption(
@@ -529,6 +532,38 @@ export class SqliteProviderEvidenceStore {
     };
   }
 
+  /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
+  public refreshHealthCache(): void {
+    this.healthStatusCache = this.status();
+    this.healthCacheStale = false;
+  }
+
+  public isHealthCacheStale(): boolean {
+    return this.healthCacheStale;
+  }
+
+  public isHealthCacheWarmed(): boolean {
+    return this.healthStatusCache !== null;
+  }
+
+  /**
+   * Health-only: never opens SQLite.
+   * Cold cache returns an empty sentinel without a live read.
+   */
+  public peekStatus(): ProviderEvidenceStatus {
+    return this.healthStatusCache ?? {
+      eventCount: this.eventCount,
+      marketEventCount: this.marketEventCount,
+      earliestSequence: null,
+      latestSequence: null,
+      latestReceivedUtc: null,
+      marketEventRetention: this.marketEventRetention,
+      marketPruneInterval: this.marketPruneInterval,
+      maximumMarketEventsBetweenPrunes:
+        this.marketEventRetention + this.marketPruneInterval - 1,
+    };
+  }
+
   private refreshCountsFromDb(): void {
     const row = this.database.prepare(`
       SELECT
@@ -589,6 +624,7 @@ export class SqliteProviderEvidenceStore {
     if (source === "projectx_market_stream") {
       this.marketEventCount += 1;
     }
+    this.healthCacheStale = true;
   }
 
   private maybePruneMarketEvent(source: string): void {
@@ -618,6 +654,7 @@ export class SqliteProviderEvidenceStore {
     if (removed > 0) {
       this.eventCount = Math.max(0, this.eventCount - removed);
       this.marketEventCount = Math.max(0, this.marketEventCount - removed);
+      this.healthCacheStale = true;
     }
   }
 

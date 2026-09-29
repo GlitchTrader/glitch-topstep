@@ -85,6 +85,10 @@ import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { HealthAlertTracker } from "./observability/health-alerts.js";
 import { buildHealthLiveness } from "./observability/health-liveness.js";
+import {
+  peekAuthenticatedHealthSqlite,
+  refreshAuthenticatedHealthSqliteCaches,
+} from "./observability/authenticated-health-sqlite.js";
 import { formatLogError } from "./observability/log-sanitize.js";
 import {
   ProjectXAuthManager,
@@ -603,10 +607,15 @@ export class GlitchTopstepService {
           quoteSource: "projectx_quote_stream",
           observationSucceededUtc: marketObservation?.last_succeeded_utc ?? null,
         });
-        const recoveryPeek = this.executionStore.peekRecoveryStatus();
-        const recoveryCacheStale = this.executionStore.isRecoveryCacheStale();
+        const healthSqlite = peekAuthenticatedHealthSqlite({
+          executionStore: this.executionStore,
+          controlStore: this.controlStore,
+          tradeOutcomeStore: this.tradeOutcomeStore,
+          providerEvidenceStore: this.providerEvidenceStore,
+          coordinator: this.coordinator,
+        }, recordedAt.getTime());
         // Fail-closed when reconcile has not heated the cache yet — never live-read SQLite here.
-        const executionRecovery = recoveryPeek ?? {
+        const executionRecovery = healthSqlite.recoveryPeek ?? {
           blockingAmbiguity: false,
           entrySubmissionPending: false,
           blockingNewExposure: true,
@@ -632,18 +641,11 @@ export class GlitchTopstepService {
           ? "enabled"
           : "disabled";
         const eventLedger = this.ledger.status();
-        const outcomeFeed = this.tradeOutcomeStore.peekStatus();
-        const protectedReduction = this.coordinator?.protectedReductionHealth(current) ?? {
-          active_state: null,
-          active_reduction_id: null,
-          unprotected_open_quantity: 0,
-          orphan_protective_orders: 0,
-          ambiguous_age_ms: null,
-          fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
-        };
+        const outcomeFeed = healthSqlite.outcomeFeed;
+        const protectedReduction = healthSqlite.protectedReduction;
         const authStatus = this.authStatus();
-        const flattenPending = this.controlStore.peekHasPendingFlatten();
-        const controlCounts = this.controlStore.peekStatus();
+        const flattenPending = healthSqlite.flattenPending;
+        const controlCounts = healthSqlite.controlCounts;
         const safetySupervisor = evaluateSafetySupervisor({
           snapshot: current,
           risk: this.config.risk,
@@ -664,8 +666,8 @@ export class GlitchTopstepService {
           evidenceQueue: this.evidenceQueue.metrics(),
           recovery: executionRecovery,
           controlCounts,
-          flattenPendingAgeMs: this.controlStore.peekOldestPendingFlattenAgeMs(recordedAt.getTime()),
-          unprotectedSinceUtc: this.executionStore.peekUnprotectedSinceUtc(),
+          flattenPendingAgeMs: healthSqlite.flattenPendingAgeMs,
+          unprotectedSinceUtc: healthSqlite.unprotectedSinceUtc,
           restSnapshotCache: this.restEvidenceRecorder.cacheMetrics(),
           supervisorGateDivergence: !safetySupervisor.agrees_with_execution_gates,
           now: recordedAt,
@@ -682,7 +684,8 @@ export class GlitchTopstepService {
           compatibility: GATEWAY_COMPATIBILITY,
           status:
             quality.stateComplete
-            && recoveryPeek !== null
+            && healthSqlite.recoveryPeek !== null
+            && healthSqlite.protectedReductionHealthCacheWarmed
             && !executionRecovery.blockingAmbiguity
             && providerHistory.lastError === null
             && marketObservation.last_error === null
@@ -712,28 +715,40 @@ export class GlitchTopstepService {
           },
           execution_recovery: executionRecovery,
           execution_recovery_cache: {
-            warmed: recoveryPeek !== null,
-            stale: recoveryCacheStale,
+            warmed: healthSqlite.recoveryPeek !== null,
+            stale: healthSqlite.recoveryCacheStale,
           },
           unprotected_since_cache: {
-            warmed: !this.executionStore.isUnprotectedSinceCacheStale(),
-            stale: this.executionStore.isUnprotectedSinceCacheStale(),
+            warmed: !healthSqlite.unprotectedSinceCacheStale,
+            stale: healthSqlite.unprotectedSinceCacheStale,
           },
           control_health_cache: {
-            warmed: this.controlStore.isHealthCacheWarmed(),
-            stale: this.controlStore.isHealthCacheStale(),
+            warmed: healthSqlite.controlHealthCacheWarmed,
+            stale: healthSqlite.controlHealthCacheStale,
           },
           outcome_health_cache: {
-            warmed: this.tradeOutcomeStore.isHealthCacheWarmed(),
-            stale: this.tradeOutcomeStore.isHealthCacheStale(),
+            warmed: healthSqlite.outcomeHealthCacheWarmed,
+            stale: healthSqlite.outcomeHealthCacheStale,
           },
-          provider_evidence: this.providerEvidenceStore.status(),
+          protected_reduction_health_cache: {
+            warmed: healthSqlite.protectedReductionHealthCacheWarmed,
+            stale: healthSqlite.protectedReductionHealthCacheStale,
+          },
+          execution_facts_health_cache: {
+            warmed: healthSqlite.executionFactsCacheWarmed,
+            stale: healthSqlite.executionFactsCacheStale,
+          },
+          provider_evidence_health_cache: {
+            warmed: healthSqlite.providerEvidenceHealthCacheWarmed,
+            stale: healthSqlite.providerEvidenceHealthCacheStale,
+          },
+          provider_evidence: healthSqlite.providerEvidence,
           provider_evidence_queue: this.evidenceQueue.metrics(),
           provider_history: providerHistory,
           market_observation: marketObservation,
           order_flow: orderFlow,
           outcome_feed: outcomeFeed,
-          execution_facts: this.executionStore.executionFactsStatus(),
+          execution_facts: healthSqlite.executionFacts,
           event_ledger: eventLedger,
           persistence: {
             new_exposure_blocked: !eventLedger.durable,
@@ -1479,15 +1494,21 @@ export class GlitchTopstepService {
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
-      const protectedReduction = this.coordinator?.protectedReductionHealth(snapshot);
+      const healthStores = {
+        executionStore: this.executionStore,
+        controlStore: this.controlStore,
+        tradeOutcomeStore: this.tradeOutcomeStore,
+        providerEvidenceStore: this.providerEvidenceStore,
+        coordinator: this.coordinator,
+      };
+      // Protected-reduction first (same live compute as before); then remaining health peeks.
+      const protectedReduction = refreshAuthenticatedHealthSqliteCaches(healthStores, snapshot);
       this.executionStore.updateUnprotectedSince(
         protectedReduction?.unprotected_open_quantity ?? 0,
         new Date().toISOString(),
       );
-      // Refresh health peeks off the /health path so peeks never live-read SQLite.
+      // updateUnprotectedSince may mark recovery stale via setMeta — re-heat after the write.
       this.executionStore.recoveryStatus();
-      this.controlStore.refreshHealthCache();
-      this.tradeOutcomeStore.refreshHealthCache();
       this.maybePruneAppliedEvidenceOutbox(Date.now());
       this.reconcileConsecutiveFailures = 0;
       this.nextReconcileAttemptAtMs = 0;
