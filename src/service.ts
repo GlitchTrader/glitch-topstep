@@ -685,6 +685,7 @@ export class GlitchTopstepService {
           status:
             quality.stateComplete
             && healthSqlite.recoveryPeek !== null
+            && healthSqlite.protectedReductionHealthCacheWarmed
             && !executionRecovery.blockingAmbiguity
             && providerHistory.lastError === null
             && marketObservation.last_error === null
