@@ -85,6 +85,7 @@ import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { HealthAlertTracker } from "./observability/health-alerts.js";
 import { buildHealthLiveness } from "./observability/health-liveness.js";
+import { EventLoopDelayMonitor } from "./observability/event-loop-delay.js";
 import {
   peekAuthenticatedHealthSqlite,
   refreshAuthenticatedHealthSqliteCaches,
@@ -162,6 +163,8 @@ export class GlitchTopstepService {
   private readonly lifecycle = new LifecycleSupervisor();
   /** Persists across /health polls so hysteresis/dedup state (TS-REAUDIT-11) is real, not per-call. */
   private readonly healthAlerts = new HealthAlertTracker();
+  /** Observe-only event-loop delay (Passo 1 before evidence-writer offload). */
+  private readonly eventLoopDelay = new EventLoopDelayMonitor();
   /** Coordinates the four periodic REST-bound timers below (TS-STREAM-RECOVERY-01 PR-F). */
   private readonly taskScheduler = new TaskScheduler({
     maxConcurrent: 2,
@@ -282,6 +285,10 @@ export class GlitchTopstepService {
   }
 
   private async startResources(): Promise<void> {
+    this.eventLoopDelay.enable();
+    this.lifecycle.register("event_loop_delay", () => {
+      this.eventLoopDelay.disable();
+    });
     await this.authManager.ensureAuthenticated();
     while (true) {
       const pending = this.providerEvidenceStore.loadPendingOutboxEvents(500);
@@ -597,7 +604,12 @@ export class GlitchTopstepService {
       this.config.localGateway,
       (authenticated) => {
         if (!authenticated) {
-          return buildHealthLiveness(GATEWAY_COMPATIBILITY);
+          // Liveness carries event_loop_delay without reset so auth stalls still leave the
+          // delay window visible for watchdog correlation (Passo 1).
+          return {
+            ...buildHealthLiveness(GATEWAY_COMPATIBILITY),
+            event_loop_delay: this.eventLoopDelay.snapshot({ reset: false }),
+          };
         }
         const healthBuildStartMs = performance.now();
         const recordedAt = new Date();
@@ -774,6 +786,8 @@ export class GlitchTopstepService {
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
+          // Reset after auth sample so soak windows measure delay between polls.
+          event_loop_delay: this.eventLoopDelay.snapshot({ reset: true }),
           sqlite_write_latency: {
             execution: this.executionStore.writeLatencyMetrics(),
             control: this.controlStore.writeLatencyMetrics(),

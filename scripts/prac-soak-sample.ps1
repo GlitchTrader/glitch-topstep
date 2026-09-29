@@ -136,6 +136,7 @@ while ((Get-Date) -lt $deadline) {
             market_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "market"
             user_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "user"
             sqlite_write_latency = Get-NoteProperty $health "sqlite_write_latency"
+            event_loop_delay = Get-NoteProperty $health "event_loop_delay"
             execution_recovery_cache = Get-NoteProperty $health "execution_recovery_cache"
             control_health_cache = Get-NoteProperty $health "control_health_cache"
             outcome_health_cache = Get-NoteProperty $health "outcome_health_cache"

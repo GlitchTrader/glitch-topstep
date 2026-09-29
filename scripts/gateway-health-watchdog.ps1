@@ -58,6 +58,15 @@ function Get-Liveness {
     }
 }
 
+function Format-EventLoopDelay {
+    param($Health)
+    if ($null -eq $Health -or $null -eq $Health.event_loop_delay) {
+        return "event_loop_delay=unavailable"
+    }
+    $eld = $Health.event_loop_delay
+    return "event_loop_delay_max_ms=$($eld.max_ms) event_loop_delay_p99_ms=$($eld.p99_ms) event_loop_delay_mean_ms=$($eld.mean_ms)"
+}
+
 function Format-SqliteWriteLatency {
     param($Health)
     if ($null -eq $Health -or $null -eq $Health.sqlite_write_latency) {
@@ -69,7 +78,8 @@ function Format-SqliteWriteLatency {
     $outMax = $sw.outcome_feed.max_write_latency_ms
     $evidMax = $sw.evidence_queue.max_write_latency_ms
     $build = $Health.health_build_ms
-    return "health_build_ms=$build exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax"
+    $eld = Format-EventLoopDelay $Health
+    return "health_build_ms=$build $eld exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax"
 }
 
 function Write-HealthUnreachableProbe {
@@ -80,8 +90,9 @@ function Write-HealthUnreachableProbe {
     } else {
         "liveness=ok status=$([string]$liveness.status)"
     }
-    # Auth /health already failed; record that write-latency telemetry could not be sampled this tick.
-    Write-WatchdogLog "health_unreachable auth_health=timeout $livenessPart sqlite_write_latency=unavailable note=telemetry_blocked_by_health_stall"
+    # Auth /health already failed; liveness may still carry event_loop_delay (no reset) for Passo 1.
+    $eld = Format-EventLoopDelay $liveness
+    Write-WatchdogLog "health_unreachable auth_health=timeout $livenessPart $eld sqlite_write_latency=unavailable note=telemetry_blocked_by_health_stall"
 }
 
 # Keep in sync with src/observability/gateway-watchdog-policy.ts (tests/gateway-watchdog-policy.test.ts).
