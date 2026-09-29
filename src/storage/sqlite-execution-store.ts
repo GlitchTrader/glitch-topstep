@@ -60,6 +60,12 @@ export class SqliteExecutionStore {
   private recoveryCacheStale = true;
   private unprotectedSinceWarmed = false;
   private cachedUnprotectedSinceUtc: string | null = null;
+  private cachedExecutionFactsStatus: {
+    live: number;
+    superseded: number;
+    high_water_sequence: number;
+  } | null = null;
+  private executionFactsCacheStale = true;
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -655,6 +661,7 @@ export class SqliteExecutionStore {
       contentHash,
       diagnosticsJson,
     );
+    this.executionFactsCacheStale = true;
     return { sequence: Number(result.lastInsertRowid), factId, revision, recorded: true };
   }
 
@@ -671,6 +678,7 @@ export class SqliteExecutionStore {
     `).run(atUtc, supersededBy, intentId);
     const count = Number(updated.changes);
     if (count > 0) {
+      this.executionFactsCacheStale = true;
       this.recordExecutionFact({
         intentId,
         phase: "outcome_superseded",
@@ -689,11 +697,39 @@ export class SqliteExecutionStore {
         COALESCE(MAX(sequence), 0) AS high
       FROM execution_facts
     `).get() as { live: number; superseded: number; high: number };
-    return {
+    const status = {
       live: Number(row.live),
       superseded: Number(row.superseded),
       high_water_sequence: Number(row.high),
     };
+    this.cachedExecutionFactsStatus = status;
+    this.executionFactsCacheStale = false;
+    return status;
+  }
+
+  /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
+  public refreshExecutionFactsHealthCache(): void {
+    this.executionFactsStatus();
+  }
+
+  /**
+   * Health-only: never opens SQLite.
+   * null = reconcile has not heated the cache yet (report explicitly; do not live-read).
+   */
+  public peekExecutionFactsStatus(): {
+    live: number;
+    superseded: number;
+    high_water_sequence: number;
+  } | null {
+    return this.cachedExecutionFactsStatus;
+  }
+
+  public isExecutionFactsCacheStale(): boolean {
+    return this.executionFactsCacheStale;
+  }
+
+  public isExecutionFactsCacheWarmed(): boolean {
+    return this.cachedExecutionFactsStatus !== null;
   }
 
   public executionFactsAfter(afterSequence: number, limit = 500): Record<string, unknown> {

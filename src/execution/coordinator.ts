@@ -116,6 +116,12 @@ export class ExecutionCoordinator {
   private executionQueue: Promise<void> = Promise.resolve();
   /** ponytail: in-memory rearm progress; restart clears partial state and may retry once */
   private readonly rearmStates = new Map<string, "stop_placed" | "confirmed">();
+  /**
+   * Health-only cache of protectedReductionHealth. Heated by reconcile; /health peeks only.
+   * Ownership + activeProtectedReduction stay live for execution callers.
+   */
+  private healthProtectedReduction: ProtectedReductionHealth | null = null;
+  private healthProtectedReductionStale = true;
 
   public constructor(
     private readonly config: AppConfig,
@@ -1415,6 +1421,32 @@ export class ExecutionCoordinator {
       accountId: this.config.scope.accountId,
       contractId: this.config.scope.contractId,
     });
+  }
+
+  /**
+   * Live evaluate + heat the health peek cache. Call from reconcile (never from /health).
+   * Same computation as protectedReductionHealth — execution callers keep using that live.
+   */
+  public refreshProtectedReductionHealthCache(
+    snapshot: AccountVenueSnapshot = this.snapshot(),
+  ): ProtectedReductionHealth {
+    const health = this.protectedReductionHealth(snapshot);
+    this.healthProtectedReduction = health;
+    this.healthProtectedReductionStale = false;
+    return health;
+  }
+
+  /** Health-only: never opens execution or ownership SQLite. null = reconcile has not heated. */
+  public peekProtectedReductionHealth(): ProtectedReductionHealth | null {
+    return this.healthProtectedReduction;
+  }
+
+  public isProtectedReductionHealthCacheStale(): boolean {
+    return this.healthProtectedReductionStale;
+  }
+
+  public isProtectedReductionHealthCacheWarmed(): boolean {
+    return this.healthProtectedReduction !== null;
   }
 
   /**
