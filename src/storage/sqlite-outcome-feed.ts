@@ -45,6 +45,8 @@ export class SqliteOutcomeFeed {
   private integrityErrorCache: string | null = null;
   private integrityCheckedAtMs = 0;
   private static readonly INTEGRITY_CACHE_MS = 30_000;
+  private healthStatusCache: OutcomeFeedStatus | null = null;
+  private healthStatusStale = true;
 
   public constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
@@ -160,6 +162,7 @@ export class SqliteOutcomeFeed {
       throw error;
     } finally {
       this.writeLatency.observe(startedMs);
+      this.healthStatusStale = true;
     }
   }
 
@@ -168,6 +171,31 @@ export class SqliteOutcomeFeed {
       SELECT payload_json FROM outcomes_current ORDER BY sequence ASC
     `).all() as Array<{ payload_json: string }>;
     return rows.map((row) => JSON.parse(row.payload_json) as TradeOutcomeV1);
+  }
+
+  /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
+  public refreshHealthCache(): void {
+    this.healthStatusCache = this.status();
+    this.healthStatusStale = false;
+  }
+
+  public isHealthCacheStale(): boolean {
+    return this.healthStatusStale;
+  }
+
+  public isHealthCacheWarmed(): boolean {
+    return this.healthStatusCache !== null;
+  }
+
+  /** Health-only: never opens SQLite. */
+  public peekStatus(): OutcomeFeedStatus {
+    return this.healthStatusCache ?? {
+      current_count: 0,
+      revision_count: 0,
+      high_water_sequence: 0,
+      integrity: "ok",
+      integrity_error: null,
+    };
   }
 
   public status(): OutcomeFeedStatus {

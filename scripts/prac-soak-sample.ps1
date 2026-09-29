@@ -135,6 +135,11 @@ while ((Get-Date) -lt $deadline) {
             data_quality_issues = @(Get-NoteProperty (Get-NoteProperty $health "data_quality") "issues")
             market_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "market"
             user_stream_event = Get-NoteProperty (Get-NoteProperty $health "stream_last_event") "user"
+            sqlite_write_latency = Get-NoteProperty $health "sqlite_write_latency"
+            execution_recovery_cache = Get-NoteProperty $health "execution_recovery_cache"
+            control_health_cache = Get-NoteProperty $health "control_health_cache"
+            outcome_health_cache = Get-NoteProperty $health "outcome_health_cache"
+            process_commit = Get-NoteProperty (Get-NoteProperty $health "process_identity") "commit"
         }
         ($row | ConvertTo-Json -Compress) | Add-Content -Encoding utf8 $samplePath
         $sampleIndex++

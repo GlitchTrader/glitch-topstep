@@ -55,8 +55,11 @@ interface SqlRow {
 export class SqliteExecutionStore {
   private readonly database: DatabaseSync;
   private readonly writeLatency = new SqliteWriteLatencyTracker();
+  /** null = never heated by reconcile; keep last value when writes mark stale. */
   private cachedRecoveryStatus: ExecutionRecoveryStatus | null = null;
-  private cachedUnprotectedSinceUtc: string | null | undefined = undefined;
+  private recoveryCacheStale = true;
+  private unprotectedSinceWarmed = false;
+  private cachedUnprotectedSinceUtc: string | null = null;
 
   public constructor(path: string) {
     if (path !== ":memory:") {
@@ -510,12 +513,20 @@ export class SqliteExecutionStore {
       lastRecoveryError,
     };
     this.cachedRecoveryStatus = status;
+    this.recoveryCacheStale = false;
     return status;
   }
 
-  /** Health-only: never opens SQLite; falls back to a live read only before first refresh. */
-  public peekRecoveryStatus(): ExecutionRecoveryStatus {
-    return this.cachedRecoveryStatus ?? this.recoveryStatus();
+  /**
+   * Health-only: never opens SQLite.
+   * null = reconcile has not heated the cache yet (report explicitly; do not live-read).
+   */
+  public peekRecoveryStatus(): ExecutionRecoveryStatus | null {
+    return this.cachedRecoveryStatus;
+  }
+
+  public isRecoveryCacheStale(): boolean {
+    return this.recoveryCacheStale;
   }
 
   public setUnprotectedFlattenBlock(reason: string, atUtc: string): void {
@@ -1091,14 +1102,13 @@ export class SqliteExecutionStore {
     return this.meta("unprotected_since_utc");
   }
 
-  /** Health-only mirror of unprotectedSinceUtc without opening SQLite after first warm. */
+  /** Health-only: never opens SQLite. Cold cache returns null without a live read. */
   public peekUnprotectedSinceUtc(): string | null {
-    if (this.cachedUnprotectedSinceUtc !== undefined) {
-      return this.cachedUnprotectedSinceUtc;
-    }
-    const value = this.unprotectedSinceUtc();
-    this.cachedUnprotectedSinceUtc = value;
-    return value;
+    return this.cachedUnprotectedSinceUtc;
+  }
+
+  public isUnprotectedSinceCacheStale(): boolean {
+    return !this.unprotectedSinceWarmed;
   }
 
   public updateUnprotectedSince(unprotectedQty: number, atUtc: string): void {
@@ -1121,9 +1131,11 @@ export class SqliteExecutionStore {
         INSERT INTO runtime_meta(key, value) VALUES (?, ?)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
       `).run(key, value);
-      this.cachedRecoveryStatus = null;
+      // Keep last recovery peek; mark stale so /health never falls back to a live SELECT.
+      this.recoveryCacheStale = true;
       if (key === "unprotected_since_utc") {
         this.cachedUnprotectedSinceUtc = value;
+        this.unprotectedSinceWarmed = true;
       }
     } finally {
       this.writeLatency.observe(startedMs);
@@ -1134,7 +1146,7 @@ export class SqliteExecutionStore {
     const startedMs = performance.now();
     try {
       const result = inSqliteTransaction(this.database, action);
-      this.cachedRecoveryStatus = null;
+      this.recoveryCacheStale = true;
       return result;
     } finally {
       this.writeLatency.observe(startedMs);

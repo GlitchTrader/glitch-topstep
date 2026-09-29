@@ -603,7 +603,18 @@ export class GlitchTopstepService {
           quoteSource: "projectx_quote_stream",
           observationSucceededUtc: marketObservation?.last_succeeded_utc ?? null,
         });
-        const executionRecovery = this.executionStore.peekRecoveryStatus();
+        const recoveryPeek = this.executionStore.peekRecoveryStatus();
+        const recoveryCacheStale = this.executionStore.isRecoveryCacheStale();
+        // Fail-closed when reconcile has not heated the cache yet — never live-read SQLite here.
+        const executionRecovery = recoveryPeek ?? {
+          blockingAmbiguity: false,
+          entrySubmissionPending: false,
+          blockingNewExposure: true,
+          unresolvedMutations: 0,
+          ambiguousMutations: 0,
+          lastRecoveryUtc: null,
+          lastRecoveryError: "recovery_cache_unheated",
+        };
         const providerHistory = this.historySync.currentStatus();
         const orderFlow = this.orderFlow?.current() ?? {
           last_attempt_utc: null,
@@ -621,7 +632,7 @@ export class GlitchTopstepService {
           ? "enabled"
           : "disabled";
         const eventLedger = this.ledger.status();
-        const outcomeFeed = this.tradeOutcomeStore.status();
+        const outcomeFeed = this.tradeOutcomeStore.peekStatus();
         const protectedReduction = this.coordinator?.protectedReductionHealth(current) ?? {
           active_state: null,
           active_reduction_id: null,
@@ -631,8 +642,8 @@ export class GlitchTopstepService {
           fail_closed_rollback: process.env.GLITCH_PARTIAL_EXIT_FAIL_CLOSED === "1",
         };
         const authStatus = this.authStatus();
-        const flattenPending = this.controlStore.hasPendingFlatten();
-        const controlCounts = this.controlStore.status();
+        const flattenPending = this.controlStore.peekHasPendingFlatten();
+        const controlCounts = this.controlStore.peekStatus();
         const safetySupervisor = evaluateSafetySupervisor({
           snapshot: current,
           risk: this.config.risk,
@@ -653,7 +664,7 @@ export class GlitchTopstepService {
           evidenceQueue: this.evidenceQueue.metrics(),
           recovery: executionRecovery,
           controlCounts,
-          flattenPendingAgeMs: this.controlStore.oldestPendingFlattenAgeMs(recordedAt.getTime()),
+          flattenPendingAgeMs: this.controlStore.peekOldestPendingFlattenAgeMs(recordedAt.getTime()),
           unprotectedSinceUtc: this.executionStore.peekUnprotectedSinceUtc(),
           restSnapshotCache: this.restEvidenceRecorder.cacheMetrics(),
           supervisorGateDivergence: !safetySupervisor.agrees_with_execution_gates,
@@ -671,6 +682,7 @@ export class GlitchTopstepService {
           compatibility: GATEWAY_COMPATIBILITY,
           status:
             quality.stateComplete
+            && recoveryPeek !== null
             && !executionRecovery.blockingAmbiguity
             && providerHistory.lastError === null
             && marketObservation.last_error === null
@@ -682,7 +694,7 @@ export class GlitchTopstepService {
           trading_mode: this.config.tradingMode,
           runtime_trading_mode: this.runtimeTradingMode,
           operator_paused: this.controlPaused,
-          controls: this.controlStore.status(),
+          controls: controlCounts,
           lifecycle: this.lifecycle.status(),
           gateway_mode: gatewayMode.effective,
           gateway_mode_downgrade_reason: gatewayMode.downgradeReason,
@@ -699,6 +711,22 @@ export class GlitchTopstepService {
             operational: current.operational,
           },
           execution_recovery: executionRecovery,
+          execution_recovery_cache: {
+            warmed: recoveryPeek !== null,
+            stale: recoveryCacheStale,
+          },
+          unprotected_since_cache: {
+            warmed: !this.executionStore.isUnprotectedSinceCacheStale(),
+            stale: this.executionStore.isUnprotectedSinceCacheStale(),
+          },
+          control_health_cache: {
+            warmed: this.controlStore.isHealthCacheWarmed(),
+            stale: this.controlStore.isHealthCacheStale(),
+          },
+          outcome_health_cache: {
+            warmed: this.tradeOutcomeStore.isHealthCacheWarmed(),
+            stale: this.tradeOutcomeStore.isHealthCacheStale(),
+          },
           provider_evidence: this.providerEvidenceStore.status(),
           provider_evidence_queue: this.evidenceQueue.metrics(),
           provider_history: providerHistory,
@@ -1456,8 +1484,10 @@ export class GlitchTopstepService {
         protectedReduction?.unprotected_open_quantity ?? 0,
         new Date().toISOString(),
       );
-      // Refresh recovery cache off the /health path so peekRecoveryStatus stays current.
+      // Refresh health peeks off the /health path so peeks never live-read SQLite.
       this.executionStore.recoveryStatus();
+      this.controlStore.refreshHealthCache();
+      this.tradeOutcomeStore.refreshHealthCache();
       this.maybePruneAppliedEvidenceOutbox(Date.now());
       this.reconcileConsecutiveFailures = 0;
       this.nextReconcileAttemptAtMs = 0;
