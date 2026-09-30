@@ -57,13 +57,83 @@ export function baseWatchdogRecoveryNeeded(health: WatchdogHealthSnapshot): bool
   return quoteStale && (streamStuck || reconciliationStale);
 }
 
+/** One `startup_outbox_drain` log line from the gateway process (before /health exists). */
+export interface StartupOutboxDrainObservation {
+  pending: number;
+  drained_so_far: number;
+  /** Process that emitted the line. A pid change is a new boot, not a stall. */
+  pid?: number;
+}
+
+export type StartupOutboxDrainDecision = "hold" | "stalled" | "absent";
+
+/**
+ * Health is down because the process has not opened the port yet.
+ * Hold while the startup outbox backlog is shrinking. Two samples with no progress are a real stall.
+ * pending === 0 (drain finished) is absent: post-drain hangs still use the normal unreachable grace.
+ */
+export function startupOutboxDrainDecision(
+  previous: StartupOutboxDrainObservation | null,
+  current: StartupOutboxDrainObservation | null,
+): StartupOutboxDrainDecision {
+  if (current === null || current.pending <= 0) {
+    return "absent";
+  }
+  if (previous === null) {
+    return "hold";
+  }
+  if (
+    current.pid !== undefined &&
+    previous.pid !== undefined &&
+    current.pid !== previous.pid
+  ) {
+    return "hold";
+  }
+  const pendingFell = current.pending < previous.pending;
+  const drainedRose = current.drained_so_far > previous.drained_so_far;
+  return pendingFell || drainedRose ? "hold" : "stalled";
+}
+
+/** Parse one stdout line. Keep in sync with the watchdog script. */
+export function parseStartupOutboxDrainLine(line: string): StartupOutboxDrainObservation | null {
+  const match = line.match(/startup_outbox_drain\s+(\{.*\})/);
+  if (!match?.[1]) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(match[1]) as Partial<StartupOutboxDrainObservation>;
+    if (!Number.isFinite(parsed.pending) || !Number.isFinite(parsed.drained_so_far)) {
+      return null;
+    }
+    const pid = Number.isFinite(parsed.pid) ? Number(parsed.pid) : undefined;
+    return {
+      pending: Number(parsed.pending),
+      drained_so_far: Number(parsed.drained_so_far),
+      ...(pid === undefined ? {} : { pid }),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Process-level restart when in-process hub restart cannot recover (network blip / SignalR limbo).
  * Keep in sync with `scripts/gateway-health-watchdog.ps1` Test-WatchdogRecoveryNeeded.
+ * When health is null, a progressing startup outbox drain is not a dead process.
  */
-export function shouldWatchdogRestartGateway(health: WatchdogHealthSnapshot | null): boolean {
+export function shouldWatchdogRestartGateway(
+  health: WatchdogHealthSnapshot | null,
+  startupDrain: {
+    previous: StartupOutboxDrainObservation | null;
+    current: StartupOutboxDrainObservation | null;
+  } | null = null,
+): boolean {
   if (health === null) {
-    return true;
+    const decision = startupOutboxDrainDecision(
+      startupDrain?.previous ?? null,
+      startupDrain?.current ?? null,
+    );
+    return decision !== "hold";
   }
   if (!baseWatchdogRecoveryNeeded(health)) {
     return false;
@@ -83,8 +153,24 @@ export function shouldWatchdogRestartGateway(health: WatchdogHealthSnapshot | nu
   return true;
 }
 
-export function watchdogRestartCause(health: WatchdogHealthSnapshot | null): string {
+export function watchdogRestartCause(
+  health: WatchdogHealthSnapshot | null,
+  startupDrain: {
+    previous: StartupOutboxDrainObservation | null;
+    current: StartupOutboxDrainObservation | null;
+  } | null = null,
+): string {
   if (health === null) {
+    const decision = startupOutboxDrainDecision(
+      startupDrain?.previous ?? null,
+      startupDrain?.current ?? null,
+    );
+    if (decision === "hold") {
+      return "startup_outbox_drain_progressing";
+    }
+    if (decision === "stalled") {
+      return "startup_outbox_drain_stalled";
+    }
     return "health_unreachable";
   }
   if (!baseWatchdogRecoveryNeeded(health)) {

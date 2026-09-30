@@ -166,6 +166,44 @@ function Test-WatchdogRecoveryNeeded {
     return $true
 }
 
+function Get-LatestStartupOutboxDrain {
+    $logPath = Join-Path $RepoRoot "data\gateway.stdout.log"
+    if (-not (Test-Path $logPath)) { return $null }
+    $lines = @(Get-Content $logPath -Tail 400 -ErrorAction SilentlyContinue)
+    for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+        if ($lines[$i] -match 'startup_outbox_drain\s+(\{.*\})') {
+            try {
+                $parsed = $Matches[1] | ConvertFrom-Json
+                $pidValue = 0
+                if ($null -ne $parsed.pid) { $pidValue = [int]$parsed.pid }
+                # A line from a dead PID is the previous boot. Treating it as current
+                # would stall-kill the successor before it logs its own drain.
+                if ($pidValue -gt 0 -and -not (Get-Process -Id $pidValue -ErrorAction SilentlyContinue)) {
+                    return $null
+                }
+                return @{
+                    pending = [int]$parsed.pending
+                    drained_so_far = [int]$parsed.drained_so_far
+                    pid = $pidValue
+                }
+            } catch { return $null }
+        }
+    }
+    return $null
+}
+
+# Keep in sync with startupOutboxDrainDecision in gateway-watchdog-policy.ts.
+function Get-StartupOutboxDrainDecision {
+    param($Previous, $Current)
+    if ($null -eq $Current -or $Current.pending -le 0) { return "absent" }
+    if ($null -eq $Previous) { return "hold" }
+    if ($Current.pid -gt 0 -and $Previous.pid -gt 0 -and $Current.pid -ne $Previous.pid) { return "hold" }
+    if ($Current.pending -lt $Previous.pending -or $Current.drained_so_far -gt $Previous.drained_so_far) {
+        return "hold"
+    }
+    return "stalled"
+}
+
 function Restart-GatewayProcess {
     $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
     foreach ($listener in $listeners) {
@@ -174,6 +212,14 @@ function Restart-GatewayProcess {
             Write-WatchdogLog "stopping PID $procId on :$Port"
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
         }
+    }
+    # Startup drain has not opened the port yet. A listener-only stop would leave the
+    # stuck node holding the runtime lock and the next start would fail closed.
+    $gatewayNodes = @(Get-CimInstance Win32_Process -Filter "Name='node.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'dist[/\\]src[/\\]index\.js' })
+    foreach ($node in $gatewayNodes) {
+        Write-WatchdogLog "stopping gateway PID $($node.ProcessId)"
+        Stop-Process -Id $node.ProcessId -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Seconds 2
     $startScript = Join-Path $RepoRoot "start.ps1"
@@ -203,21 +249,58 @@ try {
     if ($null -eq $health) {
         Write-HealthUnreachableProbe -Token $token
     }
-    $cause = Get-WatchdogRestartCause -Health $health
-    $dead = Test-WatchdogRecoveryNeeded -Health $health
 
     $state = @{
         schema_version = "glitch.topstep.gateway_watchdog.v1"
         first_dead_utc = $null
         last_check_utc = $now.ToString("o")
         last_restart_utc = $null
+        startup_drain_pending = $null
+        startup_drain_drained_so_far = $null
+        startup_drain_pid = $null
     }
     if (Test-Path $StatePath) {
         try {
             $loaded = Get-Content $StatePath -Raw | ConvertFrom-Json
             if ($loaded.first_dead_utc) { $state.first_dead_utc = [string]$loaded.first_dead_utc }
             if ($loaded.last_restart_utc) { $state.last_restart_utc = [string]$loaded.last_restart_utc }
+            if ($null -ne $loaded.startup_drain_pending -and $null -ne $loaded.startup_drain_drained_so_far) {
+                $state.startup_drain_pending = [int]$loaded.startup_drain_pending
+                $state.startup_drain_drained_so_far = [int]$loaded.startup_drain_drained_so_far
+                if ($null -ne $loaded.startup_drain_pid) { $state.startup_drain_pid = [int]$loaded.startup_drain_pid }
+            }
         } catch { }
+    }
+
+    $currentDrain = Get-LatestStartupOutboxDrain
+    $previousDrain = $null
+    if ($null -ne $state.startup_drain_pending) {
+        $previousDrain = @{
+            pending = [int]$state.startup_drain_pending
+            drained_so_far = [int]$state.startup_drain_drained_so_far
+            pid = [int]$state.startup_drain_pid
+        }
+    }
+    $drainDecision = Get-StartupOutboxDrainDecision -Previous $previousDrain -Current $currentDrain
+    if ($null -ne $health -or $drainDecision -eq "absent") {
+        $state.startup_drain_pending = $null
+        $state.startup_drain_drained_so_far = $null
+        $state.startup_drain_pid = $null
+        $drainDecision = "absent"
+    } elseif ($drainDecision -eq "hold" -and $null -ne $currentDrain) {
+        $state.startup_drain_pending = $currentDrain.pending
+        $state.startup_drain_drained_so_far = $currentDrain.drained_so_far
+        $state.startup_drain_pid = [int]$currentDrain.pid
+    }
+
+    $cause = Get-WatchdogRestartCause -Health $health
+    $dead = Test-WatchdogRecoveryNeeded -Health $health
+    if ($null -eq $health -and $drainDecision -eq "hold") {
+        $dead = $false
+        $cause = "startup_outbox_drain_progressing"
+    } elseif ($null -eq $health -and $drainDecision -eq "stalled") {
+        $dead = $true
+        $cause = "startup_outbox_drain_stalled"
     }
 
     if (-not $dead) {
@@ -225,7 +308,24 @@ try {
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
         $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
         $latency = Format-SqliteWriteLatency -Health $health
-        Write-WatchdogLog "ok status=$status cause=$cause $latency"
+        $drainNote = ""
+        if ($cause -eq "startup_outbox_drain_progressing") {
+            $drainNote = " pending=$($currentDrain.pending) drained_so_far=$($currentDrain.drained_so_far)"
+        }
+        Write-WatchdogLog "ok status=$status cause=$cause $latency$drainNote"
+        exit 0
+    }
+
+    if ($cause -eq "startup_outbox_drain_stalled") {
+        Write-WatchdogLog "restarting startup outbox drain stalled pending=$($currentDrain.pending) drained_so_far=$($currentDrain.drained_so_far)"
+        Restart-GatewayProcess
+        $state.first_dead_utc = $null
+        $state.startup_drain_pending = $null
+        $state.startup_drain_drained_so_far = $null
+        $state.startup_drain_pid = $null
+        $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
+        ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
+        Write-WatchdogLog "restart complete"
         exit 0
     }
 

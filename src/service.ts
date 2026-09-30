@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
+import { statSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import type { AppConfig } from "./config.js";
 import type { RecoveredExecutionResolution } from "./domain/execution-state.js";
@@ -284,15 +284,36 @@ export class GlitchTopstepService {
     }
   }
 
-  private async startResources(): Promise<void> {
-    this.eventLoopDelay.enable();
-    this.lifecycle.register("event_loop_delay", () => {
-      this.eventLoopDelay.disable();
-    });
-    await this.authManager.ensureAuthenticated();
+  /**
+   * Replay the identity outbox before listen(). Logs progress so the watchdog can tell
+   * a shrinking backlog from a dead process (no /health yet).
+   */
+  private async drainStartupEvidenceOutbox(): Promise<void> {
+    const logIntervalMs = 5_000;
+    let drainedSoFar = 0;
+    let lastLogMs = 0;
+    const log = (pending: number, force: boolean): void => {
+      const now = Date.now();
+      if (!force && now - lastLogMs < logIntervalMs) {
+        return;
+      }
+      lastLogMs = now;
+      const line = `startup_outbox_drain ${JSON.stringify({
+        pending,
+        drained_so_far: drainedSoFar,
+        pid: process.pid,
+      })}\n`;
+      // writeSync: file-redirected stdout is block-buffered, so console.info would
+      // stay invisible to the watchdog until the buffer fills. Ceiling: one sync
+      // write per log, not per outbox row. Upgrade path: Passo 2 moves appendBatch
+      // off this thread and this drain stops dominating boot.
+      writeSync(1, line);
+    };
+    log(this.providerEvidenceStore.outboxPendingCount(), true);
     while (true) {
       const pending = this.providerEvidenceStore.loadPendingOutboxEvents(500);
       if (pending.length === 0) {
+        log(0, true);
         break;
       }
       for (const event of pending) {
@@ -301,7 +322,18 @@ export class GlitchTopstepService {
       // ponytail: submit only schedules the writer; without await drain this loop never
       // yields, outbox stays pending, and startup busy-hangs before listen().
       await this.evidenceQueue.drain();
+      drainedSoFar += pending.length;
+      log(this.providerEvidenceStore.outboxPendingCount(), false);
     }
+  }
+
+  private async startResources(): Promise<void> {
+    this.eventLoopDelay.enable();
+    this.lifecycle.register("event_loop_delay", () => {
+      this.eventLoopDelay.disable();
+    });
+    await this.authManager.ensureAuthenticated();
+    await this.drainStartupEvidenceOutbox();
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
     const accounts = accountsCol.items;
     const contracts = contractsCol.items;
