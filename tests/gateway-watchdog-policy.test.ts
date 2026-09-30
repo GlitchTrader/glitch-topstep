@@ -4,6 +4,8 @@ import {
   shouldWatchdogRestartGateway,
   watchdogRestartCause,
   isRecoveryProgressFresh,
+  startupOutboxDrainDecision,
+  parseStartupOutboxDrainLine,
 } from "../src/observability/gateway-watchdog-policy.js";
 
 describe("gateway watchdog recovery policy", () => {
@@ -163,5 +165,43 @@ describe("gateway watchdog recovery policy", () => {
       data_quality: { issues: ["quote_stale", "market_stream_reconnecting"] },
       recovery,
     }), "recovery_progress_fresh");
+  });
+
+  it("holds restart while a startup outbox drain is shrinking, even with no /health", () => {
+    const previous = { pending: 5_000, drained_so_far: 1_000 };
+    const current = { pending: 4_500, drained_so_far: 1_500 };
+    assert.equal(startupOutboxDrainDecision(null, current), "hold");
+    assert.equal(startupOutboxDrainDecision(previous, current), "hold");
+    assert.equal(shouldWatchdogRestartGateway(null, { previous, current }), false);
+    assert.equal(
+      watchdogRestartCause(null, { previous, current }),
+      "startup_outbox_drain_progressing",
+    );
+    const line = 'startup_outbox_drain {"pending":4500,"drained_so_far":1500,"pid":38112}';
+    assert.deepEqual(parseStartupOutboxDrainLine(line), { ...current, pid: 38112 });
+    assert.equal(
+      startupOutboxDrainDecision(
+        { pending: 4_000, drained_so_far: 5_000, pid: 21916 },
+        { pending: 9_000, drained_so_far: 0, pid: 38112 },
+      ),
+      "hold",
+    );
+  });
+
+  it("restarts when a startup outbox drain stops making progress", () => {
+    const sample = { pending: 4_500, drained_so_far: 1_500 };
+    assert.equal(startupOutboxDrainDecision(sample, sample), "stalled");
+    assert.equal(shouldWatchdogRestartGateway(null, { previous: sample, current: sample }), true);
+    assert.equal(
+      watchdogRestartCause(null, { previous: sample, current: sample }),
+      "startup_outbox_drain_stalled",
+    );
+  });
+
+  it("still treats unreachable health with no drain evidence as a restart", () => {
+    assert.equal(startupOutboxDrainDecision(null, null), "absent");
+    assert.equal(startupOutboxDrainDecision(null, { pending: 0, drained_so_far: 800 }), "absent");
+    assert.equal(shouldWatchdogRestartGateway(null, null), true);
+    assert.equal(watchdogRestartCause(null), "health_unreachable");
   });
 });
