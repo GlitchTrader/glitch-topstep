@@ -1,4 +1,7 @@
-import { monitorEventLoopDelay, type IntervalHistogram } from "node:perf_hooks";
+import { monitorEventLoopDelay } from "node:perf_hooks";
+
+/** Derived from the runtime return so CI @types/node (Node 22) need not export the name. */
+type IntervalHistogram = ReturnType<typeof monitorEventLoopDelay>;
 
 /**
  * Observe-only event-loop delay for /health (Passo 1 before evidence-writer offload).
