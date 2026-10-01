@@ -7,6 +7,6 @@ import type {
 /** TS-REAUDIT-07: closed-trade projection plus revision feed for paired profile sync. */
 export interface OutcomeProjectionPort {
   publishClosedTranches(input: PublishTradeOutcomeInput): Promise<TradeOutcomeV1[]>;
-  revisionPage(afterSequence: number, limit: number): OutcomeRevisionPage;
+  revisionPage(afterSequence: number, limit: number): OutcomeRevisionPage | Promise<OutcomeRevisionPage>;
   current(): TradeOutcomeV1[];
 }

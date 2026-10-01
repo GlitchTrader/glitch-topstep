@@ -1,6 +1,7 @@
 import type { StoredExecutionMutation } from "../domain/execution-state.js";
 import type { OrderInfo, PositionInfo, TradeIntent } from "../domain/models.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import type { ExecutionRecoveryApi } from "./recovery.js";
 import { buildSystemExitIntent, deterministicIntentId, requiredInteger } from "./system-intent.js";
 
@@ -59,7 +60,7 @@ export function provesBoundedRecoveryOwnership(
 }
 
 export async function attemptBoundedRecoveryFlattens(
-  store: SqliteExecutionStore,
+  store: MayPromise<SqliteExecutionStore>,
   api: ExecutionRecoveryApi,
   accountId: number,
   contractId: string,
@@ -84,7 +85,7 @@ export async function attemptBoundedRecoveryFlattens(
     return { changed: false, resolved: 0, resolutions: [] };
   }
 
-  const ambiguousEntries = store.unresolvedMutations().filter(
+  const ambiguousEntries = (await store.unresolvedMutations()).filter(
     (mutation) => mutation.operation === "place_order" && mutation.state === "ambiguous",
   );
 
@@ -105,7 +106,7 @@ export async function attemptBoundedRecoveryFlattens(
     }
 
     const recoveryIntentId = recoveryFlattenIntentId(entryMutation.intentId);
-    if (store.mutationForIntent(recoveryIntentId)) {
+    if (await store.mutationForIntent(recoveryIntentId)) {
       continue;
     }
 
@@ -117,19 +118,19 @@ export async function attemptBoundedRecoveryFlattens(
       instrument,
       atUtc,
     );
-    store.registerIntent(recoveryIntent, atUtc);
-    store.prepareMutation(
+    await store.registerIntent(recoveryIntent, atUtc);
+    await store.prepareMutation(
       recoveryIntentId,
       "close_position",
       { accountId, contractId },
       null,
       atUtc,
     );
-    store.markMutationSubmitting(recoveryIntentId, atUtc);
+    await store.markMutationSubmitting(recoveryIntentId, atUtc);
     await api.closePosition!(accountId, contractId);
-    store.markMutationSubmitted(recoveryIntentId, null, atUtc);
-    store.markMutationSubmitted(entryMutation.intentId, ownership.providerOrderId, atUtc);
-    store.clearEntrySubmissionLatch(entryMutation.intentId);
+    await store.markMutationSubmitted(recoveryIntentId, null, atUtc);
+    await store.markMutationSubmitted(entryMutation.intentId, ownership.providerOrderId, atUtc);
+    await store.clearEntrySubmissionLatch(entryMutation.intentId);
 
     changed = true;
     resolved += 1;

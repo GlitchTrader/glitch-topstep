@@ -6,6 +6,7 @@ import type { TrancheView } from "../ownership/tranches.js";
 import { reconcilePendingReceipts } from "../execution/receipt-reconciliation.js";
 import { recoverExecutionMutations } from "../execution/recovery.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import type { AccountVenueSnapshot } from "../domain/models.js";
 import type { ExecutionCoordinator } from "../execution/coordinator.js";
@@ -24,12 +25,12 @@ export interface ReconciliationRuntime {
   scope: ReconciliationScope;
   api: ProjectXApiClient;
   state: VenueStateStore;
-  executionStore: SqliteExecutionStore;
+  executionStore: MayPromise<SqliteExecutionStore>;
   ledger: JsonlEventStore;
   coordinator: ExecutionCoordinator | null;
   lastReconciledOpenContracts: number;
   setLastReconciledOpenContracts(value: number): void;
-  resolveClosedTranchesForFlat(beforeOpen: number): TrancheView[];
+  resolveClosedTranchesForFlat(beforeOpen: number): TrancheView[] | Promise<TrancheView[]>;
   recordRestSnapshot(
     kind: string,
     receivedAt: string,
@@ -43,17 +44,17 @@ export interface ReconciliationRuntime {
     exitUtc: string,
     trigger: TradeOutcomeFlatTrigger,
   ): Promise<void>;
-  refreshCachedOpenTranches(openContracts: number): void;
+  refreshCachedOpenTranches(openContracts: number): void | Promise<void>;
   clearCachedOpenTranches(): void;
-  observeTradeExcursion(openContracts: number, unrealizedPnl: number): void;
+  observeTradeExcursion(openContracts: number, unrealizedPnl: number): void | Promise<void>;
   retryIncompleteTradeOutcomes(exitUtc: string): Promise<void>;
   reconcileEntrySubmissionLatch(
     positions: PositionInfo[],
     orders: OrderInfo[],
     receivedUtc: string,
-  ): boolean;
+  ): boolean | Promise<boolean>;
   persistRecoveryResolutions(resolutions: RecoveredExecutionResolution[]): Promise<void>;
-  invalidateIssuedPackets(): void;
+  invalidateIssuedPackets(): void | Promise<void>;
 }
 
 function sortedById<T extends { id: number | string }>(values: T[]): T[] {
@@ -76,7 +77,7 @@ export async function runReconciliationCycle(
     runtime.scope.accountId,
     runtime.scope.contractId,
   ).instrumentOpenContracts;
-  const openTranches = runtime.resolveClosedTranchesForFlat(beforeOpen);
+  const openTranches = await runtime.resolveClosedTranchesForFlat(beforeOpen);
 
   let accounts: AccountInfo[];
   let positions: PositionInfo[];
@@ -172,8 +173,8 @@ export async function runReconciliationCycle(
   }
   runtime.setLastReconciledOpenContracts(afterOpen);
   if (afterOpen > 0) {
-    runtime.refreshCachedOpenTranches(afterOpen);
-    runtime.observeTradeExcursion(
+    await runtime.refreshCachedOpenTranches(afterOpen);
+    await runtime.observeTradeExcursion(
       afterOpen,
       runtime.state.buildSnapshot(
         runtime.scope.accountId,
@@ -185,14 +186,14 @@ export async function runReconciliationCycle(
     await runtime.retryIncompleteTradeOutcomes(receivedAt);
   }
 
-  const latchCleared = runtime.reconcileEntrySubmissionLatch(positions, orders, receivedAt);
+  const latchCleared = await runtime.reconcileEntrySubmissionLatch(positions, orders, receivedAt);
   const positionOpen = positions.some(
     (position) => position.accountId === runtime.scope.accountId
       && position.contractId === runtime.scope.contractId
       && position.type !== 0
       && Math.abs(position.size) > 0,
   );
-  const receiptReconciliation = reconcilePendingReceipts(
+  const receiptReconciliation = await reconcilePendingReceipts(
     runtime.executionStore,
     orders,
     runtime.scope.accountId,
@@ -201,11 +202,12 @@ export async function runReconciliationCycle(
     receivedAt,
     afterOpen,
   );
-  const requiresRecovery = runtime.executionStore.recoveryStatus().unresolvedMutations > 0
-    || runtime.executionStore.terminalMutationsWithoutReceipts().length > 0
-    || runtime.executionStore.intentsWithoutReceiptsOrMutations().length > 0;
+  const recovery = await runtime.executionStore.recoveryStatus();
+  const requiresRecovery = recovery.unresolvedMutations > 0
+    || (await runtime.executionStore.terminalMutationsWithoutReceipts()).length > 0
+    || (await runtime.executionStore.intentsWithoutReceiptsOrMutations()).length > 0;
   if (requiresRecovery) {
-    const before = JSON.stringify(runtime.executionStore.recoveryStatus());
+    const before = JSON.stringify(await runtime.executionStore.recoveryStatus());
     const recovery = await recoverExecutionMutations(
       runtime.executionStore,
       runtime.api,
@@ -220,12 +222,12 @@ export async function runReconciliationCycle(
       },
     );
     await runtime.persistRecoveryResolutions(recovery.resolutions);
-    if (JSON.stringify(runtime.executionStore.recoveryStatus()) !== before) {
-      runtime.invalidateIssuedPackets();
+    if (JSON.stringify(await runtime.executionStore.recoveryStatus()) !== before) {
+      await runtime.invalidateIssuedPackets();
     }
   }
   if (latchCleared || receiptReconciliation.changed) {
-    runtime.invalidateIssuedPackets();
+    await runtime.invalidateIssuedPackets();
   }
   for (const event of receiptReconciliation.events) {
     await runtime.ledger.append({
@@ -237,7 +239,7 @@ export async function runReconciliationCycle(
     });
   }
   if (afterOpen > 0) {
-    runtime.refreshCachedOpenTranches(afterOpen);
+    await runtime.refreshCachedOpenTranches(afterOpen);
   }
   const liveSnapshot = runtime.state.buildSnapshot(
     runtime.scope.accountId,
@@ -247,7 +249,7 @@ export async function runReconciliationCycle(
     if (liveSnapshot.instrumentOpenContracts === 0) {
       const swept = await runtime.coordinator.sweepOrphanProtectiveOrders(liveSnapshot);
       if (swept) {
-        runtime.invalidateIssuedPackets();
+        await runtime.invalidateIssuedPackets();
       }
       // Clear unprotected latch once flat.
       await runtime.coordinator.flattenUnprotectedOwnedExposure(liveSnapshot, {
@@ -256,7 +258,7 @@ export async function runReconciliationCycle(
     } else {
       const rearmed = await runtime.coordinator.rearmTrancheProtection(liveSnapshot);
       if (rearmed) {
-        runtime.invalidateIssuedPackets();
+        await runtime.invalidateIssuedPackets();
       }
       const postRearmSnapshot = runtime.state.buildSnapshot(
         runtime.scope.accountId,
@@ -267,7 +269,7 @@ export async function runReconciliationCycle(
         { afterRearmAttempt: true },
       );
       if (flattened.changed || flattened.flattened) {
-        runtime.invalidateIssuedPackets();
+        await runtime.invalidateIssuedPackets();
       }
     }
   }

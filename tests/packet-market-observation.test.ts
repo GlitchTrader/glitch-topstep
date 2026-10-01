@@ -72,7 +72,7 @@ const recovery: ExecutionRecoveryStatus = {
   lastRecoveryError: null,
 };
 
-it("changes packet identity with market evidence but never turns it into an execution gate", () => {
+it("changes packet identity with market evidence but never turns it into an execution gate", async () => {
   const store = new SqliteExecutionStore(":memory:");
   let marketObservation: MarketObservationState = {
     last_attempt_utc: null,
@@ -89,7 +89,7 @@ it("changes packet identity with market evidence but never turns it into an exec
     () => marketObservation,
   );
   try {
-    const withoutBars = service.current();
+    const withoutBars = await service.current();
     marketObservation = {
       last_attempt_utc: "2026-07-21T12:00:00Z",
       last_succeeded_utc: "2026-07-21T12:00:00Z",
@@ -103,13 +103,13 @@ it("changes packet identity with market evidence but never turns it into an exec
         timeframes: [],
       },
     };
-    const withBars = service.current();
+    const withBars = await service.current();
     marketObservation = {
       ...marketObservation,
       last_attempt_utc: "2026-07-21T12:01:00Z",
       last_error: "Error:history unavailable",
     };
-    const degradedBars = service.current();
+    const degradedBars = await service.current();
 
     assert.notEqual(withBars.market.snapshot_hash, withoutBars.market.snapshot_hash);
     assert.notEqual(degradedBars.market.snapshot_hash, withBars.market.snapshot_hash);

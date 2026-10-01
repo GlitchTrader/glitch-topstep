@@ -5,6 +5,7 @@ import type { ProviderEvidenceStatus } from "../domain/provider-evidence.js";
 import type { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
 import type { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
 import type { TradeOutcomeStore } from "../storage/trade-outcome-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 
 /**
  * Single choke point for SQLite touched by authenticated /health.
@@ -13,17 +14,19 @@ import type { TradeOutcomeStore } from "../storage/trade-outcome-store.js";
  */
 
 export interface ProtectedReductionHealthCache {
-  refreshProtectedReductionHealthCache(snapshot: AccountVenueSnapshot): ProtectedReductionHealth;
+  refreshProtectedReductionHealthCache(
+    snapshot: AccountVenueSnapshot,
+  ): ProtectedReductionHealth | Promise<ProtectedReductionHealth>;
   peekProtectedReductionHealth(): ProtectedReductionHealth | null;
   isProtectedReductionHealthCacheStale(): boolean;
   isProtectedReductionHealthCacheWarmed(): boolean;
 }
 
 export interface AuthenticatedHealthSqliteStores {
-  executionStore: SqliteExecutionStore;
-  controlStore: DurableControlStore;
+  executionStore: MayPromise<SqliteExecutionStore>;
+  controlStore: MayPromise<DurableControlStore>;
   tradeOutcomeStore: TradeOutcomeStore;
-  providerEvidenceStore: SqliteProviderEvidenceStore;
+  providerEvidenceStore: MayPromise<SqliteProviderEvidenceStore>;
   coordinator: ProtectedReductionHealthCache | null;
 }
 
@@ -67,17 +70,17 @@ const UNHEATED_EXECUTION_FACTS = {
 };
 
 /** Heat every authenticated-/health SQLite peek. Call from reconcile, never from /health. */
-export function refreshAuthenticatedHealthSqliteCaches(
+export async function refreshAuthenticatedHealthSqliteCaches(
   stores: AuthenticatedHealthSqliteStores,
   snapshot: AccountVenueSnapshot,
-): ProtectedReductionHealth | null {
-  const protectedReduction = stores.coordinator?.refreshProtectedReductionHealthCache(snapshot)
+): Promise<ProtectedReductionHealth | null> {
+  const protectedReduction = await stores.coordinator?.refreshProtectedReductionHealthCache(snapshot)
     ?? null;
-  stores.executionStore.recoveryStatus();
-  stores.executionStore.refreshExecutionFactsHealthCache();
-  stores.controlStore.refreshHealthCache();
-  stores.tradeOutcomeStore.refreshHealthCache();
-  stores.providerEvidenceStore.refreshHealthCache();
+  await stores.executionStore.recoveryStatus();
+  await stores.executionStore.refreshExecutionFactsHealthCache();
+  await stores.controlStore.refreshHealthCache();
+  await stores.tradeOutcomeStore.refreshHealthCache();
+  await stores.providerEvidenceStore.refreshHealthCache();
   return protectedReduction;
 }
 
@@ -86,31 +89,38 @@ export function peekAuthenticatedHealthSqlite(
   stores: AuthenticatedHealthSqliteStores,
   nowMs = Date.now(),
 ): AuthenticatedHealthSqliteFields {
-  const protectedPeek = stores.coordinator?.peekProtectedReductionHealth() ?? null;
-  const factsPeek = stores.executionStore.peekExecutionFactsStatus();
+  const protectedPeek = settled(stores.coordinator?.peekProtectedReductionHealth() ?? null);
+  const factsPeek = settled(stores.executionStore.peekExecutionFactsStatus());
   return {
-    recoveryPeek: stores.executionStore.peekRecoveryStatus(),
-    recoveryCacheStale: stores.executionStore.isRecoveryCacheStale(),
-    unprotectedSinceUtc: stores.executionStore.peekUnprotectedSinceUtc(),
-    unprotectedSinceCacheStale: stores.executionStore.isUnprotectedSinceCacheStale(),
-    controlCounts: stores.controlStore.peekStatus(),
-    flattenPending: stores.controlStore.peekHasPendingFlatten(),
-    flattenPendingAgeMs: stores.controlStore.peekOldestPendingFlattenAgeMs(nowMs),
-    controlHealthCacheWarmed: stores.controlStore.isHealthCacheWarmed(),
-    controlHealthCacheStale: stores.controlStore.isHealthCacheStale(),
-    outcomeFeed: stores.tradeOutcomeStore.peekStatus(),
-    outcomeHealthCacheWarmed: stores.tradeOutcomeStore.isHealthCacheWarmed(),
-    outcomeHealthCacheStale: stores.tradeOutcomeStore.isHealthCacheStale(),
-    providerEvidence: stores.providerEvidenceStore.peekStatus(),
-    providerEvidenceHealthCacheWarmed: stores.providerEvidenceStore.isHealthCacheWarmed(),
-    providerEvidenceHealthCacheStale: stores.providerEvidenceStore.isHealthCacheStale(),
+    recoveryPeek: settled(stores.executionStore.peekRecoveryStatus()),
+    recoveryCacheStale: settled(stores.executionStore.isRecoveryCacheStale()),
+    unprotectedSinceUtc: settled(stores.executionStore.peekUnprotectedSinceUtc()),
+    unprotectedSinceCacheStale: settled(stores.executionStore.isUnprotectedSinceCacheStale()),
+    controlCounts: settled(stores.controlStore.peekStatus()),
+    flattenPending: settled(stores.controlStore.peekHasPendingFlatten()),
+    flattenPendingAgeMs: settled(stores.controlStore.peekOldestPendingFlattenAgeMs(nowMs)),
+    controlHealthCacheWarmed: settled(stores.controlStore.isHealthCacheWarmed()),
+    controlHealthCacheStale: settled(stores.controlStore.isHealthCacheStale()),
+    outcomeFeed: settled(stores.tradeOutcomeStore.peekStatus()),
+    outcomeHealthCacheWarmed: settled(stores.tradeOutcomeStore.isHealthCacheWarmed()),
+    outcomeHealthCacheStale: settled(stores.tradeOutcomeStore.isHealthCacheStale()),
+    providerEvidence: settled(stores.providerEvidenceStore.peekStatus()),
+    providerEvidenceHealthCacheWarmed: settled(stores.providerEvidenceStore.isHealthCacheWarmed()),
+    providerEvidenceHealthCacheStale: settled(stores.providerEvidenceStore.isHealthCacheStale()),
     executionFacts: factsPeek ?? UNHEATED_EXECUTION_FACTS,
-    executionFactsCacheWarmed: stores.executionStore.isExecutionFactsCacheWarmed(),
-    executionFactsCacheStale: stores.executionStore.isExecutionFactsCacheStale(),
+    executionFactsCacheWarmed: settled(stores.executionStore.isExecutionFactsCacheWarmed()),
+    executionFactsCacheStale: settled(stores.executionStore.isExecutionFactsCacheStale()),
     protectedReduction: protectedPeek ?? UNHEATED_PROTECTED_REDUCTION,
     protectedReductionHealthCacheWarmed:
       stores.coordinator?.isProtectedReductionHealthCacheWarmed() ?? false,
     protectedReductionHealthCacheStale:
       stores.coordinator?.isProtectedReductionHealthCacheStale() ?? true,
   };
+}
+
+function settled<T>(value: T | Promise<T>): T {
+  if (value instanceof Promise) {
+    throw new Error("health_peek_must_not_wait_on_sqlite");
+  }
+  return value;
 }

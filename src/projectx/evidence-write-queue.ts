@@ -21,7 +21,9 @@ import type { ProviderEvidenceEvent } from "../domain/provider-evidence.js";
 export type EvidenceQueueClass = "identity" | "quote" | "depth" | "print";
 
 export interface DurableEvidenceWriter {
-  appendBatch(events: readonly ProviderEvidenceEvent[]): readonly { sequence: number }[];
+  appendBatch(
+    events: readonly ProviderEvidenceEvent[],
+  ): readonly { sequence: number }[] | Promise<readonly { sequence: number }[]>;
 }
 
 export type EvidenceSubmitOutcome = "queued" | "coalesced" | "dropped";
@@ -62,7 +64,8 @@ export interface EvidenceWriteQueueOptions {
   onWriteError?: (error: unknown, pending: number) => void;
   onApplyError?: (error: unknown, event: ProviderEvidenceEvent) => void;
   /** TS-REAUDIT-02: sqlite outbox insert before identity enqueue. */
-  onStageIdentity?: (event: ProviderEvidenceEvent) => void;
+  /** Identity outbox insert. A promise is awaited before the event is queued. */
+  onStageIdentity?: (event: ProviderEvidenceEvent) => void | Promise<void>;
   now?: () => number;
 }
 
@@ -94,6 +97,8 @@ export class EvidenceWriteQueue {
   private pending = 0;
   private identityPending = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private stageTail: Promise<void> = Promise.resolve();
+  private batchRunning = false;
   private degraded = false;
   private closed = false;
   private highWaterHits = 0;
@@ -145,14 +150,30 @@ export class EvidenceWriteQueue {
     event: ProviderEvidenceEvent,
     onDurable: (() => void) | null,
     options?: { skipOutboxStage?: boolean },
-  ): EvidenceSubmitOutcome {
+  ): EvidenceSubmitOutcome | Promise<EvidenceSubmitOutcome> {
     if (this.closed) {
       throw new Error("evidence_queue_closed");
     }
     const eventClass = classify(event);
     if (eventClass === "identity" && !options?.skipOutboxStage) {
-      this.options.onStageIdentity?.(event);
+      const staged = this.options.onStageIdentity?.(event);
+      if (isPromise(staged)) {
+        const run = this.stageTail.then(async () => {
+          await staged;
+          return this.enqueue(event, eventClass, onDurable);
+        });
+        this.stageTail = run.then(() => undefined, () => undefined);
+        return run;
+      }
     }
+    return this.enqueue(event, eventClass, onDurable);
+  }
+
+  private enqueue(
+    event: ProviderEvidenceEvent,
+    eventClass: EvidenceQueueClass,
+    onDurable: (() => void) | null,
+  ): EvidenceSubmitOutcome {
     if (eventClass === "identity" && this.identityPending >= this.highWaterMark) {
       this.raiseDegraded();
       // ponytail: identity spills via sqlite outbox when in-memory window is full (TS-REAUDIT-02).
@@ -228,14 +249,18 @@ export class EvidenceWriteQueue {
 
   /** Write everything currently queued, yielding to the event loop between batches. */
   public async drain(): Promise<void> {
-    while (this.pending > 0) {
-      this.runBatch();
+    this.clearTimer();
+    while (this.pending > 0 || this.batchRunning) {
+      if (this.batchRunning) {
+        await yieldToEventLoop();
+        continue;
+      }
+      await this.runBatch();
       if (this.consecutiveWriteFailures >= DRAIN_WRITE_FAILURE_LIMIT) {
         throw new Error(
           `evidence_queue_drain_failed:pending=${this.pending}:resume_cursor=${this.resumeCursor ?? "none"}`,
         );
       }
-      await yieldToEventLoop();
     }
   }
 
@@ -255,60 +280,69 @@ export class EvidenceWriteQueue {
   }
 
   private schedule(): void {
-    if (this.timer !== null || this.closed || this.pending === 0) {
+    if (this.timer !== null || this.closed || this.pending === 0 || this.batchRunning) {
       return;
     }
     const delay = this.pending >= this.batchSize ? 0 : this.batchIntervalMs;
     this.timer = setTimeout(() => {
       this.timer = null;
-      this.runBatch();
-      this.schedule();
+      void this.runBatch().finally(() => {
+        this.schedule();
+      });
     }, delay);
     this.timer.unref?.();
   }
 
-  private runBatch(): void {
+  private async runBatch(): Promise<void> {
+    if (this.batchRunning) {
+      return;
+    }
     const startHead = this.head;
     const batch = this.takeBatch();
     if (batch.length === 0) {
       return;
     }
+    this.batchRunning = true;
     const startedMs = this.now();
     let stored: readonly { sequence: number }[];
     try {
-      stored = this.writer.appendBatch(batch.map((entry) => entry.event));
-    } catch (error) {
-      this.restore(batch, startHead);
-      this.compactSuperseded();
-      this.writeFailures += 1;
-      this.consecutiveWriteFailures += 1;
-      this.raiseDegraded();
-      this.options.onWriteError?.(error, this.pending);
-      return;
-    }
-    const latency = this.now() - startedMs;
-    this.compact();
-    this.consecutiveWriteFailures = 0;
-    this.persisted += batch.length;
-    this.lastBatchSize = batch.length;
-    this.lastWriteLatencyMs = latency;
-    this.maxWriteLatencyMs = Math.max(this.maxWriteLatencyMs, latency);
-    const lastSequence = stored.at(-1)?.sequence;
-    if (typeof lastSequence === "number") {
-      this.resumeCursor = lastSequence;
-    }
-    for (const entry of batch) {
-      if (!entry.onDurable) {
-        continue;
-      }
       try {
-        entry.onDurable();
+        stored = await this.writer.appendBatch(batch.map((entry) => entry.event));
       } catch (error) {
-        this.applyFailures += 1;
-        this.options.onApplyError?.(error, entry.event);
+        this.restore(batch, startHead);
+        this.compactSuperseded();
+        this.writeFailures += 1;
+        this.consecutiveWriteFailures += 1;
+        this.raiseDegraded();
+        this.options.onWriteError?.(error, this.pending);
+        return;
       }
+      const latency = this.now() - startedMs;
+      this.compact();
+      this.consecutiveWriteFailures = 0;
+      this.persisted += batch.length;
+      this.lastBatchSize = batch.length;
+      this.lastWriteLatencyMs = latency;
+      this.maxWriteLatencyMs = Math.max(this.maxWriteLatencyMs, latency);
+      const lastSequence = stored.at(-1)?.sequence;
+      if (typeof lastSequence === "number") {
+        this.resumeCursor = lastSequence;
+      }
+      for (const entry of batch) {
+        if (!entry.onDurable) {
+          continue;
+        }
+        try {
+          entry.onDurable();
+        } catch (error) {
+          this.applyFailures += 1;
+          this.options.onApplyError?.(error, entry.event);
+        }
+      }
+      this.maybeRecover();
+    } finally {
+      this.batchRunning = false;
     }
-    this.maybeRecover();
   }
 
   private takeBatch(): QueueEntry[] {
@@ -410,6 +444,10 @@ export class EvidenceWriteQueue {
       this.timer = null;
     }
   }
+}
+
+function isPromise(value: unknown): value is Promise<void> {
+  return typeof (value as Promise<void> | undefined)?.then === "function";
 }
 
 function classify(event: ProviderEvidenceEvent): EvidenceQueueClass {

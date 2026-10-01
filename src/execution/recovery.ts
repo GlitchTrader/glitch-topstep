@@ -6,6 +6,7 @@ import type {
 import type { OrderInfo, PositionInfo } from "../domain/models.js";
 import type { ProjectXApiClient } from "../projectx/client.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import { maybeKill } from "./kill-hook.js";
 import { attemptBoundedRecoveryFlattens } from "./recovery-flatten.js";
 import { requiredInteger } from "./system-intent.js";
@@ -33,7 +34,7 @@ export interface ExecutionRecoveryResult {
 }
 
 export async function recoverExecutionMutations(
-  store: SqliteExecutionStore,
+  store: MayPromise<SqliteExecutionStore>,
   api: ExecutionRecoveryApi | ProjectXApiClient,
   accountId: number,
   contractId: string,
@@ -41,15 +42,15 @@ export async function recoverExecutionMutations(
   now = new Date(),
   options: RecoveryOptions = {},
 ): Promise<ExecutionRecoveryResult> {
-  const orphanIntents = store.intentsWithoutReceiptsOrMutations();
-  const unresolved = store.unresolvedMutations();
-  const terminalWithoutReceipts = store.terminalMutationsWithoutReceipts();
+  const orphanIntents = await store.intentsWithoutReceiptsOrMutations();
+  const unresolved = await store.unresolvedMutations();
+  const terminalWithoutReceipts = await store.terminalMutationsWithoutReceipts();
   if (
     orphanIntents.length === 0
     && unresolved.length === 0
     && terminalWithoutReceipts.length === 0
   ) {
-    store.recordRecoveryResult(now.toISOString(), null);
+    await store.recordRecoveryResult(now.toISOString(), null);
     return { changed: false, resolved: 0, ambiguous: 0, resolutions: [] };
   }
 
@@ -64,7 +65,7 @@ export async function recoverExecutionMutations(
     // After durable work is loaded, before outbox/provider reconciliation mutates state.
     maybeKill("during_recovery");
     for (const mutation of unresolved.filter((candidate) => candidate.state === "prepared")) {
-      store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
+      await store.markMutationConfirmedNotSubmitted(mutation.intentId, now.toISOString());
       changed = true;
       resolved += 1;
       resolutions.push({
@@ -96,7 +97,7 @@ export async function recoverExecutionMutations(
 
     for (const mutation of uncertainEntries) {
       try {
-        const live = store.mutationForIntent(mutation.intentId);
+        const live = await store.mutationForIntent(mutation.intentId);
         if (!live || isTerminalMutationState(live.state)) {
           continue;
         }
@@ -109,7 +110,7 @@ export async function recoverExecutionMutations(
         }
         const outcome = reconcileEntryMutation(live, historicalOrders, accountId, contractId);
         if (outcome.orderId !== null) {
-          store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
+          await store.markMutationSubmitted(mutation.intentId, outcome.orderId, now.toISOString());
           changed = true;
           resolved += 1;
           resolutions.push({
@@ -122,7 +123,7 @@ export async function recoverExecutionMutations(
           });
           continue;
         }
-        store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+        await store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
         changed = changed || mutation.state === "submitting";
         ambiguous += 1;
         resolutions.push({
@@ -136,7 +137,7 @@ export async function recoverExecutionMutations(
       } catch (error) {
         ambiguous += 1;
         const detail = error instanceof Error ? error.message : String(error);
-        store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+        await store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
         changed = true;
         resolutions.push({
           intentId: mutation.intentId,
@@ -167,13 +168,13 @@ export async function recoverExecutionMutations(
 
     for (const mutation of uncertainModifyEntries) {
       try {
-        const live = store.mutationForIntent(mutation.intentId);
+        const live = await store.mutationForIntent(mutation.intentId);
         if (!live || isTerminalMutationState(live.state)) {
           continue;
         }
         const outcome = reconcileModifyMutation(live, historicalOrders, accountId, contractId);
         if (outcome.recovered) {
-          store.markMutationSubmitted(
+          await store.markMutationSubmitted(
             mutation.intentId,
             outcome.orderId,
             now.toISOString(),
@@ -190,7 +191,7 @@ export async function recoverExecutionMutations(
           });
           continue;
         }
-        store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
+        await store.markMutationAmbiguous(mutation.intentId, outcome.error, now.toISOString());
         changed = changed || mutation.state === "submitting";
         ambiguous += 1;
         resolutions.push({
@@ -204,7 +205,7 @@ export async function recoverExecutionMutations(
       } catch (error) {
         ambiguous += 1;
         const detail = error instanceof Error ? error.message : String(error);
-        store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+        await store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
         changed = true;
         resolutions.push({
           intentId: mutation.intentId,
@@ -226,12 +227,12 @@ export async function recoverExecutionMutations(
     for (const mutation of unresolved.filter(
       (candidate) => candidate.operation === "close_position" && candidate.state !== "prepared",
     )) {
-      const live = store.mutationForIntent(mutation.intentId);
+      const live = await store.mutationForIntent(mutation.intentId);
       if (!live || isTerminalMutationState(live.state)) {
         continue;
       }
       if (!contractStillOpen) {
-        store.markMutationSubmitted(mutation.intentId, null, now.toISOString());
+        await store.markMutationSubmitted(mutation.intentId, null, now.toISOString());
         changed = true;
         resolved += 1;
         resolutions.push({
@@ -245,7 +246,7 @@ export async function recoverExecutionMutations(
         continue;
       }
       const detail = "close_position_outcome_ambiguous:configured_contract_still_open";
-      store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
+      await store.markMutationAmbiguous(mutation.intentId, detail, now.toISOString());
       changed = changed || mutation.state === "submitting";
       ambiguous += 1;
       resolutions.push({
@@ -296,11 +297,11 @@ export async function recoverExecutionMutations(
       }
     }
 
-    store.recordRecoveryResult(now.toISOString(), null);
+    await store.recordRecoveryResult(now.toISOString(), null);
     return { changed, resolved, ambiguous, resolutions };
   } catch (error) {
     const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
-    store.recordRecoveryResult(now.toISOString(), detail);
+    await store.recordRecoveryResult(now.toISOString(), detail);
     throw error;
   }
 }

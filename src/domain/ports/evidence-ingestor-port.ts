@@ -19,7 +19,7 @@ export interface EvidenceIngestorPort {
     event: ProviderEvidenceEvent,
     eventClass: EvidenceQueueClass,
     onDurable?: () => void,
-  ): EvidenceSubmitOutcome;
+  ): EvidenceSubmitOutcome | Promise<EvidenceSubmitOutcome>;
   metrics(): EvidenceIngestorMetrics;
   close(): Promise<void>;
 }

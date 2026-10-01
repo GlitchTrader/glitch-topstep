@@ -17,7 +17,7 @@ export class EvidenceIngestorAdapter implements EvidenceIngestor {
     event: ProviderEvidenceEvent,
     _eventClass: EvidenceQueueClass,
     onDurable?: () => void,
-  ): EvidenceSubmitOutcome {
+  ): EvidenceSubmitOutcome | Promise<EvidenceSubmitOutcome> {
     return this.queue.submit(event, onDurable ?? null);
   }
 

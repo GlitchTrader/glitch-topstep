@@ -72,7 +72,7 @@ const recovery: ExecutionRecoveryStatus = {
   lastRecoveryError: null,
 };
 
-it("changes packet identity with order flow but never turns flow into an execution gate", () => {
+it("changes packet identity with order flow but never turns flow into an execution gate", async () => {
   const store = new SqliteExecutionStore(":memory:");
   let orderFlow: ProjectXOrderFlowState = {
     last_attempt_utc: null,
@@ -90,7 +90,7 @@ it("changes packet identity with order flow but never turns flow into an executi
     () => orderFlow,
   );
   try {
-    const empty = service.current();
+    const empty = await service.current();
     orderFlow = {
       last_attempt_utc: "2026-07-21T12:00:00Z",
       last_succeeded_utc: "2026-07-21T12:00:00Z",
@@ -130,13 +130,13 @@ it("changes packet identity with order flow but never turns flow into an executi
         last_trade_utc: null,
       },
     };
-    const observed = service.current();
+    const observed = await service.current();
     orderFlow = {
       ...orderFlow,
       last_attempt_utc: "2026-07-21T12:00:01Z",
       last_error: "Error:evidence database unavailable",
     };
-    const degraded = service.current();
+    const degraded = await service.current();
 
     assert.notEqual(observed.market.snapshot_hash, empty.market.snapshot_hash);
     assert.notEqual(degraded.market.snapshot_hash, observed.market.snapshot_hash);
@@ -161,7 +161,7 @@ it("changes packet identity with order flow but never turns flow into an executi
         },
       },
     };
-    const depthMissing = service.current();
+    const depthMissing = await service.current();
     assert.equal(depthMissing.data_quality.state_complete, true);
     assert.deepEqual(depthMissing.data_quality.issues, []);
     assert.deepEqual(depthMissing.data_quality.optional_issues, ["order_flow_depth_unavailable"]);
@@ -188,7 +188,7 @@ it("changes packet identity with order flow but never turns flow into an executi
         },
       },
     };
-    const depthDiverged = service.current();
+    const depthDiverged = await service.current();
     assert.equal(depthDiverged.order_flow.observation?.depth.available, false);
     assert.equal(
       depthDiverged.order_flow.observation?.depth.unavailable_reason,

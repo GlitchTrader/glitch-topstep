@@ -55,13 +55,16 @@ import {
   syncPathChronologyTracker,
 } from "./learning/path-chronology-tracker.js";
 import type { TrancheView } from "./ownership/tranches.js";
-import { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
+import type { SqliteExecutionStore } from "./storage/sqlite-execution-store.js";
+import type { SqliteWriteLatencyMetrics } from "./storage/sqlite-write-latency.js";
 import { JsonlEventStore } from "./storage/jsonl-event-store.js";
 import { TradeOutcomeStore } from "./storage/trade-outcome-store.js";
-import { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
+import type { SqliteProviderEvidenceStore } from "./storage/sqlite-provider-evidence-store.js";
+import type { MayPromise } from "./storage/may-promise.js";
+import { SqlitePersistence } from "./storage/sqlite-persistence.js";
 import {
-  DurableControlStore,
   parseControlCommand,
+  type DurableControlStore,
   type StoredControlCommand,
 } from "./control/durable-control-store.js";
 import {
@@ -124,12 +127,13 @@ export class GlitchTopstepService {
   private readonly api: ProjectXApiClient;
   private readonly state = new VenueStateStore();
   private readonly ledger: JsonlEventStore;
-  private readonly executionStore: SqliteExecutionStore;
+  private readonly persistence: SqlitePersistence;
+  private readonly executionStore: MayPromise<SqliteExecutionStore>;
   private readonly tradeOutcomeStore: TradeOutcomeStore;
   private readonly tradeOutcomePublisher: TradeOutcomePublisher;
-  private readonly providerEvidenceStore: SqliteProviderEvidenceStore;
+  private readonly providerEvidenceStore: MayPromise<SqliteProviderEvidenceStore>;
   private readonly evidenceQueue: EvidenceWriteQueue;
-  private readonly controlStore: DurableControlStore;
+  private readonly controlStore: MayPromise<DurableControlStore>;
   private readonly restEvidenceRecorder: ProviderRestSnapshotRecorder;
   private readonly historySync: ProjectXHistorySyncService;
   private readonly historySyncIntervalMs: number;
@@ -142,7 +146,7 @@ export class GlitchTopstepService {
   private realtime: ProjectXRealtimeClient | null = null;
   private gateway: LocalGatewayServer | null = null;
   private coordinator: ExecutionCoordinator | null = null;
-  private ownershipService: ProjectXOrderOwnershipService | null = null;
+  private ownershipService: MayPromise<ProjectXOrderOwnershipService> | null = null;
   private packets: DecisionPacketService | null = null;
   private tokenRefreshTimer: NodeJS.Timeout | null = null;
   private reconciliationTimer: NodeJS.Timeout | null = null;
@@ -194,32 +198,42 @@ export class GlitchTopstepService {
     });
     this.api = this.authManager.authenticatedClient();
     this.ledger = new JsonlEventStore(config.dataDir);
-    this.executionStore = new SqliteExecutionStore(
-      join(config.dataDir, "glitch-topstep.sqlite"),
-    );
+    const ownershipConfig = config.localGateway.ownership;
+    this.persistence = new SqlitePersistence({
+      execution: join(config.dataDir, "glitch-topstep.sqlite"),
+      evidence: join(config.dataDir, "projectx-evidence.sqlite"),
+      control: join(config.dataDir, "glitch-topstep-controls.sqlite"),
+      outcome: join(config.dataDir, "trade-outcomes.sqlite"),
+      evidenceOptions: {
+        marketEventRetention: config.providerEvidence.marketEventRetention,
+        marketPruneInterval: config.providerEvidence.marketPruneInterval,
+      },
+      ownership: ownershipConfig
+        ? {
+          accountId: ownershipConfig.accountId,
+          accountName: ownershipConfig.accountName,
+          contractId: ownershipConfig.contractId,
+          instrument: ownershipConfig.instrument,
+        }
+        : null,
+    });
+    this.executionStore = this.persistence.execution;
     this.tradeOutcomeStore = new TradeOutcomeStore(
       config.dataDir,
       "trade-outcomes.jsonl",
       config.outcomesExportPath,
+      this.persistence.outcome,
     );
     this.tradeOutcomePublisher = new TradeOutcomePublisher(this.api, this.tradeOutcomeStore);
-    this.providerEvidenceStore = new SqliteProviderEvidenceStore(
-      join(config.dataDir, "projectx-evidence.sqlite"),
-      {
-        marketEventRetention: config.providerEvidence.marketEventRetention,
-        marketPruneInterval: config.providerEvidence.marketPruneInterval,
-      },
-    );
+    this.providerEvidenceStore = this.persistence.evidence;
     this.evidenceQueue = new EvidenceWriteQueue(this.providerEvidenceStore, {
-      onStageIdentity: (event) => {
-        this.providerEvidenceStore.stageIdentityOutbox(event);
-      },
+      onStageIdentity: (event) => this.providerEvidenceStore.stageIdentityOutbox(event),
       onDegraded: (metrics) => {
         this.handleEvidenceQueueDegraded(metrics);
       },
-      onRecovered: () => {
+      onRecovered: async () => {
         this.state.markEvidenceBacklog(false);
-        this.packets?.invalidateAll();
+        await this.packets?.invalidateAll();
       },
       onWriteError: (error, pending) => {
         console.error("Provider evidence batch write failed", { pending }, error);
@@ -232,7 +246,7 @@ export class GlitchTopstepService {
         console.error("Provider evidence apply failed after durable commit", error);
       },
     });
-    this.controlStore = new DurableControlStore(join(config.dataDir, "glitch-topstep-controls.sqlite"));
+    this.controlStore = this.persistence.control;
     this.restEvidenceRecorder = new ProviderRestSnapshotRecorder(this.providerEvidenceStore);
     const history = config.providerHistory ?? DEFAULT_PROVIDER_HISTORY;
     this.historySyncIntervalMs = history.syncIntervalMs;
@@ -309,9 +323,9 @@ export class GlitchTopstepService {
       // off this thread and this drain stops dominating boot.
       writeSync(1, line);
     };
-    log(this.providerEvidenceStore.outboxPendingCount(), true);
+    log(await this.providerEvidenceStore.outboxPendingCount(), true);
     while (true) {
-      const pending = this.providerEvidenceStore.loadPendingOutboxEvents(500);
+      const pending = await this.providerEvidenceStore.loadPendingOutboxEvents(500);
       if (pending.length === 0) {
         log(0, true);
         break;
@@ -323,7 +337,7 @@ export class GlitchTopstepService {
       // yields, outbox stays pending, and startup busy-hangs before listen().
       await this.evidenceQueue.drain();
       drainedSoFar += pending.length;
-      log(this.providerEvidenceStore.outboxPendingCount(), false);
+      log(await this.providerEvidenceStore.outboxPendingCount(), false);
     }
   }
 
@@ -332,6 +346,7 @@ export class GlitchTopstepService {
     this.lifecycle.register("event_loop_delay", () => {
       this.eventLoopDelay.disable();
     });
+    await this.persistence.whenReady();
     await this.authManager.ensureAuthenticated();
     await this.drainStartupEvidenceOutbox();
     const [accountsCol, contractsCol, positionsCol, ordersCol] = await this.fetchStartupScope();
@@ -379,7 +394,11 @@ export class GlitchTopstepService {
     this.orderFlows = new Map(this.instrumentUniverse.contracts.map((candidate) => [
       candidate.contract_id,
       new ProjectXOrderFlowService(
-        join(this.config.dataDir, "projectx-evidence.sqlite"),
+        (input) => this.providerEvidenceStore.loadOrderFlowEvents(
+          input.contractId,
+          input.lookbackStartUtc,
+          input.limit,
+        ),
         {
           contractId: candidate.contract_id,
           tickSize: candidate.tick_size,
@@ -447,25 +466,9 @@ export class GlitchTopstepService {
       },
     );
     await this.persistRecoveryResolutions(initialRecovery.resolutions);
-    this.reconcileEntrySubmissionLatch(positions, orders, new Date().toISOString());
+    await this.reconcileEntrySubmissionLatch(positions, orders, new Date().toISOString());
 
-    const ownershipConfig = this.config.localGateway.ownership;
-    if (ownershipConfig) {
-      this.ownershipService = new ProjectXOrderOwnershipService(
-        ownershipConfig.executionDatabasePath,
-        ownershipConfig.evidenceDatabasePath,
-        {
-          accountId: ownershipConfig.accountId,
-          accountName: ownershipConfig.accountName,
-          contractId: ownershipConfig.contractId,
-          instrument: ownershipConfig.instrument,
-        },
-      );
-      this.lifecycle.register("order_ownership", () => {
-        this.ownershipService?.close();
-        this.ownershipService = null;
-      });
-    }
+    this.ownershipService = this.persistence.ownership;
 
     const snapshot = () => this.state.buildSnapshot(
       this.config.scope.accountId,
@@ -476,7 +479,7 @@ export class GlitchTopstepService {
       this.config,
       snapshot,
       this.executionStore,
-      () => this.executionStore.recoveryStatus(),
+      async () => await this.executionStore.recoveryStatus(),
       Date.now,
       () => this.currentMarketObservation(),
       () => this.orderFlow?.current() ?? {
@@ -485,7 +488,7 @@ export class GlitchTopstepService {
         last_error: "order_flow_service_unavailable",
         observation: null,
       },
-      () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
+      async () => (await this.ownershipService?.current(snapshot().instrumentOpenContracts))?.tranches ?? [],
       () => this.tradeOutcomeStore.all(),
       () => this.tradeOutcomeStore.isLoaded(),
       () => this.instrumentUniverse === null
@@ -515,7 +518,7 @@ export class GlitchTopstepService {
           await this.recoveryPipeline.run(() => this.handleHubReconnected());
         },
         onStateInvalidated: async () => {
-          this.packets?.invalidateAll();
+          await this.packets?.invalidateAll();
           if (RecoveryPipelineGate.shouldSkipInvalidateReconcile({
             pipelineRunning: this.recoveryPipeline.isRunning(),
             hubRecoveryActive: this.isHubRecoveryStorm(),
@@ -528,9 +531,8 @@ export class GlitchTopstepService {
             console.error("ProjectX reconciliation failed after state invalidation", error);
           }
         },
-        onBeforePositionApply: (position, receivedUtc) => {
-          this.handleStreamPositionBeforeApply(position, receivedUtc);
-        },
+        onBeforePositionApply: (position, receivedUtc) =>
+          this.handleStreamPositionBeforeApply(position, receivedUtc),
         livenessMs: this.config.streamLivenessMs,
         isMarketExpectedLive: () => isProviderBarLagPublishing(
           latest1mBarAgeMs(this.currentMarketObservation(), Date.now()),
@@ -623,11 +625,13 @@ export class GlitchTopstepService {
       this.ledger,
       this.executionStore,
       snapshot,
-      (snapshotHash) => this.packets?.resolve(snapshotHash) ?? null,
-      () => this.packets?.invalidateAll(),
-      () => this.ownershipService?.current(snapshot().instrumentOpenContracts).tranches ?? [],
+      async (snapshotHash) => (await this.packets?.resolve(snapshotHash)) ?? null,
+      async () => {
+        await this.packets?.invalidateAll();
+      },
+      async () => (await this.ownershipService?.current(snapshot().instrumentOpenContracts))?.tranches ?? [],
       () => ({ paused: this.controlPaused, mode: this.runtimeTradingMode }),
-      () => this.packets?.current().execution.daily_capture_locked ?? false,
+      async () => (await this.packets?.current())?.execution.daily_capture_locked ?? false,
       () => this.instrumentUniverse,
       (contractId) => this.state.buildSnapshot(this.config.scope.accountId, contractId),
     );
@@ -821,8 +825,8 @@ export class GlitchTopstepService {
           // Reset after auth sample so soak windows measure delay between polls.
           event_loop_delay: this.eventLoopDelay.snapshot({ reset: true }),
           sqlite_write_latency: {
-            execution: this.executionStore.writeLatencyMetrics(),
-            control: this.controlStore.writeLatencyMetrics(),
+            execution: this.executionStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
+            control: this.controlStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
             outcome_feed: this.tradeOutcomeStore.writeLatencyMetrics(),
             evidence_queue: {
               last_write_latency_ms: this.evidenceQueue.metrics().last_write_latency_ms,
@@ -838,15 +842,15 @@ export class GlitchTopstepService {
         const refreshMeta = await this.ensurePacketMarketObservationFresh(scope);
         return this.buildDecisionPacketForScope(scope, refreshMeta);
       },
-      (limit, query) => {
+      async (limit, query) => {
         if (query?.source || query?.eventType) {
-          return this.providerEvidenceStore.query({
+          return await this.providerEvidenceStore.query({
             limit,
             source: query.source,
             eventType: query.eventType,
           });
         }
-        return this.providerEvidenceStore.recent(limit);
+        return await this.providerEvidenceStore.recent(limit);
       },
       coordinator,
       this.ownershipService,
@@ -856,11 +860,11 @@ export class GlitchTopstepService {
         : undefined,
       (afterSequence, limit) => this.tradeOutcomeStore.revisionPage(afterSequence, limit),
       (input) => this.applyControl(input),
-      (controlId) => this.controlStore.get(controlId),
+      async (controlId) => await this.controlStore.get(controlId),
       () => this.scannerPacket(),
-      (afterSequence, limit) => this.executionStore.executionFactsAfter(afterSequence, limit),
+      async (afterSequence, limit) => await this.executionStore.executionFactsAfter(afterSequence, limit),
     );
-    this.restoreEffectiveControlState();
+    await this.restoreEffectiveControlState();
     await this.resumePendingControls();
     await this.gateway.start();
     this.lifecycle.register("local_gateway", async () => {
@@ -891,8 +895,8 @@ export class GlitchTopstepService {
         instrument: this.config.scope.instrument,
         trading_mode: this.config.tradingMode,
         policy_authority: this.config.policy.authority,
-        execution_recovery: this.executionStore.recoveryStatus(),
-        provider_evidence: this.providerEvidenceStore.status(),
+        execution_recovery: await this.executionStore.recoveryStatus(),
+        provider_evidence: await this.providerEvidenceStore.status(),
         provider_history: this.historySync.currentStatus(),
         market_observation: this.currentMarketObservation(),
         order_flow: this.orderFlowForContract(this.config.scope.contractId),
@@ -945,7 +949,7 @@ export class GlitchTopstepService {
       );
       await runShutdownFailureRecovery({
         criticalFailedDisposers,
-        backlogPending: this.shouldRetainShutdownRecoveryState(),
+        backlogPending: await this.shouldRetainShutdownRecoveryState(),
         closeStores: () => this.closeStores(),
         onCleanupError: (cleanupError) => {
           console.error("shutdown cleanup failed", cleanupError);
@@ -966,12 +970,12 @@ export class GlitchTopstepService {
   }
 
   /** TS-REAUDIT-02/08: retain lock + evidence handles when durable backlog remains. */
-  private shouldRetainShutdownRecoveryState(): boolean {
+  private async shouldRetainShutdownRecoveryState(): Promise<boolean> {
     const metrics = this.evidenceQueue.metrics();
     return metrics.incomplete_shutdown
       || metrics.identity_depth > 0
       || metrics.depth > 0
-      || this.providerEvidenceStore.outboxPendingCount() > 0;
+      || await this.providerEvidenceStore.outboxPendingCount() > 0;
   }
 
   private async closeStores(): Promise<void> {
@@ -984,10 +988,8 @@ export class GlitchTopstepService {
       // Queued evidence is durable before the handle closes; a failed drain reports the
       // resumable cursor instead of discarding what is still pending.
       await this.evidenceQueue.close();
-      this.providerEvidenceStore.close();
       await this.tradeOutcomeStore.close();
-      this.controlStore.close();
-      this.executionStore.close();
+      await this.persistence.close();
       this.storesClosed = true;
     }
     await this.runtimeLock.release();
@@ -1002,13 +1004,13 @@ export class GlitchTopstepService {
     return this.authManager.status();
   }
 
-  private handleEvidenceQueueDegraded(metrics: EvidenceQueueMetrics): void {
+  private async handleEvidenceQueueDegraded(metrics: EvidenceQueueMetrics): Promise<void> {
     this.state.markEvidenceBacklog(true);
     this.state.markPayloadFault(
       "market",
       new Error(`evidence_queue_high_water:depth=${metrics.depth}`),
     );
-    this.packets?.invalidateAll();
+    await this.packets?.invalidateAll();
     void this.reconcile().catch((error: unknown) => {
       console.error("ProjectX reconciliation failed after evidence queue overflow", error);
     });
@@ -1029,27 +1031,27 @@ export class GlitchTopstepService {
   }
 
   private async resumePendingControls(): Promise<void> {
-    this.restoreEffectiveControlState();
-    for (const control of this.controlStore.pending()) {
+    await this.restoreEffectiveControlState();
+    for (const control of await this.controlStore.pending()) {
       if (control.status === "applying") {
         // Pause/resume/mode are local idempotent state changes. Reapply the
         // recorded effect and complete them; never silently restore an armed
         // state merely because the process crashed during the final write.
         if (control.action === "pause") {
           this.controlPaused = true;
-          this.packets?.invalidateAll();
-          this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+          await this.packets?.invalidateAll();
+          await this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
         } else if (control.action === "resume") {
           this.controlPaused = false;
-          this.packets?.invalidateAll();
-          this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+          await this.packets?.invalidateAll();
+          await this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
         } else if (control.action === "set_mode" && control.mode) {
           if (control.mode === "armed" && this.config.tradingMode !== "armed") {
-            this.controlStore.transition(control.control_id, "rejected", "control_cannot_escalate_beyond_startup_mode");
+            await this.controlStore.transition(control.control_id, "rejected", "control_cannot_escalate_beyond_startup_mode");
           } else {
             this.runtimeTradingMode = control.mode;
-            this.packets?.invalidateAll();
-            this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
+            await this.packets?.invalidateAll();
+            await this.controlStore.transition(control.control_id, "completed", "reconciled_after_restart");
           }
         } else if (control.action === "flatten") {
           const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
@@ -1058,15 +1060,15 @@ export class GlitchTopstepService {
             buildFlattenVenueSnapshot(current, this.config.scope.accountId, this.config.scope.contractId),
           );
           if (transition.status === "completed" || transition.status === "applying") {
-            this.controlStore.transition(control.control_id, transition.status, transition.detail);
+            await this.controlStore.transition(control.control_id, transition.status, transition.detail);
           } else {
             this.controlPaused = true;
             this.runtimeTradingMode = "disabled";
-            this.packets?.invalidateAll();
-            this.controlStore.transition(control.control_id, transition.status, transition.detail);
+            await this.packets?.invalidateAll();
+            await this.controlStore.transition(control.control_id, transition.status, transition.detail);
           }
         } else {
-          this.controlStore.transition(control.control_id, "failed", "control_resume_unsupported_action");
+          await this.controlStore.transition(control.control_id, "failed", "control_resume_unsupported_action");
         }
         continue;
       }
@@ -1074,8 +1076,8 @@ export class GlitchTopstepService {
     }
   }
 
-  private restoreEffectiveControlState(): void {
-    const effective = this.controlStore.effectiveState(
+  private async restoreEffectiveControlState(): Promise<void> {
+    const effective = await this.controlStore.effectiveState(
       this.config.scope.accountId,
       this.config.scope.contractId,
     );
@@ -1175,7 +1177,7 @@ export class GlitchTopstepService {
       };
   }
 
-  private buildDecisionPacketForScope(
+  private async buildDecisionPacketForScope(
     scope: ActivePositionScope,
     refreshMeta: PacketObservationRefreshResult | null,
   ) {
@@ -1185,7 +1187,7 @@ export class GlitchTopstepService {
     const contractId = scope.packetTargetContractId;
     const snapshot = this.state.buildSnapshot(this.config.scope.accountId, contractId);
     const marketObservation = this.marketObservationForContract(contractId);
-    const packet = this.packets.current({
+    const packet = await this.packets.current({
       snapshot,
       instrument: scope.packetTargetInstrument,
       marketObservation,
@@ -1223,7 +1225,7 @@ export class GlitchTopstepService {
 
   private async applyControl(input: unknown): Promise<StoredControlCommand> {
     const command = parseControlCommand(input);
-    const stored = this.controlStore.submit(command);
+    const stored = await this.controlStore.submit(command);
     if (["completed", "rejected", "failed"].includes(stored.status)) {
       return stored;
     }
@@ -1232,7 +1234,7 @@ export class GlitchTopstepService {
 
   private async applyStoredControl(stored: StoredControlCommand): Promise<StoredControlCommand> {
     if (stored.account_id !== this.config.scope.accountId) {
-      return this.controlStore.transition(stored.control_id, "rejected", "control_account_mismatch");
+      return await this.controlStore.transition(stored.control_id, "rejected", "control_account_mismatch");
     }
     if (stored.contract_id !== null) {
       const allowlisted = this.instrumentUniverse?.contracts.some(
@@ -1245,15 +1247,15 @@ export class GlitchTopstepService {
       const accountPositioned = referenceSnapshot.totalOpenContracts > 0
         || referenceSnapshot.openOrders.some((order) => order.accountId === this.config.scope.accountId);
       if (!allowlisted || (accountPositioned && stored.contract_id !== this.activePositionScope().packetTargetContractId)) {
-        return this.controlStore.transition(stored.control_id, "rejected", "control_contract_outside_scope");
+        return await this.controlStore.transition(stored.control_id, "rejected", "control_contract_outside_scope");
       }
     }
     if (stored.status === "completed" || stored.status === "rejected" || stored.status === "failed") {
       return stored;
     }
-    const claimed = this.controlStore.claimPending(stored.control_id);
+    const claimed = await this.controlStore.claimPending(stored.control_id);
     if (!claimed) {
-      return this.controlStore.get(stored.control_id) ?? stored;
+      return await this.controlStore.get(stored.control_id) ?? stored;
     }
     try {
       if (stored.action === "pause") {
@@ -1262,7 +1264,7 @@ export class GlitchTopstepService {
         this.controlPaused = false;
       } else if (stored.action === "set_mode") {
         if (stored.mode === "armed" && this.config.tradingMode !== "armed") {
-          return this.controlStore.transition(
+          return await this.controlStore.transition(
             stored.control_id,
             "rejected",
             "control_cannot_escalate_beyond_startup_mode",
@@ -1273,7 +1275,7 @@ export class GlitchTopstepService {
         let receiptStatus = "submitted";
         const current = this.state.buildSnapshot(this.config.scope.accountId, this.config.scope.contractId);
         if (current.instrumentOpenContracts > 0) {
-          const packet = this.packets?.current();
+          const packet = await this.packets?.current();
           if (!packet || !this.coordinator) {
             throw new Error("flatten_execution_path_unavailable");
           }
@@ -1317,13 +1319,13 @@ export class GlitchTopstepService {
           receiptStatus,
           buildFlattenVenueSnapshot(settled, this.config.scope.accountId, this.config.scope.contractId),
         );
-        this.packets?.invalidateAll();
-        return this.controlStore.transition(stored.control_id, transition.status, transition.detail);
+        await this.packets?.invalidateAll();
+        return await this.controlStore.transition(stored.control_id, transition.status, transition.detail);
       }
-      this.packets?.invalidateAll();
-      return this.controlStore.transition(stored.control_id, "completed");
+      await this.packets?.invalidateAll();
+      return await this.controlStore.transition(stored.control_id, "completed");
     } catch (error) {
-      return this.controlStore.transition(
+      return await this.controlStore.transition(
         stored.control_id,
         "failed",
         error instanceof Error ? error.message : String(error),
@@ -1356,7 +1358,7 @@ export class GlitchTopstepService {
   }
 
   private async completePendingFlattenControls(): Promise<void> {
-    for (const control of this.controlStore.pending()) {
+    for (const control of await this.controlStore.pending()) {
       if (control.action !== "flatten" || control.status !== "applying") {
         continue;
       }
@@ -1367,7 +1369,7 @@ export class GlitchTopstepService {
       if (shouldCompletePendingFlatten(
         buildFlattenVenueSnapshot(current, this.config.scope.accountId, this.config.scope.contractId),
       )) {
-        this.controlStore.transition(control.control_id, "completed", "venue_flat_confirmed");
+        await this.controlStore.transition(control.control_id, "completed", "venue_flat_confirmed");
       }
     }
   }
@@ -1385,7 +1387,7 @@ export class GlitchTopstepService {
    * onStateInvalidated must not fire a second reconcile while recovery is already active.
    */
   private async handleHubReconnected(): Promise<void> {
-    this.packets?.invalidateAll();
+    await this.packets?.invalidateAll();
     if (!this.realtime) {
       return;
     }
@@ -1428,7 +1430,7 @@ export class GlitchTopstepService {
       console.error("ProjectX recovery pipeline failed after reconnect", error);
       throw error;
     }
-    this.packets?.invalidateAll();
+    await this.packets?.invalidateAll();
   }
 
   private shouldReconcileMetadata(): boolean {
@@ -1456,27 +1458,27 @@ export class GlitchTopstepService {
   }
 
   /** IA-260901-GW-06: compact applied identity outbox rows; never prune pending. */
-  private maybePruneAppliedEvidenceOutbox(nowMs: number): void {
+  private async maybePruneAppliedEvidenceOutbox(nowMs: number): Promise<void> {
     if (nowMs - this.lastAppliedOutboxPruneAtMs < 3_600_000) {
       return;
     }
     this.lastAppliedOutboxPruneAtMs = nowMs;
     try {
-      this.providerEvidenceStore.pruneAppliedOutbox();
+      await this.providerEvidenceStore.pruneAppliedOutbox();
     } catch (error) {
       console.error("evidence_outbox_prune_failed", { error: formatLogError(error) });
     }
   }
 
   /** ponytail: idempotent — coordinator no-ops when stop already at breakeven or protection unproven. */
-  private maybeRetightenStopsAfterCaptureLock(): void {
+  private async maybeRetightenStopsAfterCaptureLock(): Promise<void> {
     const resetLocalTime = this.config.session.tradingDayResetLocalTime ?? "17:00";
     const tradingDayId = resolveTradingDayId(
       new Date(),
       this.config.session.timezone,
       resetLocalTime,
     );
-    if (!this.executionStore.isDailyCaptureLocked(tradingDayId)) {
+    if (!await this.executionStore.isDailyCaptureLocked(tradingDayId)) {
       return;
     }
     const snapshot = this.state.buildSnapshot(
@@ -1527,11 +1529,11 @@ export class GlitchTopstepService {
           this.reconcileEntrySubmissionLatch(positions, orders, receivedUtc)
         ),
         persistRecoveryResolutions: (resolutions) => this.persistRecoveryResolutions(resolutions),
-        invalidateIssuedPackets: () => {
-          this.packets?.invalidateAll();
+        invalidateIssuedPackets: async () => {
+          await this.packets?.invalidateAll();
         },
       }, { includeMetadata });
-      this.maybeRetightenStopsAfterCaptureLock();
+      await this.maybeRetightenStopsAfterCaptureLock();
       if (includeMetadata) {
         this.lastMetadataReconcileAt = new Date().toISOString();
       }
@@ -1548,14 +1550,14 @@ export class GlitchTopstepService {
         coordinator: this.coordinator,
       };
       // Protected-reduction first (same live compute as before); then remaining health peeks.
-      const protectedReduction = refreshAuthenticatedHealthSqliteCaches(healthStores, snapshot);
-      this.executionStore.updateUnprotectedSince(
+      const protectedReduction = await refreshAuthenticatedHealthSqliteCaches(healthStores, snapshot);
+      await this.executionStore.updateUnprotectedSince(
         protectedReduction?.unprotected_open_quantity ?? 0,
         new Date().toISOString(),
       );
       // updateUnprotectedSince may mark recovery stale via setMeta — re-heat after the write.
-      this.executionStore.recoveryStatus();
-      this.maybePruneAppliedEvidenceOutbox(Date.now());
+      await this.executionStore.recoveryStatus();
+      await this.maybePruneAppliedEvidenceOutbox(Date.now());
       this.reconcileConsecutiveFailures = 0;
       this.nextReconcileAttemptAtMs = 0;
     } catch (error) {
@@ -1572,7 +1574,7 @@ export class GlitchTopstepService {
     }
   }
 
-  private handleStreamPositionBeforeApply(position: PositionInfo, receivedUtc: string): void {
+  private async handleStreamPositionBeforeApply(position: PositionInfo, receivedUtc: string): Promise<void> {
     if (position.accountId !== this.config.scope.accountId
       || position.contractId !== this.config.scope.contractId) {
       return;
@@ -1592,26 +1594,26 @@ export class GlitchTopstepService {
       position,
     );
     if (afterOpen > 0) {
-      this.refreshCachedOpenTranches(afterOpen);
+      await this.refreshCachedOpenTranches(afterOpen);
       const live = this.state.buildSnapshot(
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
-      this.observeOpenTradePath(afterOpen, live.unrealizedPnl);
+      await this.observeOpenTradePath(afterOpen, live.unrealizedPnl);
       return;
     }
     // Capture excursion against the last open unrealized before publishing.
-    this.observeOpenTradePath(beforeOpen, snapshot.unrealizedPnl);
-    const tranches = this.resolveClosedTranchesForFlat(beforeOpen);
+    await this.observeOpenTradePath(beforeOpen, snapshot.unrealizedPnl);
+    const tranches = await this.resolveClosedTranchesForFlat(beforeOpen);
     void this.publishTradeOutcomesOnFlat(tranches, receivedUtc, "stream").catch((error: unknown) => {
       console.error("Trade outcome publication failed after stream flat", error);
     });
   }
 
-  private resolveClosedTranchesForFlat(beforeOpen: number): TrancheView[] {
+  private async resolveClosedTranchesForFlat(beforeOpen: number): Promise<TrancheView[]> {
     const live = this.ownershipService
       ? tranchesForClosedPosition(
-        this.ownershipService.current(beforeOpen > 0 ? beforeOpen : 0).tranches,
+        (await this.ownershipService.current(beforeOpen > 0 ? beforeOpen : 0)).tranches,
       )
       : [];
     const cached = this.cachedOpenTranches.length > 0
@@ -1620,39 +1622,41 @@ export class GlitchTopstepService {
     return preferRicherClosedTranches(live, cached);
   }
 
-  private refreshCachedOpenTranches(openContracts: number): void {
+  private async refreshCachedOpenTranches(openContracts: number): Promise<void> {
     if (!this.ownershipService || openContracts <= 0) {
       return;
     }
-    const active = this.ownershipService.current(openContracts).tranches
-      .filter((tranche) => tranche.remaining_qty > 0)
-      .map((tranche) => this.enrichClosedTrancheForOutcome(tranche));
+    const active = await Promise.all(
+      (await this.ownershipService.current(openContracts)).tranches
+        .filter((tranche) => tranche.remaining_qty > 0)
+        .map((tranche) => this.enrichClosedTrancheForOutcome(tranche)),
+    );
     if (active.length > 0) {
       this.cachedOpenTranches = preferRicherClosedTranches(active, this.cachedOpenTranches);
     }
-    this.recordLifecycleFillFacts(active, new Date().toISOString(), false);
+    await this.recordLifecycleFillFacts(active, new Date().toISOString(), false);
   }
 
   /**
    * Publishes the current fill state of each tranche as an immediate lifecycle fact. Unchanged
    * state is deduplicated by the store, so this can run on every reconciliation pass.
    */
-  private recordLifecycleFillFacts(
+  private async recordLifecycleFillFacts(
     tranches: readonly TrancheView[],
     atUtc: string,
     instrumentFlat: boolean,
-  ): void {
+  ): Promise<void> {
     for (const tranche of tranches) {
       const fact = trancheLifecycleFact({
         tranche,
-        requestedQuantity: this.executionStore.registeredIntentPayload(tranche.intent_id)?.quantity ?? null,
+        requestedQuantity: (await this.executionStore.registeredIntentPayload(tranche.intent_id))?.quantity ?? null,
         recordedUtc: atUtc,
         instrumentFlat,
       });
       if (!fact) {
         continue;
       }
-      this.executionStore.recordExecutionFact({
+      await this.executionStore.recordExecutionFact({
         intentId: fact.intentId,
         phase: fact.phase,
         factKey: fact.factKey,
@@ -1663,12 +1667,12 @@ export class GlitchTopstepService {
     }
   }
 
-  private enrichClosedTrancheForOutcome(tranche: TrancheView): TrancheView {
-    const receipt = this.executionStore.receiptForIntent<{
+  private async enrichClosedTrancheForOutcome(tranche: TrancheView): Promise<TrancheView> {
+    const receipt = await this.executionStore.receiptForIntent(tranche.intent_id) as {
       code?: string;
       detail?: string | null;
-    }>(tranche.intent_id);
-    const intent = this.executionStore.registeredIntentPayload(tranche.intent_id);
+    } | null;
+    const intent = await this.executionStore.registeredIntentPayload(tranche.intent_id);
     return latchProvenProtectionFromReceipt(tranche, receipt, {
       stop: intent?.stopLoss ?? null,
       target: intent?.takeProfit1 ?? null,
@@ -1680,7 +1684,7 @@ export class GlitchTopstepService {
       return;
     }
     await this.tradeOutcomeStore.load();
-    const filled = this.ownershipService.current(0).tranches
+    const filled = (await this.ownershipService.current(0)).tranches
       .filter((tranche) => tranche.filled_qty > 0);
     const incomplete = filled.filter((tranche) => {
       const existing = this.tradeOutcomeStore.get(tranche.intent_id);
@@ -1696,7 +1700,7 @@ export class GlitchTopstepService {
     await this.publishTradeOutcomesOnFlat(incomplete, exitUtc, "reconcile");
   }
 
-  private observeOpenTradePath(openContracts: number, unrealizedPnl: number): void {
+  private async observeOpenTradePath(openContracts: number, unrealizedPnl: number): Promise<void> {
     if (openContracts <= 0) {
       return;
     }
@@ -1706,7 +1710,7 @@ export class GlitchTopstepService {
     );
     const mark = markPriceFromSnapshot(snapshot);
     this.tradeExcursion.observe(openContracts, unrealizedPnl, mark.price, mark.utc);
-    const activeTranche = this.ownershipService?.current(openContracts).tranches
+    const activeTranche = (await this.ownershipService?.current(openContracts))?.tranches
       .find((tranche) => tranche.remaining_qty > 0);
     if (activeTranche) {
       this.pathChronologyIntentId = syncPathChronologyTracker(
@@ -1738,23 +1742,25 @@ export class GlitchTopstepService {
     });
     // Factual closure is published before the enriched outcome so the next decision does not
     // have to wait for the learner round trip.
-    this.recordLifecycleFillFacts(tranches, exitUtc, true);
+    await this.recordLifecycleFillFacts(tranches, exitUtc, true);
     try {
       const snapshot = this.state.buildSnapshot(
         this.config.scope.accountId,
         this.config.scope.contractId,
       );
       const excursion = this.tradeExcursion.excursionUsd();
-      const enriched = tranches.map((tranche) => this.enrichClosedTrancheForOutcome(tranche));
+      const enriched = await Promise.all(
+        tranches.map((tranche) => this.enrichClosedTrancheForOutcome(tranche)),
+      );
       const decisionLinks = new Map<string, { packet_id: string | null; snapshot_hash: string | null }>();
       for (const tranche of enriched) {
-        const link = this.executionStore.decisionLinkForIntent(tranche.intent_id);
+        const link = await this.executionStore.decisionLinkForIntent(tranche.intent_id);
         if (link) {
           decisionLinks.set(tranche.intent_id, link);
         }
       }
       // Only entry intents named by a submitted EXIT receipt qualify as manual_exit.
-      const exitTargets = this.executionStore.submittedExitTargetIntentIds();
+      const exitTargets = await this.executionStore.submittedExitTargetIntentIds();
       const hadExitIntentByTranche = new Map(
         enriched.map((tranche) => [tranche.intent_id, exitTargets.has(tranche.intent_id)]),
       );
@@ -1780,7 +1786,7 @@ export class GlitchTopstepService {
       });
       if (published.length > 0) {
         for (const outcome of published) {
-          this.executionStore.supersedeExecutionFacts(outcome.intent_id, outcome.outcome_id, exitUtc);
+          await this.executionStore.supersedeExecutionFacts(outcome.intent_id, outcome.outcome_id, exitUtc);
         }
         await this.ledger.append({
           schema_version: "glitch.direct.event.v1",
@@ -1825,19 +1831,19 @@ export class GlitchTopstepService {
     });
   }
 
-  private reconcileEntrySubmissionLatch(
+  private async reconcileEntrySubmissionLatch(
     positions: PositionInfo[],
     orders: OrderInfo[],
     atUtc?: string,
-  ): boolean {
-    const intentId = this.executionStore.entrySubmissionIntentId();
+  ): Promise<boolean> {
+    const intentId = await this.executionStore.entrySubmissionIntentId();
     if (!intentId) {
       return false;
     }
-    const mutation = this.executionStore.mutationForIntent(intentId);
+    const mutation = await this.executionStore.mutationForIntent(intentId);
     const venueFlat = this.isVenueFlatForLatch(positions);
     if (!mutation || mutation.operation !== "place_order") {
-      return venueFlat ? this.executionStore.clearEntrySubmissionLatch(intentId) : false;
+      return venueFlat ? await this.executionStore.clearEntrySubmissionLatch(intentId) : false;
     }
 
     const positionObserved = positions.some(
@@ -1852,7 +1858,7 @@ export class GlitchTopstepService {
         && order.customTag === mutation.customTag,
     );
     if (positionObserved || orderObserved) {
-      return this.executionStore.clearEntrySubmissionLatch(intentId);
+      return await this.executionStore.clearEntrySubmissionLatch(intentId);
     }
 
     const nowUtc = atUtc ?? new Date().toISOString();
@@ -1864,7 +1870,7 @@ export class GlitchTopstepService {
       positionObserved,
       orderObserved,
     )) {
-      return this.executionStore.clearEntrySubmissionLatch(intentId);
+      return await this.executionStore.clearEntrySubmissionLatch(intentId);
     }
     return false;
   }
@@ -1906,7 +1912,7 @@ export class GlitchTopstepService {
         detail: resolution.detail
           ?? "Recovered from durable outbox and current ProjectX evidence.",
       };
-      this.executionStore.recordReceipt(receipt);
+      await this.executionStore.recordReceipt(receipt);
       try {
         await this.ledger.append({
           schema_version: "glitch.direct.event.v1",
@@ -1933,23 +1939,23 @@ export class GlitchTopstepService {
     const contractId = this.config.scope.contractId;
     const stamp = () => new Date().toISOString();
 
-    const packetBefore = this.packets.current();
+    const packetBefore = await this.packets.current();
     const hashBefore = packetBefore.market.snapshot_hash;
     const baseline = snapshotReconnectPhase(
       "baseline",
       this.state.buildSnapshot(accountId, contractId),
       hashBefore,
-      this.packets.resolve(hashBefore) !== null,
+      await this.packets.resolve(hashBefore) !== null,
       stamp(),
     );
 
     this.state.markStreamReconnecting("market", new Error("acceptance_forced_gap"));
-    this.packets.invalidateAll();
+    await this.packets.invalidateAll();
     const gap = snapshotReconnectPhase(
       "after_stream_gap",
       this.state.buildSnapshot(accountId, contractId),
       hashBefore,
-      this.packets.resolve(hashBefore) !== null,
+      await this.packets.resolve(hashBefore) !== null,
       stamp(),
     );
 
@@ -1957,13 +1963,13 @@ export class GlitchTopstepService {
     this.state.markStreamConnected("market");
     this.state.markStreamEvent("market");
 
-    const packetAfter = this.packets.current();
+    const packetAfter = await this.packets.current();
     const hashAfter = packetAfter.market.snapshot_hash;
     const settled = snapshotReconnectPhase(
       "after_reconciliation",
       this.state.buildSnapshot(accountId, contractId),
       hashAfter,
-      this.packets.resolve(hashAfter) !== null,
+      await this.packets.resolve(hashAfter) !== null,
       stamp(),
     );
 

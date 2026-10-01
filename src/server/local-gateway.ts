@@ -9,6 +9,7 @@ import type { DirectDecisionPacket } from "../hermes/packet-builder.js";
 import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 import type { OutcomeRevisionPage } from "../storage/sqlite-outcome-feed.js";
 import { ProjectXOrderOwnershipService } from "../ownership/projectx-order-ownership.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import { formatLogError } from "../observability/log-sanitize.js";
 import { resolveIntentReceiptResponse } from "../domain/intent-delivery-status.js";
 
@@ -51,7 +52,7 @@ export interface PacketRequest {
 
 export class LocalGatewayServer {
   private server: Server | null = null;
-  private ownershipService: ProjectXOrderOwnershipService | null;
+  private ownershipService: MayPromise<ProjectXOrderOwnershipService> | null;
   private readonly ownsOwnershipService: boolean;
   private readonly activeConnections = new Set<ServerResponse>();
 
@@ -63,16 +64,19 @@ export class LocalGatewayServer {
     private readonly evidence: (
       limit: number,
       query?: { source?: ProviderEvidenceSource; eventType?: string },
-    ) => StoredProviderEvidenceEvent[],
+    ) => StoredProviderEvidenceEvent[] | Promise<StoredProviderEvidenceEvent[]>,
     private readonly coordinator: ExecutionCoordinator,
-    ownershipService: ProjectXOrderOwnershipService | null = null,
+    ownershipService: MayPromise<ProjectXOrderOwnershipService> | null = null,
     private readonly outcomes: (limit: number) => Promise<TradeOutcomeV1[]> = async () => [],
     private readonly acceptanceStreamGap?: () => Promise<{ phases: unknown[] }>,
-    private readonly outcomeFeed?: (afterSequence: number, limit: number) => OutcomeRevisionPage,
+    private readonly outcomeFeed?: (
+      afterSequence: number,
+      limit: number,
+    ) => OutcomeRevisionPage | Promise<OutcomeRevisionPage>,
     private readonly control?: (input: unknown) => Promise<unknown>,
-    private readonly controlLookup?: (controlId: string) => unknown,
+    private readonly controlLookup?: (controlId: string) => unknown | Promise<unknown>,
     private readonly scanner?: () => unknown,
-    private readonly executionFacts?: (afterSequence: number, limit: number) => unknown,
+    private readonly executionFacts?: (afterSequence: number, limit: number) => unknown | Promise<unknown>,
   ) {
     const ownership = options.ownership;
     this.ownsOwnershipService = ownershipService === null && ownership !== undefined;
@@ -175,7 +179,7 @@ export class LocalGatewayServer {
       if (request.method === "GET" && url.pathname === "/evidence") {
         const source = this.evidenceSource(url.searchParams.get("source"));
         const eventType = url.searchParams.get("event_type")?.trim() || undefined;
-        const events = this.evidence(this.evidenceLimit(url.searchParams.get("limit")), {
+        const events = await this.evidence(this.evidenceLimit(url.searchParams.get("limit")), {
           source,
           eventType,
         });
@@ -192,7 +196,7 @@ export class LocalGatewayServer {
           this.json(response, 503, { error: "ownership_projection_unavailable" });
           return;
         }
-        this.json(response, 200, this.ownershipService.current(this.snapshot().instrumentOpenContracts));
+        this.json(response, 200, await this.ownershipService.current(this.snapshot().instrumentOpenContracts));
         return;
       }
       if (request.method === "GET" && url.pathname === "/outcomes") {
@@ -220,7 +224,7 @@ export class LocalGatewayServer {
         }
         const afterSequence = this.nonNegativeInteger(url.searchParams.get("after_sequence"), 0);
         const limit = this.evidenceLimit(url.searchParams.get("limit"));
-        this.json(response, 200, this.outcomeFeed(afterSequence, limit));
+        this.json(response, 200, await this.outcomeFeed(afterSequence, limit));
         return;
       }
       if (request.method === "GET" && url.pathname === "/execution/facts") {
@@ -230,7 +234,7 @@ export class LocalGatewayServer {
         }
         const afterSequence = this.nonNegativeInteger(url.searchParams.get("after_sequence"), 0);
         const limit = this.evidenceLimit(url.searchParams.get("limit"));
-        this.json(response, 200, this.executionFacts(afterSequence, limit));
+        this.json(response, 200, await this.executionFacts(afterSequence, limit));
         return;
       }
       if (request.method === "GET" && url.pathname === "/intent/status") {
@@ -239,7 +243,7 @@ export class LocalGatewayServer {
           this.json(response, 400, { error: "intent_id_required" });
           return;
         }
-        this.json(response, 200, this.coordinator.intentDeliveryStatus(intentId));
+        this.json(response, 200, await this.coordinator.intentDeliveryStatus(intentId));
         return;
       }
       if (request.method === "GET" && url.pathname === "/intent/receipt") {
@@ -248,12 +252,12 @@ export class LocalGatewayServer {
           this.json(response, 400, { error: "intent_id_required" });
           return;
         }
-        const receipt = this.coordinator.receiptForIntent(intentId);
+        const receipt = await this.coordinator.receiptForIntent(intentId);
         // A missing receipt does not mean the intent never happened -- fall back to delivery
         // status so a non-terminal intent is never reported as a bare 404 (TS-REAUDIT-04).
         const resolved = resolveIntentReceiptResponse(
           receipt,
-          this.coordinator.intentDeliveryStatus(intentId),
+          await this.coordinator.intentDeliveryStatus(intentId),
         );
         this.json(response, resolved.httpStatus, resolved.body);
         return;
@@ -295,7 +299,7 @@ export class LocalGatewayServer {
           this.json(response, 400, { error: "control_id_required" });
           return;
         }
-        const result = this.controlLookup?.(controlId) ?? null;
+        const result = await this.controlLookup?.(controlId) ?? null;
         this.json(response, result === null ? 404 : 200, result ?? { error: "control_not_found" });
         return;
       }

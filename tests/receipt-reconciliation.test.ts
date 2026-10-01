@@ -6,7 +6,7 @@ import { SqliteExecutionStore } from "../src/storage/sqlite-execution-store.js";
 import type { OrderInfo } from "../src/domain/models.js";
 
 describe("pending receipt reconciliation", () => {
-  it("promotes a pending entry receipt to open_protected when child legs are observed", () => {
+  it("promotes a pending entry receipt to open_protected when child legs are observed", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const intentId = "00000000-0000-4000-8000-00000000c001";
     try {
@@ -97,7 +97,7 @@ describe("pending receipt reconciliation", () => {
           customTag: `glt-${intentId}-TP`,
         },
       ];
-      const result = reconcilePendingReceipts(
+      const result = await reconcilePendingReceipts(
         store,
         orders,
         101,
@@ -121,7 +121,7 @@ describe("pending receipt reconciliation", () => {
     }
   });
 
-  it("marks entry protection verification failed after the timeout without child legs", () => {
+  it("marks entry protection verification failed after the timeout without child legs", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const intentId = "00000000-0000-4000-8000-00000000c002";
     try {
@@ -181,7 +181,7 @@ describe("pending receipt reconciliation", () => {
       store.markMutationSubmitting(intentId, "2026-07-21T12:00:03Z");
       store.markMutationSubmitted(intentId, 9002, "2026-07-21T12:00:04Z");
 
-      const result = reconcilePendingReceipts(
+      const result = await reconcilePendingReceipts(
         store,
         [],
         101,
@@ -199,7 +199,7 @@ describe("pending receipt reconciliation", () => {
     }
   });
 
-  it("reconciles a confirmed partial EXIT when venue position matches the reduction record", () => {
+  it("reconciles a confirmed partial EXIT when venue position matches the reduction record", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const entryIntentId = "00000000-0000-4000-8000-00000000c010";
     const exitIntentId = "00000000-0000-4000-8000-00000000c011";
@@ -282,7 +282,7 @@ describe("pending receipt reconciliation", () => {
       store.markMutationSubmitting(exitIntentId, "2026-07-21T12:00:05Z");
       store.markMutationSubmitted(exitIntentId, 9201, "2026-07-21T12:00:06Z");
 
-      const result = reconcilePendingReceipts(
+      const result = await reconcilePendingReceipts(
         store,
         [],
         101,
@@ -301,7 +301,7 @@ describe("pending receipt reconciliation", () => {
     }
   });
 
-  it("keeps partial EXIT pending while the exit order is still working", () => {
+  it("keeps partial EXIT pending while the exit order is still working", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const entryIntentId = "00000000-0000-4000-8000-00000000c020";
     const exitIntentId = "00000000-0000-4000-8000-00000000c021";
@@ -371,7 +371,7 @@ describe("pending receipt reconciliation", () => {
       store.markMutationSubmitting(exitIntentId, "2026-07-21T12:00:05Z");
       store.markMutationSubmitted(exitIntentId, 9201, "2026-07-21T12:00:06Z");
 
-      const result = reconcilePendingReceipts(
+      const result = await reconcilePendingReceipts(
         store,
         [{
           id: 9201,

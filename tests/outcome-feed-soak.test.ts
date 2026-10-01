@@ -36,7 +36,7 @@ test("cursor replay walks more than 10000 revisions without gaps", async () => {
     let seen = 0;
     let pages = 0;
     for (;;) {
-      const page = store.revisionPage(cursor, PAGE);
+      const page = await store.revisionPage(cursor, PAGE);
       assert.equal(page.schema_version, "glitch.topstep.outcome_feed.v2");
       assert.equal(page.after_sequence, cursor);
       assert.equal(page.count, page.revisions.length);
@@ -57,7 +57,7 @@ test("cursor replay walks more than 10000 revisions without gaps", async () => {
 
     assert.equal(seen, TOTAL);
     assert.equal(cursor, TOTAL);
-    assert.equal(store.revisionPage(cursor, PAGE).high_water_sequence, TOTAL);
+    assert.equal((await store.revisionPage(cursor, PAGE)).high_water_sequence, TOTAL);
     assert.deepEqual(store.status().feed, {
       current_count: TOTAL,
       revision_count: TOTAL,

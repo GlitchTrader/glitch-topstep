@@ -44,6 +44,7 @@ import {
 import { isTickAligned, toProjectXBracketTicks } from "./brackets.js";
 import { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import { evaluatePortfolioAdmission, type ProtectedExposure } from "../risk/portfolio-risk.js";
 import { validatePortfolioSelection } from "../risk/portfolio-selection.js";
 import type { InstrumentUniverse } from "../domain/instrument-universe.js";
@@ -127,16 +128,18 @@ export class ExecutionCoordinator {
     private readonly config: AppConfig,
     private readonly api: ProjectXApiClient,
     private readonly ledger: JsonlEventStore,
-    private readonly store: SqliteExecutionStore,
+    private readonly store: MayPromise<SqliteExecutionStore>,
     private readonly snapshot: () => AccountVenueSnapshot,
-    private readonly resolveIssuedPacket: (snapshotHash: string) => DirectDecisionPacket | null,
-    private readonly invalidateIssuedPackets: () => void,
-    private readonly tranches: () => TrancheView[] = () => [],
+    private readonly resolveIssuedPacket: (
+      snapshotHash: string,
+    ) => DirectDecisionPacket | null | Promise<DirectDecisionPacket | null>,
+    private readonly invalidateIssuedPackets: () => void | Promise<void>,
+    private readonly tranches: () => TrancheView[] | Promise<TrancheView[]> = () => [],
     private readonly controlState: () => { paused: boolean; mode: TradingMode } = () => ({
       paused: false,
       mode: config.tradingMode,
     }),
-    private readonly dailyCaptureLocked: () => boolean = () => false,
+    private readonly dailyCaptureLocked: () => boolean | Promise<boolean> = () => false,
     private readonly instrumentUniverse: () => InstrumentUniverse | null = () => null,
     contractSnapshot?: (contractId: string) => AccountVenueSnapshot,
   ) {
@@ -234,25 +237,28 @@ export class ExecutionCoordinator {
     return result;
   }
 
-  public receiptForIntent(intentId: string): ExecutionReceipt | null {
-    return this.store.receiptForIntent<ExecutionReceipt>(intentId);
+  public async receiptForIntent(intentId: string): Promise<ExecutionReceipt | null> {
+    return await this.store.receiptForIntent(intentId) as ExecutionReceipt | null;
   }
 
-  public intentDeliveryStatus(intentId: string) {
-    return this.store.intentDeliveryStatus(intentId);
+  public async intentDeliveryStatus(intentId: string) {
+    return await this.store.intentDeliveryStatus(intentId);
   }
 
   private async handleWireIntentSerial(input: unknown): Promise<ExecutionReceipt> {
-    const early = evaluateIntentAdmissionEarly(input, {
-      registerIntent: (intent, receivedUtc) => this.store.registerIntent(intent, receivedUtc),
-      receiptForIntent: <T,>(intentId: string) => this.store.receiptForIntent<T>(intentId),
-      recordExecutionFact: (fact) => this.store.recordExecutionFact(fact),
+    const early = await evaluateIntentAdmissionEarly(input, {
+      registerIntent: async (intent, receivedUtc) => await this.store.registerIntent(intent, receivedUtc),
+      receiptForIntent: async <T,>(intentId: string) =>
+        await this.store.receiptForIntent(intentId) as T | null,
+      recordExecutionFact: async (fact) => {
+        await this.store.recordExecutionFact(fact);
+      },
       resolveIssuedPacket: (snapshotHash) => this.resolveIssuedPacket(snapshotHash),
       currentMode: () => this.currentMode(),
       controlPaused: () => this.controlState().paused,
       ledgerIsDurable: () => this.ledger.isDurable(),
       ledgerStatus: () => this.ledger.status(),
-      recoveryStatus: () => this.store.recoveryStatus(),
+      recoveryStatus: async () => await this.store.recoveryStatus(),
     });
 
     if (early.kind === "reject" || early.kind === "ignore") {
@@ -260,7 +266,7 @@ export class ExecutionCoordinator {
     }
     if (early.kind === "ambiguous") {
       const existing = early.receipt.intentId
-        ? this.store.receiptForIntent<ExecutionReceipt>(early.receipt.intentId)
+        ? await this.store.receiptForIntent(early.receipt.intentId) as ExecutionReceipt | null
         : null;
       return existing ?? this.ephemeral(early.receipt);
     }
@@ -293,7 +299,7 @@ export class ExecutionCoordinator {
           expectedContractId: issuedPacket.contract.id,
           expectedScopeHash: issuedPacket.decision_scope.scope_hash,
           expectedScopeGeneration: issuedPacket.decision_scope.generation,
-          dailyCaptureLocked: issuedPacket.execution.daily_capture_locked || this.dailyCaptureLocked(),
+          dailyCaptureLocked: issuedPacket.execution.daily_capture_locked || await this.dailyCaptureLocked(),
           armedMode: this.currentMode() === "armed",
         },
       );
@@ -387,7 +393,7 @@ export class ExecutionCoordinator {
         stopLossBracket: { ticks: projectXBrackets.stopTicks, type: 4 },
         takeProfitBracket: { ticks: projectXBrackets.targetTicks, type: 1 },
       };
-      this.store.prepareMutation(
+      await this.store.prepareMutation(
         intent.intentId,
         "place_order",
         request as unknown as Record<string, unknown>,
@@ -396,18 +402,18 @@ export class ExecutionCoordinator {
       );
       this.invalidateIssuedPackets();
       maybeKill("after_prepared_before_provider");
-      this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+      await this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
       maybeKill("after_submitting_before_transport");
 
       try {
         const orderId = await this.api.placeOrder(request);
         try {
-          this.store.noteMutationProviderOrderId(intent.intentId, orderId);
+          await this.store.noteMutationProviderOrderId(intent.intentId, orderId);
         } catch {
           // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
         }
         maybeKill("after_accept_before_submitted");
-        this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        await this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
         maybeKill("after_submitted_before_receipt");
         return this.record({
           intentId: intent.intentId,
@@ -498,7 +504,7 @@ export class ExecutionCoordinator {
         : positionSize);
 
     if (intent.targetIntentId !== undefined) {
-      const tranche = this.tranches().find((candidate) => candidate.intent_id === intent.targetIntentId);
+      const tranche = (await this.tranches()).find((candidate) => candidate.intent_id === intent.targetIntentId);
       if (!tranche || tranche.filled_qty <= 0) {
         return this.record({
           intentId: intent.intentId,
@@ -529,9 +535,9 @@ export class ExecutionCoordinator {
     } else if (
       intent.quantity !== undefined
       && intent.quantity < positionSize
-      && this.tranches().length > 0
+      && (await this.tranches()).length > 0
     ) {
-      const fifoRemaining = this.tranches()
+      const fifoRemaining = (await this.tranches())
         .filter((candidate) => candidate.remaining_qty > 0)
         .reduce((total, candidate) => total + candidate.remaining_qty, 0);
       if (exitQuantity > fifoRemaining) {
@@ -554,7 +560,7 @@ export class ExecutionCoordinator {
     }
 
     const partialExit = exitQuantity < positionSize;
-    const attributableTranches = this.attributableTranches().filter(
+    const attributableTranches = (await this.attributableTranches()).filter(
       (tranche) => tranche.remaining_qty > 0,
     );
     if (partialExit && attributableTranches.length > 1 && intent.targetIntentId === undefined) {
@@ -575,7 +581,7 @@ export class ExecutionCoordinator {
       });
     }
 
-    const survivorTranches = this.attributableTranches().filter(
+    const survivorTranches = (await this.attributableTranches()).filter(
       (tranche) => tranche.intent_id !== intent.targetIntentId && tranche.remaining_qty > 0,
     );
     const survivorProtection = survivorTranches.length === 1
@@ -590,7 +596,7 @@ export class ExecutionCoordinator {
       : null;
     const nowUtc = new Date().toISOString();
     if (partialExit) {
-      this.store.beginProtectedReduction({
+      await this.store.beginProtectedReduction({
         reductionId: randomUUID(),
         exitIntentId: intent.intentId,
         targetIntentId: intent.targetIntentId ?? null,
@@ -603,7 +609,7 @@ export class ExecutionCoordinator {
         nowUtc,
       });
       maybeKill("reduction_after_prepared");
-      this.store.advanceProtectedReduction(
+      await this.store.advanceProtectedReduction(
         intent.intentId,
         "reduction_submitting",
         "prepared_to_submitting",
@@ -616,7 +622,7 @@ export class ExecutionCoordinator {
     if (partialExit && intent.targetIntentId !== undefined) {
       const cancelError = await this.cancelTrancheProtectionOrders(snapshot, intent);
       if (cancelError) {
-        this.store.advanceProtectedReduction(
+        await this.store.advanceProtectedReduction(
           intent.intentId,
           "failed",
           "protection_cancel_failed",
@@ -640,7 +646,7 @@ export class ExecutionCoordinator {
           accountId: this.config.scope.accountId,
           contractId,
         };
-    this.store.prepareMutation(
+    await this.store.prepareMutation(
       intent.intentId,
       partialExit ? "place_order" : "close_position",
       request,
@@ -648,18 +654,18 @@ export class ExecutionCoordinator {
       new Date().toISOString(),
     );
     this.invalidateIssuedPackets();
-    this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+    await this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
     try {
       if (partialExit) {
         const orderId = await this.api.placeOrder(request as PlaceOrderRequest);
         maybeKill("reduction_after_place_before_mark");
         try {
-          this.store.noteMutationProviderOrderId(intent.intentId, orderId);
+          await this.store.noteMutationProviderOrderId(intent.intentId, orderId);
         } catch {
           // ponytail: recovery can race submitting->ambiguous while placeOrder is in flight
         }
-        this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
-        this.store.advanceProtectedReduction(
+        await this.store.markMutationSubmitted(intent.intentId, orderId, new Date().toISOString());
+        await this.store.advanceProtectedReduction(
           intent.intentId,
           "reduction_ambiguous",
           "exit_submitted_pending_survivor_proof",
@@ -676,7 +682,7 @@ export class ExecutionCoordinator {
       }
       maybeKill("during_close_position");
       await this.api.closePosition(request.accountId, request.contractId);
-      this.store.markMutationSubmitted(intent.intentId, null, new Date().toISOString());
+      await this.store.markMutationSubmitted(intent.intentId, null, new Date().toISOString());
       return this.record({
         intentId: intent.intentId,
         status: "closed",
@@ -685,7 +691,7 @@ export class ExecutionCoordinator {
     } catch (error) {
       if (partialExit) {
         try {
-          this.store.advanceProtectedReduction(
+          await this.store.advanceProtectedReduction(
             intent.intentId,
             "failed",
             "provider_partial_exit_failed",
@@ -726,7 +732,7 @@ export class ExecutionCoordinator {
       return validation;
     }
 
-    const attributableTranches = this.attributableTranches();
+    const attributableTranches = await this.attributableTranches();
     if (intent.targetIntentId === undefined && attributableTranches.length > 1) {
       return this.record({
         intentId: intent.intentId,
@@ -735,7 +741,7 @@ export class ExecutionCoordinator {
       });
     }
 
-    const active = this.resolveActiveProtection(snapshot, intent);
+    const active = await this.resolveActiveProtection(snapshot, intent);
     if (!active) {
       if (intent.targetIntentId !== undefined) {
         return this.record({
@@ -791,9 +797,9 @@ export class ExecutionCoordinator {
         code: "position_side_unknown",
       });
     }
-    const amendmentSafety = (() => {
+    const amendmentSafety = await (async () => {
       const side = scaleInAction === "ENTER_LONG" ? "long" : "short";
-      const entryPayload = this.store.registeredIntentPayload(active.intentId);
+      const entryPayload = await this.store.registeredIntentPayload(active.intentId);
       const originalRiskEnvelope = leg === "stop"
         && entryPayload?.stopLoss !== undefined
         && position?.averagePrice
@@ -877,7 +883,7 @@ export class ExecutionCoordinator {
       ...(leg === "stop" ? { stopPrice: newPrice } : { limitPrice: newPrice }),
     };
     // ponytail: outbox rows are keyed by intent_id; venue protective tags are stable across amends
-    this.store.prepareMutation(
+    await this.store.prepareMutation(
       intent.intentId,
       "modify_order",
       request as unknown as Record<string, unknown>,
@@ -885,10 +891,10 @@ export class ExecutionCoordinator {
       new Date().toISOString(),
     );
     this.invalidateIssuedPackets();
-    this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
+    await this.store.markMutationSubmitting(intent.intentId, new Date().toISOString());
     try {
       await this.api.modifyOrder(request);
-      this.store.markMutationSubmitted(intent.intentId, protectiveLeg.providerOrderId, new Date().toISOString());
+      await this.store.markMutationSubmitted(intent.intentId, protectiveLeg.providerOrderId, new Date().toISOString());
       return this.record({
         intentId: intent.intentId,
         status: "pending",
@@ -937,8 +943,8 @@ export class ExecutionCoordinator {
     return null;
   }
 
-  private attributableTranches(): TrancheView[] {
-    return this.tranches().filter((tranche) => tranche.remaining_qty > 0);
+  private async attributableTranches(): Promise<TrancheView[]> {
+    return (await this.tranches()).filter((tranche) => tranche.remaining_qty > 0);
   }
 
   /**
@@ -956,7 +962,7 @@ export class ExecutionCoordinator {
     if (snapshot.instrumentOpenContracts !== 0) {
       return false;
     }
-    this.store.markProtectedReductionsFlat(new Date().toISOString());
+    await this.store.markProtectedReductionsFlat(new Date().toISOString());
     const orphans = snapshot.openOrders.filter(
       (order) => order.accountId === this.config.scope.accountId
         && order.contractId === this.config.scope.contractId
@@ -1028,10 +1034,10 @@ export class ExecutionCoordinator {
         && order.contractId === this.config.scope.contractId
         && !isProtectiveCustomTag(order.customTag),
     );
-    if (nonProtective.length > 0 || this.store.hasExitMutationBlockingRearm()) {
+    if (nonProtective.length > 0 || await this.store.hasExitMutationBlockingRearm()) {
       return false;
     }
-    const exitTargets = this.store.submittedExitTargetIntentIds();
+    const exitTargets = await this.store.submittedExitTargetIntentIds();
     const contractPositions = snapshot.positions.filter(
       (position) => position.accountId === this.config.scope.accountId
         && position.contractId === this.config.scope.contractId
@@ -1043,7 +1049,7 @@ export class ExecutionCoordinator {
       return false;
     }
     const coverSide: 0 | 1 = netSigned < 0 ? 0 : 1;
-    const candidates = this.attributableTranches().filter((tranche) => {
+    const candidates = (await this.attributableTranches()).filter((tranche) => {
       if (this.rearmStates.get(tranche.intent_id) === "confirmed" || exitTargets.has(tranche.intent_id)) {
         return false;
       }
@@ -1095,7 +1101,7 @@ export class ExecutionCoordinator {
         ),
       );
       const tags = protectionCustomTags(tranche.intent_id, generation);
-      const entry = this.store.registeredIntentPayload(tranche.intent_id);
+      const entry = await this.store.registeredIntentPayload(tranche.intent_id);
       const historicalStop = lastProtectivePriceForIntent(
         recentOrders,
         tranche.intent_id,
@@ -1139,7 +1145,7 @@ export class ExecutionCoordinator {
       const stopPrice = sanitized.stopPrice;
       const targetPrice = historicalTarget === null ? null : sanitized.targetPrice;
       const size = tranche.remaining_qty;
-      let activeReduction = this.store.activeProtectedReduction();
+      let activeReduction = await this.store.activeProtectedReduction();
       let targetRearmFailed = false;
       try {
         if (!protection.stop.providerOrderId && this.rearmStates.get(tranche.intent_id) !== "stop_placed") {
@@ -1152,18 +1158,18 @@ export class ExecutionCoordinator {
             stopPrice,
             customTag: tags.stop,
           });
-          activeReduction = this.store.activeProtectedReduction();
+          activeReduction = await this.store.activeProtectedReduction();
           if (activeReduction
             && (activeReduction.state === "reduction_ambiguous"
               || activeReduction.state === "reduction_submitting")) {
-            this.store.advanceProtectedReduction(
+            await this.store.advanceProtectedReduction(
               activeReduction.exit_intent_id,
               "degraded_stop_only",
               "survivor_stop_replaced",
               new Date().toISOString(),
               { detail: `tranche=${tranche.intent_id};generation=${generation}` },
             );
-            activeReduction = this.store.activeProtectedReduction();
+            activeReduction = await this.store.activeProtectedReduction();
           }
           maybeKill("rearm_after_stop_before_tp");
           this.rearmStates.set(tranche.intent_id, "stop_placed");
@@ -1179,11 +1185,11 @@ export class ExecutionCoordinator {
               limitPrice: targetPrice,
               customTag: tags.target,
             });
-            activeReduction = this.store.activeProtectedReduction();
+            activeReduction = await this.store.activeProtectedReduction();
             if (activeReduction
               && (activeReduction.state === "degraded_stop_only"
                 || activeReduction.state === "reduction_ambiguous")) {
-              this.store.advanceProtectedReduction(
+              await this.store.advanceProtectedReduction(
                 activeReduction.exit_intent_id,
                 "reduced_protected",
                 "survivor_stop_and_target_replaced",
@@ -1192,10 +1198,10 @@ export class ExecutionCoordinator {
             }
           } catch (tpError) {
             targetRearmFailed = true;
-            activeReduction = this.store.activeProtectedReduction();
+            activeReduction = await this.store.activeProtectedReduction();
             if (activeReduction && activeReduction.state === "reduction_ambiguous") {
               try {
-                this.store.advanceProtectedReduction(
+                await this.store.advanceProtectedReduction(
                   activeReduction.exit_intent_id,
                   "degraded_stop_only",
                   "target_rearm_failed_stop_only",
@@ -1224,9 +1230,9 @@ export class ExecutionCoordinator {
           protection.stop.providerOrderId
           && protection.target.providerOrderId
         ) {
-          activeReduction = this.store.activeProtectedReduction();
+          activeReduction = await this.store.activeProtectedReduction();
           if (activeReduction && activeReduction.state === "reduction_ambiguous") {
-            this.store.advanceProtectedReduction(
+            await this.store.advanceProtectedReduction(
               activeReduction.exit_intent_id,
               "reduced_protected",
               "survivor_protection_still_proven",
@@ -1255,10 +1261,10 @@ export class ExecutionCoordinator {
           });
         }
       } catch (error) {
-        activeReduction = this.store.activeProtectedReduction();
+        activeReduction = await this.store.activeProtectedReduction();
         if (activeReduction) {
           try {
-            this.store.advanceProtectedReduction(
+            await this.store.advanceProtectedReduction(
               activeReduction.exit_intent_id,
               "failed",
               "survivor_stop_rearm_failed",
@@ -1328,7 +1334,7 @@ export class ExecutionCoordinator {
     );
 
     let tightened = 0;
-    for (const tranche of this.attributableTranches()) {
+    for (const tranche of await this.attributableTranches()) {
       const protection = bindProtection(
         tranche.intent_id,
         snapshot.openOrders,
@@ -1413,11 +1419,13 @@ export class ExecutionCoordinator {
     return tightened;
   }
 
-  public protectedReductionHealth(snapshot: AccountVenueSnapshot = this.snapshot()): ProtectedReductionHealth {
+  public async protectedReductionHealth(
+    snapshot: AccountVenueSnapshot = this.snapshot(),
+  ): Promise<ProtectedReductionHealth> {
     return evaluateProtectionHealth({
       snapshot,
-      tranches: this.attributableTranches(),
-      activeReduction: this.store.activeProtectedReduction(),
+      tranches: await this.attributableTranches(),
+      activeReduction: await this.store.activeProtectedReduction(),
       accountId: this.config.scope.accountId,
       contractId: this.config.scope.contractId,
     });
@@ -1427,10 +1435,10 @@ export class ExecutionCoordinator {
    * Live evaluate + heat the health peek cache. Call from reconcile (never from /health).
    * Same computation as protectedReductionHealth — execution callers keep using that live.
    */
-  public refreshProtectedReductionHealthCache(
+  public async refreshProtectedReductionHealthCache(
     snapshot: AccountVenueSnapshot = this.snapshot(),
-  ): ProtectedReductionHealth {
-    const health = this.protectedReductionHealth(snapshot);
+  ): Promise<ProtectedReductionHealth> {
+    const health = await this.protectedReductionHealth(snapshot);
     this.healthProtectedReduction = health;
     this.healthProtectedReductionStale = false;
     return health;
@@ -1457,7 +1465,7 @@ export class ExecutionCoordinator {
     snapshot: AccountVenueSnapshot,
     options: { afterRearmAttempt: boolean; now?: Date } = { afterRearmAttempt: true },
   ): Promise<UnprotectedFlattenResult> {
-    return this.enqueue(() => runUnprotectedFlattenCycle({
+    return this.enqueue(async () => runUnprotectedFlattenCycle({
       snapshot,
       store: this.store,
       api: this.api,
@@ -1466,8 +1474,8 @@ export class ExecutionCoordinator {
       contractId: this.config.scope.contractId,
       accountName: this.config.scope.accountName,
       instrument: this.config.scope.instrument,
-      attributableTranches: this.attributableTranches(),
-      activeReduction: this.store.activeProtectedReduction(),
+      attributableTranches: await this.attributableTranches(),
+      activeReduction: await this.store.activeProtectedReduction(),
       afterRearmAttempt: options.afterRearmAttempt,
       invalidateIssuedPackets: this.invalidateIssuedPackets,
       now: options.now,
@@ -1478,7 +1486,7 @@ export class ExecutionCoordinator {
     snapshot: AccountVenueSnapshot,
     intent: TradeIntent,
   ): Promise<ExecutionReceipt | null> {
-    const active = this.resolveActiveProtection(snapshot, intent);
+    const active = await this.resolveActiveProtection(snapshot, intent);
     if (!active) {
       return null;
     }
@@ -1500,12 +1508,12 @@ export class ExecutionCoordinator {
     return null;
   }
 
-  private resolveActiveProtection(
+  private async resolveActiveProtection(
     snapshot: AccountVenueSnapshot,
     intent?: TradeIntent,
-  ): { intentId: string; protection: ResolvedProtection } | null {
-    const allTranches = this.tranches();
-    const attributableTranches = this.attributableTranches();
+  ): Promise<{ intentId: string; protection: ResolvedProtection } | null> {
+    const allTranches = await this.tranches();
+    const attributableTranches = await this.attributableTranches();
 
     const positionOpen = snapshot.instrumentOpenContracts > 0;
 
@@ -1569,12 +1577,12 @@ export class ExecutionCoordinator {
     error: unknown,
   ): Promise<ExecutionReceipt> {
     const detail = error instanceof Error ? `${error.name}:${error.message}` : String(error);
-    const mutation = this.store.mutationForIntent(intentId);
+    const mutation = await this.store.mutationForIntent(intentId);
     if (mutation?.state === "submitted") {
       return this.recordSubmittedMutationReceipt(intentId, mutation, detail);
     }
     if (this.isAuthoritativeRejection(error)) {
-      this.store.markMutationRejected(intentId, detail, new Date().toISOString());
+      await this.store.markMutationRejected(intentId, detail, new Date().toISOString());
       this.invalidateIssuedPackets();
       return this.record({
         intentId,
@@ -1584,7 +1592,7 @@ export class ExecutionCoordinator {
       });
     }
 
-    this.store.markMutationAmbiguous(intentId, detail, new Date().toISOString());
+    await this.store.markMutationAmbiguous(intentId, detail, new Date().toISOString());
     return this.record({
       intentId,
       status: "ambiguous",
@@ -1683,13 +1691,13 @@ export class ExecutionCoordinator {
       ...(input.path === undefined ? {} : { path: input.path }),
     };
     if (receipt.intent_id) {
-      const mutation = this.store.mutationForIntent(receipt.intent_id);
+      const mutation = await this.store.mutationForIntent(receipt.intent_id);
       const fact = receiptLifecycleFact(receipt.intent_id, receipt, receipt.recorded_utc, {
         submittedUtc: mutation?.resolvedUtc ?? mutation?.submittingUtc ?? null,
         fillObservedUtc: receipt.fill_observed_utc ?? null,
         protectionConfirmedUtc: receipt.status === "open_protected" ? receipt.recorded_utc : null,
       });
-      this.store.recordExecutionFact({
+      await this.store.recordExecutionFact({
         intentId: fact.intentId,
         phase: fact.phase,
         factKey: fact.factKey,
@@ -1698,7 +1706,7 @@ export class ExecutionCoordinator {
         diagnostics: fact.diagnostics,
       });
     }
-    this.store.recordReceipt({ ...receipt });
+    await this.store.recordReceipt({ ...receipt });
     maybeKill("after_receipt_before_jsonl");
     try {
       await this.ledger.append({
