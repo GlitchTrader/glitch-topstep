@@ -67,6 +67,24 @@ function Format-EventLoopDelay {
     return "event_loop_delay_max_ms=$($eld.max_ms) event_loop_delay_p99_ms=$($eld.p99_ms) event_loop_delay_mean_ms=$($eld.mean_ms)"
 }
 
+function Format-WorkerQueueTiming {
+    param($Health)
+    if ($null -eq $Health) {
+        return "quote_age_ms=unavailable state_age_ms=unavailable worker_queue_timing=unavailable"
+    }
+    $quality = $Health.data_quality
+    $quote = if ($null -eq $quality -or $null -eq $quality.quote_age_ms) { "unavailable" } else { $quality.quote_age_ms }
+    $state = if ($null -eq $quality -or $null -eq $quality.state_age_ms) { "unavailable" } else { $quality.state_age_ms }
+    $timing = $Health.worker_queue_timing
+    if ($null -eq $timing) {
+        return "quote_age_ms=$quote state_age_ms=$state worker_queue_timing=unavailable"
+    }
+    $reconcile = $timing.reconcile
+    $evidence = $timing.evidence
+    $other = $timing.other
+    return "quote_age_ms=$quote state_age_ms=$state reconcile_queue_wait_max_ms=$($reconcile.max_queue_wait_ms) reconcile_exec_max_ms=$($reconcile.max_exec_ms) reconcile_n=$($reconcile.count) evidence_queue_wait_max_ms=$($evidence.max_queue_wait_ms) evidence_exec_max_ms=$($evidence.max_exec_ms) evidence_n=$($evidence.count) other_queue_wait_max_ms=$($other.max_queue_wait_ms) other_exec_max_ms=$($other.max_exec_ms) other_n=$($other.count)"
+}
+
 function Format-SqliteWriteLatency {
     param($Health)
     if ($null -eq $Health -or $null -eq $Health.sqlite_write_latency) {
@@ -308,11 +326,12 @@ try {
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
         $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
         $latency = Format-SqliteWriteLatency -Health $health
+        $queue = Format-WorkerQueueTiming -Health $health
         $drainNote = ""
         if ($cause -eq "startup_outbox_drain_progressing") {
             $drainNote = " pending=$($currentDrain.pending) drained_so_far=$($currentDrain.drained_so_far)"
         }
-        Write-WatchdogLog "ok status=$status cause=$cause $latency$drainNote"
+        Write-WatchdogLog "ok status=$status cause=$cause $latency $queue$drainNote"
         exit 0
     }
 

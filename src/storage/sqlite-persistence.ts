@@ -6,6 +6,12 @@ import type { SqliteExecutionStore } from "./sqlite-execution-store.js";
 import type { SqliteOutcomeFeed } from "./sqlite-outcome-feed.js";
 import type { SqliteProviderEvidenceStore } from "./sqlite-provider-evidence-store.js";
 import type { SqliteWriteLatencyMetrics } from "./sqlite-write-latency.js";
+import {
+  WorkerQueueTimingTracker,
+  workerLane,
+  type WorkerLane,
+  type WorkerQueueTiming,
+} from "./worker-queue-timing.js";
 import type { ProviderEvidenceStatus } from "../domain/provider-evidence.js";
 import type { ExecutionRecoveryStatus } from "../domain/execution-state.js";
 
@@ -28,17 +34,24 @@ export interface SqlitePersistencePaths {
   ownership: SqlitePersistenceOwnership | null;
 }
 
+interface WorkerTiming {
+  queue_wait_ms: number;
+  exec_ms: number;
+}
+
 interface WorkerSuccess {
   id: number;
   ok: true;
   result: unknown;
   caches: CacheSnapshot | null;
+  timing?: WorkerTiming;
 }
 
 interface WorkerFailure {
   id: number;
   ok: false;
   error: string;
+  timing?: WorkerTiming;
 }
 
 interface CacheSnapshot {
@@ -88,7 +101,9 @@ export class SqlitePersistence {
   private readonly pending = new Map<number, {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
+    lane: WorkerLane;
   }>();
+  private readonly queueTiming = new WorkerQueueTimingTracker();
   private seq = 0;
   private closed = false;
   private readonly ready: Promise<void>;
@@ -112,6 +127,9 @@ export class SqlitePersistence {
         return;
       }
       this.pending.delete(message.id);
+      if (message.timing) {
+        this.queueTiming.observe(waiter.lane, message.timing.queue_wait_ms, message.timing.exec_ms);
+      }
       if (!message.ok) {
         waiter.reject(new Error(message.error));
         return;
@@ -142,6 +160,11 @@ export class SqlitePersistence {
     return this.ready;
   }
 
+  /** Interval max resets on authenticated /health. Last values stay. */
+  public queueTimingSnapshot(options: { reset?: boolean } = {}): WorkerQueueTiming {
+    return this.queueTiming.snapshot(options);
+  }
+
   /** Test hook: block the worker without touching the main thread. */
   public delay(ms: number): Promise<void> {
     return this.send({ op: "delay", ms }).then(() => undefined);
@@ -161,17 +184,20 @@ export class SqlitePersistence {
   }
 
   public call(store: string, method: string, args: unknown[]): Promise<unknown> {
-    return this.ready.then(() => this.send({ op: "call", store, method, args }));
+    return this.ready.then(() => this.send(
+      { op: "call", store, method, args },
+      workerLane(store, method),
+    ));
   }
 
-  private send(message: Record<string, unknown>): Promise<unknown> {
+  private send(message: Record<string, unknown>, lane: WorkerLane = "other"): Promise<unknown> {
     if (this.closed && message.op !== "close") {
       return Promise.reject(new Error("sqlite_persistence_closed"));
     }
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage({ ...message, id });
+      this.pending.set(id, { resolve, reject, lane });
+      this.worker.postMessage({ ...message, id, enqueuedAtMs: Date.now() });
     });
   }
 }
