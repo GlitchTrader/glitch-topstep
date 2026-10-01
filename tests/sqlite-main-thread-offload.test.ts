@@ -24,6 +24,9 @@ describe("sqlite off the gateway main thread", () => {
       assert.ok(ticks >= 1, `main thread kept ticking during worker delay, saw ${ticks}`);
       await blocking;
       clearInterval(timer);
+      const status = await persistence.call("execution", "recoveryStatus", []);
+      assert.equal(typeof status, "object");
+      assert.ok(status !== null && "unresolvedMutations" in (status as object));
     } finally {
       await persistence.close();
     }

@@ -139,7 +139,7 @@ port.on("message", (message: {
       if (!fn) {
         throw new Error(`sqlite_worker_unknown_call:${storeName}.${method}`);
       }
-      const result = fn(...(message.args ?? []));
+      const result = fn.apply(target, message.args ?? []);
       port.postMessage({ id: message.id, ok: true, result, caches: caches() });
       return;
     }
