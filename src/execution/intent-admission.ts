@@ -32,21 +32,21 @@ export type IntentAdmissionEarlyResult =
   | { kind: "proceed"; intent: TradeIntent; issuedPacket: DirectDecisionPacket };
 
 export interface IntentAdmissionEarlyDeps {
-  registerIntent(intent: TradeIntent, receivedUtc: string): IntentRegistrationResult;
-  receiptForIntent<T = Record<string, unknown>>(intentId: string): T | null;
+  registerIntent(intent: TradeIntent, receivedUtc: string): IntentRegistrationResult | Promise<IntentRegistrationResult>;
+  receiptForIntent<T = Record<string, unknown>>(intentId: string): T | null | Promise<T | null>;
   recordExecutionFact(input: {
     intentId: string;
     phase: string;
     recordedUtc: string;
     detail: Record<string, unknown>;
     diagnostics?: Record<string, unknown>;
-  }): void;
-  resolveIssuedPacket(snapshotHash: string): DirectDecisionPacket | null;
+  }): void | Promise<void>;
+  resolveIssuedPacket(snapshotHash: string): DirectDecisionPacket | null | Promise<DirectDecisionPacket | null>;
   currentMode(): TradingMode;
   controlPaused(): boolean;
   ledgerIsDurable(): boolean;
   ledgerStatus(): ExecutionLedgerStatus;
-  recoveryStatus(): ExecutionRecoveryStatus;
+  recoveryStatus(): ExecutionRecoveryStatus | Promise<ExecutionRecoveryStatus>;
   receivedUtc?: string;
 }
 
@@ -55,10 +55,10 @@ export interface IntentAdmissionEarlyDeps {
  * (before validateEntryRisk). Side effects on the store happen here; receipt
  * persistence remains with the coordinator.
  */
-export function evaluateIntentAdmissionEarly(
+export async function evaluateIntentAdmissionEarly(
   input: unknown,
   deps: IntentAdmissionEarlyDeps,
-): IntentAdmissionEarlyResult {
+): Promise<IntentAdmissionEarlyResult> {
   let intent: TradeIntent;
   try {
     intent = parseTradeIntent(input);
@@ -89,7 +89,7 @@ export function evaluateIntentAdmissionEarly(
   }
 
   const receivedUtc = deps.receivedUtc ?? new Date().toISOString();
-  const registration = deps.registerIntent(intent, receivedUtc);
+  const registration = await deps.registerIntent(intent, receivedUtc);
   if (registration.status === "conflict") {
     return {
       kind: "reject",
@@ -112,7 +112,7 @@ export function evaluateIntentAdmissionEarly(
     };
   }
 
-  deps.recordExecutionFact({
+  await deps.recordExecutionFact({
     intentId: intent.intentId,
     phase: "intent_admitted",
     recordedUtc: receivedUtc,
@@ -127,7 +127,7 @@ export function evaluateIntentAdmissionEarly(
 
   const issuedPacket = intent.action === "NOTHING" || intent.action === "HOLD"
     ? null
-    : deps.resolveIssuedPacket(intent.snapshotHash);
+    : await deps.resolveIssuedPacket(intent.snapshotHash);
   if (issuedPacket === null && intent.action !== "NOTHING" && intent.action !== "HOLD") {
     return {
       kind: "reject",
@@ -219,7 +219,7 @@ export function evaluateIntentAdmissionEarly(
     };
   }
 
-  const recovery = deps.recoveryStatus();
+  const recovery = await deps.recoveryStatus();
   if (recovery.blockingNewExposure) {
     return {
       kind: "reject",

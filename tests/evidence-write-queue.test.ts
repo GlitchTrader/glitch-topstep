@@ -140,6 +140,36 @@ describe("provider evidence write queue", () => {
     assert.equal(queue.metrics().resume_cursor, 1);
   });
 
+  it("holds onDurable until a delayed appendBatch resolves while the event loop keeps ticking", async () => {
+    let releaseCommit!: () => void;
+    const committed = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let applied = false;
+    const writer = {
+      appendBatch: async (events: readonly ProviderEvidenceEvent[]) => {
+        await committed;
+        return events.map((_event, offset) => ({ sequence: offset + 1 }));
+      },
+    };
+    const queue = new EvidenceWriteQueue(writer, { batchIntervalMs: 0, batchSize: 1 });
+    let ticks = 0;
+    const timer = setInterval(() => {
+      ticks += 1;
+    }, 10);
+    queue.submit(identityEvent("order", 1), () => {
+      applied = true;
+    });
+    const draining = queue.drain();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(applied, false);
+    assert.ok(ticks >= 1, `event loop ticks during the durable wait, saw ${ticks}`);
+    releaseCommit();
+    await draining;
+    assert.equal(applied, true);
+    clearInterval(timer);
+  });
+
   it("never drops identity evidence in a burst above the TS-R2-07 rates", async () => {
     const writer = new RecordingWriter();
     const queue = new EvidenceWriteQueue(writer, {

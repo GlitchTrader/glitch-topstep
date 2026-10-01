@@ -9,6 +9,7 @@ import type { OrderInfo } from "../domain/models.js";
 import { receiptLifecycleFact } from "./lifecycle-facts.js";
 import { bindProtection } from "../ownership/protection.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 
 const WORKING_ORDER_STATUSES = new Set([0, 1, 6]);
 
@@ -18,27 +19,27 @@ export interface ReceiptReconciliationResult {
   events: BracketVerificationEvent[];
 }
 
-export function reconcilePendingReceipts(
-  store: SqliteExecutionStore,
+export async function reconcilePendingReceipts(
+  store: MayPromise<SqliteExecutionStore>,
   orders: OrderInfo[],
   accountId: number,
   contractId: string,
   positionOpen: boolean,
   nowUtc: string,
   instrumentOpenContracts = 0,
-): ReceiptReconciliationResult {
+): Promise<ReceiptReconciliationResult> {
   let changed = false;
   let reconciled = 0;
   const events: BracketVerificationEvent[] = [];
 
-  for (const intentId of store.pendingReceiptIntentIds()) {
-    const receipt = store.receiptForIntent<ExecutionReceipt>(intentId);
-    const mutation = store.mutationForIntent(intentId);
+  for (const intentId of await store.pendingReceiptIntentIds()) {
+    const receipt = await store.receiptForIntent(intentId) as ExecutionReceipt | null;
+    const mutation = await store.mutationForIntent(intentId);
     if (!receipt || !mutation) {
       continue;
     }
 
-    const next = reconcileReceipt(
+    const next = await reconcileReceipt(
       store,
       receipt,
       mutation,
@@ -57,7 +58,7 @@ export function reconcilePendingReceipts(
       ...next.receipt,
       recorded_utc: nowUtc,
     };
-    store.recordReceipt({ ...settled });
+    await store.recordReceipt({ ...settled });
     // Reconciliation is where protection, amendments and entry fills become provable, so the
     // lifecycle fact for those moments is published here rather than only at receipt time.
     const fact = receiptLifecycleFact(intentId, settled, nowUtc, {
@@ -65,7 +66,7 @@ export function reconcilePendingReceipts(
       fillObservedUtc: settled.fill_observed_utc ?? null,
       protectionConfirmedUtc: settled.status === "open_protected" ? nowUtc : null,
     });
-    store.recordExecutionFact({
+    await store.recordExecutionFact({
       intentId: fact.intentId,
       phase: fact.phase,
       factKey: fact.factKey,
@@ -88,8 +89,8 @@ interface ReconcileReceiptOutcome {
   event: BracketVerificationEvent | null;
 }
 
-function reconcileReceipt(
-  store: SqliteExecutionStore,
+async function reconcileReceipt(
+  store: MayPromise<SqliteExecutionStore>,
   receipt: ExecutionReceipt,
   mutation: StoredExecutionMutation,
   orders: OrderInfo[],
@@ -98,13 +99,13 @@ function reconcileReceipt(
   positionOpen: boolean,
   instrumentOpenContracts: number,
   nowUtc: string,
-): ReconcileReceiptOutcome | null {
+): Promise<ReconcileReceiptOutcome | null> {
   if (
     receipt.code === "partial_exit_submitted_pending_reconciliation"
     && mutation.operation === "place_order"
     && receipt.intent_id
   ) {
-    return reconcilePartialExitReceipt(
+    return await reconcilePartialExitReceipt(
       store,
       receipt,
       mutation,
@@ -232,8 +233,8 @@ function reconcileReceipt(
   return null;
 }
 
-function reconcilePartialExitReceipt(
-  store: SqliteExecutionStore,
+async function reconcilePartialExitReceipt(
+  store: MayPromise<SqliteExecutionStore>,
   receipt: ExecutionReceipt,
   mutation: StoredExecutionMutation,
   orders: OrderInfo[],
@@ -241,13 +242,13 @@ function reconcilePartialExitReceipt(
   contractId: string,
   positionOpen: boolean,
   instrumentOpenContracts: number,
-): ReconcileReceiptOutcome | null {
+): Promise<ReconcileReceiptOutcome | null> {
   const intentId = receipt.intent_id!;
-  const registered = store.registeredIntentPayload(intentId);
+  const registered = await store.registeredIntentPayload(intentId);
   if (registered?.action !== "EXIT") {
     return null;
   }
-  const reduction = store.protectedReductionByExitIntent(intentId);
+  const reduction = await store.protectedReductionByExitIntent(intentId);
   if (!reduction) {
     return null;
   }

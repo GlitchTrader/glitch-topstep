@@ -6,6 +6,7 @@ import type { TradeOutcomeV1 } from "../learning/trade-outcome.js";
 const MAX_HOT_OUTCOMES = 2_048;
 import { quarantineCorruptTail, writeFileAtomic, type QuarantineRecord } from "./atomic-file.js";
 import { SqliteOutcomeFeed, type OutcomeFeedStatus, type OutcomeRevisionPage } from "./sqlite-outcome-feed.js";
+import type { MayPromise } from "./may-promise.js";
 import type { SqliteWriteLatencyMetrics } from "./sqlite-write-latency.js";
 
 export interface TradeOutcomeStoreStatus {
@@ -23,7 +24,7 @@ export class TradeOutcomeStore {
   private readonly mirrorPath?: string;
   private readonly known = new Map<string, TradeOutcomeV1>();
   private readonly pending = new Set<string>();
-  private readonly feed: SqliteOutcomeFeed;
+  private readonly feed: MayPromise<SqliteOutcomeFeed>;
   private writeChain: Promise<void> = Promise.resolve();
   private loaded = false;
   private lastWriteError: string | null = null;
@@ -36,10 +37,11 @@ export class TradeOutcomeStore {
     dataDirectory: string,
     fileName = "trade-outcomes.jsonl",
     mirrorPath?: string,
+    feed?: MayPromise<SqliteOutcomeFeed>,
   ) {
     this.path = resolve(dataDirectory, fileName);
     this.mirrorPath = mirrorPath ? resolve(mirrorPath) : undefined;
-    this.feed = new SqliteOutcomeFeed(resolve(dataDirectory, "trade-outcomes.sqlite"));
+    this.feed = feed ?? new SqliteOutcomeFeed(resolve(dataDirectory, "trade-outcomes.sqlite"));
   }
 
   public async load(): Promise<void> {
@@ -48,7 +50,7 @@ export class TradeOutcomeStore {
     }
     this.loaded = true;
     this.known.clear();
-    const canonical = this.feed.current();
+    const canonical = await this.feed.current();
     if (canonical.length > 0) {
       for (const outcome of canonical) {
         this.known.set(outcome.intent_id, outcome);
@@ -85,7 +87,7 @@ export class TradeOutcomeStore {
       }
       if (typeof row.intent_id === "string") {
         this.known.set(row.intent_id, row);
-        this.feed.publish(row, "enriched", row.exit_utc);
+        await this.feed.publish(row, "enriched", row.exit_utc);
       }
     }
   }
@@ -112,7 +114,7 @@ export class TradeOutcomeStore {
     }
     this.pending.add(outcome.intent_id);
     return this.schedule(async () => {
-      this.commit(outcome, outcome.learning_eligible ? "enriched" : "provisional", () => {
+      await this.commit(outcome, outcome.learning_eligible ? "enriched" : "provisional", () => {
         this.pending.delete(outcome.intent_id);
       });
       await this.syncExport(outcome);
@@ -121,13 +123,13 @@ export class TradeOutcomeStore {
 
   public replace(outcome: TradeOutcomeV1): Promise<void> {
     return this.schedule(async () => {
-      this.commit(outcome, "corrected");
+      await this.commit(outcome, "corrected");
       await this.syncExport(null);
     });
   }
 
-  public revisionPage(afterSequence: number, limit: number): OutcomeRevisionPage {
-    return this.feed.afterSequence(afterSequence, limit);
+  public async revisionPage(afterSequence: number, limit: number): Promise<OutcomeRevisionPage> {
+    return await this.feed.afterSequence(afterSequence, limit);
   }
 
   public status(): TradeOutcomeStoreStatus {
@@ -138,21 +140,21 @@ export class TradeOutcomeStore {
       export_failures: this.exportFailures,
       last_export_error: this.lastExportError,
       quarantine: this.quarantine,
-      feed: this.feed.status(),
+      feed: syncValue(this.feed.status()),
     };
   }
 
   /** Live SQLite refresh for health peeks — call from reconcile, never from /health. */
-  public refreshHealthCache(): void {
-    this.feed.refreshHealthCache();
+  public async refreshHealthCache(): Promise<void> {
+    await this.feed.refreshHealthCache();
   }
 
   public isHealthCacheStale(): boolean {
-    return this.feed.isHealthCacheStale();
+    return syncValue(this.feed.isHealthCacheStale());
   }
 
   public isHealthCacheWarmed(): boolean {
-    return this.feed.isHealthCacheWarmed();
+    return syncValue(this.feed.isHealthCacheWarmed());
   }
 
   /** Health-only: memory fields + cached feed status; never opens SQLite. */
@@ -164,17 +166,17 @@ export class TradeOutcomeStore {
       export_failures: this.exportFailures,
       last_export_error: this.lastExportError,
       quarantine: this.quarantine,
-      feed: this.feed.peekStatus(),
+      feed: syncValue(this.feed.peekStatus()),
     };
   }
 
   public writeLatencyMetrics(): SqliteWriteLatencyMetrics {
-    return this.feed.writeLatencyMetrics();
+    return syncValue(this.feed.writeLatencyMetrics());
   }
 
   public async close(): Promise<void> {
     await this.waitForIdle();
-    this.feed.close();
+    await this.feed.close();
   }
 
   public async waitForIdle(): Promise<void> {
@@ -194,13 +196,13 @@ export class TradeOutcomeStore {
   }
 
   /** SQLite is authoritative, so the in-memory index only moves after that transaction commits. */
-  private commit(
+  private async commit(
     outcome: TradeOutcomeV1,
     status: "provisional" | "enriched" | "corrected",
     onSettled: () => void = () => {},
-  ): void {
+  ): Promise<void> {
     try {
-      this.feed.publish(outcome, status);
+      await this.feed.publish(outcome, status);
       this.known.set(outcome.intent_id, outcome);
       if (this.known.size > MAX_HOT_OUTCOMES) {
         const overflow = this.known.size - MAX_HOT_OUTCOMES;
@@ -251,6 +253,13 @@ export class TradeOutcomeStore {
       await writeFileAtomic(this.mirrorPath, text);
     }
   }
+}
+
+function syncValue<T>(value: T | Promise<T>): T {
+  if (value instanceof Promise) {
+    throw new Error("outcome_feed_sync_value_is_async");
+  }
+  return value;
 }
 
 function joinLines(lines: string[]): string {

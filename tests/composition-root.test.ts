@@ -70,7 +70,7 @@ test("TS-REAUDIT-07 production bindings satisfy runtime ports", async () => {
     ),
   );
   assert.deepEqual(outcomeProjection.current(), []);
-  assert.equal(outcomeProjection.revisionPage(0, 10).count, 0);
+  assert.equal((await outcomeProjection.revisionPage(0, 10)).count, 0);
 
   evidenceStore.close();
   executionStore.close();

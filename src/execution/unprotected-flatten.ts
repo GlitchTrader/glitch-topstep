@@ -4,6 +4,7 @@ import { bindProtection } from "../ownership/protection.js";
 import type { TrancheView } from "../ownership/tranches.js";
 import type { JsonlEventStore } from "../storage/jsonl-event-store.js";
 import { SqliteExecutionStore } from "../storage/sqlite-execution-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 import {
   BRACKET_VERIFICATION_TIMEOUT_MS,
   resolvePacketProtectionStatus,
@@ -181,17 +182,20 @@ export function decideUnprotectedFlatten(input: {
   };
 }
 
-export function anyProtectionVerificationFailed(input: {
+export async function anyProtectionVerificationFailed(input: {
   tranches: readonly TrancheView[];
   openOrders: readonly OrderInfo[];
   accountId: number;
   contractId: string;
   positionOpen: boolean;
   nowUtc: string;
-  receiptForIntent: (intentId: string) => { code?: string; fill_observed_utc?: string } | null;
-}): boolean {
-  return input.tranches.some((tranche) => {
-    const receipt = input.receiptForIntent(tranche.intent_id);
+  receiptForIntent: (
+    intentId: string,
+  ) => { code?: string; fill_observed_utc?: string } | null
+    | Promise<{ code?: string; fill_observed_utc?: string } | null>;
+}): Promise<boolean> {
+  for (const tranche of input.tranches) {
+    const receipt = await input.receiptForIntent(tranche.intent_id);
     if (receipt?.code === "entry_protection_verification_failed") {
       return true;
     }
@@ -211,12 +215,15 @@ export function anyProtectionVerificationFailed(input: {
       nowUtc: input.nowUtc,
       timeoutMs: BRACKET_VERIFICATION_TIMEOUT_MS,
     });
-    return packetStatus.protection_status === "failed";
-  });
+    if (packetStatus.protection_status === "failed") {
+      return true;
+    }
+  }
+  return false;
 }
 
 export async function attemptUnprotectedExposureFlatten(input: {
-  store: SqliteExecutionStore;
+  store: MayPromise<SqliteExecutionStore>;
   api: ExecutionRecoveryApi;
   accountId: number;
   contractId: string;
@@ -233,7 +240,7 @@ export async function attemptUnprotectedExposureFlatten(input: {
   const nowUtc = now.toISOString();
 
   if (input.unprotectedOpenQuantity <= 0) {
-    input.store.clearUnprotectedFlattenBlock();
+    await input.store.clearUnprotectedFlattenBlock();
     return {
       changed: false,
       flattened: false,
@@ -245,7 +252,7 @@ export async function attemptUnprotectedExposureFlatten(input: {
     };
   }
 
-  input.store.setUnprotectedFlattenBlock("unprotected_open_quantity", nowUtc);
+  await input.store.setUnprotectedFlattenBlock("unprotected_open_quantity", nowUtc);
 
   const ownership = proveOwnedUnprotectedFlatten({
     accountId: input.accountId,
@@ -259,7 +266,7 @@ export async function attemptUnprotectedExposureFlatten(input: {
     unprotectedOpenQuantity: input.unprotectedOpenQuantity,
     afterRearmAttempt: input.afterRearmAttempt,
     protectionVerificationFailed: input.protectionVerificationFailed,
-    unprotectedSinceUtc: input.store.unprotectedSinceUtc(),
+    unprotectedSinceUtc: await input.store.unprotectedSinceUtc(),
     nowUtc,
     ownership,
   });
@@ -290,7 +297,7 @@ export async function attemptUnprotectedExposureFlatten(input: {
 
   const entryKey = ownership.entryIntentIds.join(",");
   const controlId = unprotectedFlattenIntentId(input.accountId, input.contractId, entryKey);
-  const existing = input.store.mutationForIntent(controlId);
+  const existing = await input.store.mutationForIntent(controlId);
   if (existing) {
     return {
       changed: false,
@@ -311,21 +318,21 @@ export async function attemptUnprotectedExposureFlatten(input: {
     decision.trigger ?? "rearm_exhausted",
     nowUtc,
   );
-  input.store.registerIntent(intent, nowUtc);
-  input.store.prepareMutation(
+  await input.store.registerIntent(intent, nowUtc);
+  await input.store.prepareMutation(
     controlId,
     "close_position",
     { accountId: input.accountId, contractId: input.contractId },
     null,
     nowUtc,
   );
-  input.store.markMutationSubmitting(controlId, nowUtc);
+  await input.store.markMutationSubmitting(controlId, nowUtc);
   try {
     await input.api.closePosition!(input.accountId, input.contractId);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    input.store.markMutationAmbiguous(controlId, detail, nowUtc);
-    input.store.recordReceipt({
+    await input.store.markMutationAmbiguous(controlId, detail, nowUtc);
+    await input.store.recordReceipt({
       schema_version: "glitch.direct.execution_receipt.v1",
       receipt_id: `unprotected-flatten-${controlId}`,
       recorded_utc: nowUtc,
@@ -345,8 +352,8 @@ export async function attemptUnprotectedExposureFlatten(input: {
       detail,
     };
   }
-  input.store.markMutationSubmitted(controlId, null, nowUtc);
-  input.store.recordReceipt({
+  await input.store.markMutationSubmitted(controlId, null, nowUtc);
+  await input.store.recordReceipt({
     schema_version: "glitch.direct.execution_receipt.v1",
     receipt_id: `unprotected-flatten-${controlId}`,
     recorded_utc: nowUtc,
@@ -371,7 +378,7 @@ export async function attemptUnprotectedExposureFlatten(input: {
 /** Coordinator-facing orchestration kept out of coordinator.ts for size ratchet. */
 export async function runUnprotectedFlattenCycle(input: {
   snapshot: AccountVenueSnapshot;
-  store: SqliteExecutionStore;
+  store: MayPromise<SqliteExecutionStore>;
   api: ExecutionRecoveryApi;
   ledger: JsonlEventStore;
   accountId: number;
@@ -392,16 +399,19 @@ export async function runUnprotectedFlattenCycle(input: {
     accountId: input.accountId,
     contractId: input.contractId,
   });
-  input.store.updateUnprotectedSince(health.unprotected_open_quantity, now.toISOString());
+  await input.store.updateUnprotectedSince(health.unprotected_open_quantity, now.toISOString());
 
-  const protectionVerificationFailed = anyProtectionVerificationFailed({
+  const protectionVerificationFailed = await anyProtectionVerificationFailed({
     tranches: input.attributableTranches,
     openOrders: input.snapshot.openOrders,
     accountId: input.accountId,
     contractId: input.contractId,
     positionOpen: input.snapshot.instrumentOpenContracts > 0,
     nowUtc: now.toISOString(),
-    receiptForIntent: (intentId) => input.store.receiptForIntent(intentId),
+    receiptForIntent: async (intentId) => await input.store.receiptForIntent(intentId) as {
+      code?: string;
+      fill_observed_utc?: string;
+    } | null,
   });
 
   const outcome = await attemptUnprotectedExposureFlatten({

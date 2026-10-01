@@ -148,7 +148,7 @@ describe("authenticated /health SQLite class isolation", () => {
 
     try {
       // Reconcile-equivalent warm: live evaluate once, then /health must never prepare.
-      refreshAuthenticatedHealthSqliteCaches(healthStores, current);
+      await refreshAuthenticatedHealthSqliteCaches(healthStores, current);
       executionStore.updateUnprotectedSince(0, new Date().toISOString());
       executionStore.recoveryStatus();
 

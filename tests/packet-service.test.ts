@@ -81,12 +81,12 @@ function healthyRecovery(): ExecutionRecoveryStatus {
 }
 
 describe("decision packet issuance", () => {
-  it("publishes current truth while preserving an issued decision lease", () => {
+  it("publishes current truth while preserving an issued decision lease", async () => {
     let now = CURRENT_TIME_MS;
     const current = snapshot();
     const store = new SqliteExecutionStore(":memory:");
     const service = new DecisionPacketService(config(), () => current, store, healthyRecovery, () => now);
-    const first = service.current();
+    const first = await service.current();
     assert.equal(first.schema_version, "glitch.direct.decision_packet.v2");
     assert.equal(first.required_output_template.operator_profile, "glitch-topstep");
     assert.equal(first.account_selection.schema_version, "glitch.topstep.account_selection.v1");
@@ -97,23 +97,23 @@ describe("decision packet issuance", () => {
     assert.equal(first.data_quality.state_complete, true);
     assert.equal(first.data_quality.quote_age_ms, 1_000);
     current.quote = { ...current.quote!, bestAsk: 20_001.25, timestamp: "2026-07-21T12:00:05Z" };
-    const second = service.current();
+    const second = await service.current();
     assert.notEqual(second.market.snapshot_hash, first.market.snapshot_hash);
-    assert.ok(service.resolve(first.market.snapshot_hash));
+    assert.ok(await service.resolve(first.market.snapshot_hash));
     now += 300_001;
-    assert.equal(service.resolve(first.market.snapshot_hash), null);
+    assert.equal(await service.resolve(first.market.snapshot_hash), null);
     store.close();
   });
 
-  it("changes factual quality when unchanged state crosses the stale boundary", () => {
+  it("changes factual quality when unchanged state crosses the stale boundary", async () => {
     let now = CURRENT_TIME_MS;
     const current = snapshot();
     current.operational.reconciliation.lastSucceededAt = "2026-07-21T11:59:00Z";
     const store = new SqliteExecutionStore(":memory:");
     const service = new DecisionPacketService(config(), () => current, store, healthyRecovery, () => now);
-    const fresh = service.current();
+    const fresh = await service.current();
     now += 5_001;
-    const stale = service.current();
+    const stale = await service.current();
     assert.equal(fresh.data_quality.state_complete, true);
     assert.equal(stale.data_quality.state_complete, false);
     assert.ok(stale.data_quality.issues.includes("quote_stale"));
@@ -123,7 +123,7 @@ describe("decision packet issuance", () => {
     store.close();
   });
 
-  it("invalidates every issued decision after venue truth is invalidated", () => {
+  it("invalidates every issued decision after venue truth is invalidated", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const service = new DecisionPacketService(
       config(),
@@ -132,13 +132,13 @@ describe("decision packet issuance", () => {
       healthyRecovery,
       () => CURRENT_TIME_MS,
     );
-    const issued = service.current();
-    service.invalidateAll();
-    assert.equal(service.resolve(issued.market.snapshot_hash), null);
+    const issued = await service.current();
+    await service.invalidateAll();
+    assert.equal(await service.resolve(issued.market.snapshot_hash), null);
     store.close();
   });
 
-  it("publishes recovery ambiguity as evidence and capability state", () => {
+  it("publishes recovery ambiguity as evidence and capability state", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const recovery = (): ExecutionRecoveryStatus => ({
       blockingAmbiguity: true,
@@ -149,7 +149,7 @@ describe("decision packet issuance", () => {
       lastRecoveryUtc: null,
       lastRecoveryError: "provider_order_not_found",
     });
-    const packet = new DecisionPacketService(
+    const packet = await new DecisionPacketService(
       config(),
       snapshot,
       store,
@@ -163,14 +163,14 @@ describe("decision packet issuance", () => {
     store.close();
   });
 
-  it("publishes a pending accepted entry as a factual capability block", () => {
+  it("publishes a pending accepted entry as a factual capability block", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const recovery = (): ExecutionRecoveryStatus => ({
       ...healthyRecovery(),
       entrySubmissionPending: true,
       blockingNewExposure: true,
     });
-    const packet = new DecisionPacketService(
+    const packet = await new DecisionPacketService(
       config(),
       snapshot,
       store,
@@ -183,7 +183,7 @@ describe("decision packet issuance", () => {
     store.close();
   });
 
-  it("latches the daily capture lock once and keeps it across a restart", () => {
+  it("latches the daily capture lock once and keeps it across a restart", async () => {
     const store = new SqliteExecutionStore(":memory:");
     const outcomes: TradeOutcomeV1[] = [{
       schema_version: "glitch.topstep.trade_outcome.v1",
@@ -217,17 +217,17 @@ describe("decision packet issuance", () => {
     const first = service(() => {
       latched += 1;
     });
-    const packet = first.current();
+    const packet = await first.current();
     assert.equal(packet.daily_economics?.daily_capture.reached, true);
     assert.equal(packet.execution.daily_capture_locked, true);
     assert.equal(packet.execution.supported_actions.includes("ENTER_LONG"), false);
     assert.equal(latched, 1);
-    first.current();
+    await first.current();
     assert.equal(latched, 1);
 
     // Restart: a fresh service over the same durable store sees the lock, and does not re-fire.
     let relatched = 0;
-    const restarted = service(() => {
+    const restarted = await service(() => {
       relatched += 1;
     }).current();
     assert.equal(restarted.execution.daily_capture_locked, true);

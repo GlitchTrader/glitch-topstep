@@ -28,7 +28,7 @@ function healthyRecovery(): ExecutionRecoveryStatus {
   };
 }
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const ROOT = await path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const FIXTURE_DIR = path.join(ROOT, "tests", "fixtures", "projectx", "live");
 const stamp = "2026-07-21T12:00:00Z";
 
@@ -105,7 +105,7 @@ function readyVenueState(): VenueStateStore {
 }
 
 describe("TS-R2-05 reconnect proof", () => {
-  it("bumps generation, invalidates issued packets, and requires reconciliation before state is complete again", () => {
+  it("bumps generation, invalidates issued packets, and requires reconciliation before state is complete again", async () => {
     const state = readyVenueState();
     const store = new SqliteExecutionStore(":memory:");
     const packets = new DecisionPacketService(
@@ -116,12 +116,12 @@ describe("TS-R2-05 reconnect proof", () => {
       () => Date.parse("2026-07-21T12:00:05Z"),
     );
 
-    const issued = packets.current();
+    const issued = await packets.current();
     const baseline = snapshotReconnectPhase(
       "baseline",
       state.buildSnapshot(101, "CON.F.US.MNQ.U26"),
       issued.market.snapshot_hash,
-      packets.resolve(issued.market.snapshot_hash) !== null,
+      await packets.resolve(issued.market.snapshot_hash) !== null,
       stamp,
     );
     assert.equal(baseline.operational_generation, 1);
@@ -132,7 +132,7 @@ describe("TS-R2-05 reconnect proof", () => {
       "after_stream_gap",
       state.buildSnapshot(101, "CON.F.US.MNQ.U26"),
       issued.market.snapshot_hash,
-      packets.resolve(issued.market.snapshot_hash) !== null,
+      await packets.resolve(issued.market.snapshot_hash) !== null,
       stamp,
     );
     assert.equal(gap.operational_generation, 2);
@@ -144,12 +144,12 @@ describe("TS-R2-05 reconnect proof", () => {
     state.markStreamEvent("market");
     state.markReconciliationStarted();
     state.markReconciliationSucceeded();
-    const reissued = packets.current();
+    const reissued = await packets.current();
     const settled = snapshotReconnectPhase(
       "after_reconciliation",
       state.buildSnapshot(101, "CON.F.US.MNQ.U26"),
       reissued.market.snapshot_hash,
-      packets.resolve(reissued.market.snapshot_hash) !== null,
+      await packets.resolve(reissued.market.snapshot_hash) !== null,
       stamp,
     );
     assert.equal(settled.reconciliation_current, true);

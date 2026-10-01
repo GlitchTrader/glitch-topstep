@@ -3,7 +3,8 @@ import type {
   ProviderHistorySyncStatus,
 } from "../domain/provider-history.js";
 import type { OrderInfo, TradeInfo } from "../domain/models.js";
-import { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
+import type { SqliteProviderEvidenceStore } from "../storage/sqlite-provider-evidence-store.js";
+import type { MayPromise } from "../storage/may-promise.js";
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -33,10 +34,11 @@ export interface ProjectXHistorySyncOptions {
 export class ProjectXHistorySyncService {
   private inFlight: Promise<ProviderHistorySyncResult> | null = null;
   private readonly syncKey: string;
+  private cached: ProviderHistorySyncStatus | null = null;
 
   public constructor(
     private readonly api: ProjectXHistoryApi,
-    private readonly evidence: SqliteProviderEvidenceStore,
+    private readonly evidence: MayPromise<SqliteProviderEvidenceStore>,
     private readonly options: ProjectXHistorySyncOptions,
     private readonly now: () => Date = () => new Date(),
   ) {
@@ -65,7 +67,23 @@ export class ProjectXHistorySyncService {
   }
 
   public currentStatus(): ProviderHistorySyncStatus {
-    return this.evidence.historySyncStatus(this.syncKey);
+    return this.cached ?? {
+      syncKey: this.syncKey,
+      cursorUtc: null,
+      lastAttemptUtc: null,
+      lastSucceededUtc: null,
+      lastWindowStartUtc: null,
+      lastWindowEndUtc: null,
+      lastError: null,
+      lastOrdersSeen: 0,
+      lastTradesSeen: 0,
+      lastEventsAppended: 0,
+    };
+  }
+
+  public async refreshStatus(): Promise<ProviderHistorySyncStatus> {
+    this.cached = await this.evidence.historySyncStatus(this.syncKey);
+    return this.cached;
   }
 
   public sync(): Promise<ProviderHistorySyncResult> {
@@ -101,7 +119,7 @@ export class ProjectXHistorySyncService {
 
   private async run(): Promise<ProviderHistorySyncResult> {
     const targetEnd = this.now().getTime();
-    const existing = this.evidence.historySyncStatus(this.syncKey);
+    const existing = await this.refreshStatus();
     const cursorMs = existing.cursorUtc === null ? null : Date.parse(existing.cursorUtc);
     if (cursorMs !== null && !Number.isFinite(cursorMs)) {
       throw new Error("provider_history_cursor_invalid");
@@ -123,7 +141,7 @@ export class ProjectXHistorySyncService {
       const windowStartUtc = new Date(windowStart).toISOString();
       const windowEndUtc = new Date(windowEnd).toISOString();
       attemptedWindows += 1;
-      this.evidence.recordHistorySyncAttempt(
+      await this.evidence.recordHistorySyncAttempt(
         this.syncKey,
         attemptedUtc,
         windowStartUtc,
@@ -140,7 +158,7 @@ export class ProjectXHistorySyncService {
         let windowEventsAppended = 0;
 
         for (const order of orderedOrders) {
-          const result = this.evidence.appendIfChanged(
+          const result = await this.evidence.appendIfChanged(
             `historical-order:${this.options.accountId}:${order.id}`,
             {
               receivedUtc: this.now().toISOString(),
@@ -161,7 +179,7 @@ export class ProjectXHistorySyncService {
           }
         }
         for (const trade of orderedTrades) {
-          const result = this.evidence.appendIfChanged(
+          const result = await this.evidence.appendIfChanged(
             `historical-trade:${this.options.accountId}:${trade.id}`,
             {
               receivedUtc: this.now().toISOString(),
@@ -183,7 +201,7 @@ export class ProjectXHistorySyncService {
         }
 
         const succeededUtc = this.now().toISOString();
-        this.evidence.recordHistorySyncSuccess(
+        await this.evidence.recordHistorySyncSuccess(
           this.syncKey,
           windowEndUtc,
           succeededUtc,
@@ -202,7 +220,7 @@ export class ProjectXHistorySyncService {
         const detail = error instanceof Error
           ? `${error.name}:${error.message}`
           : String(error);
-        this.evidence.recordHistorySyncFailure(
+        await this.evidence.recordHistorySyncFailure(
           this.syncKey,
           this.now().toISOString(),
           windowStartUtc,
@@ -219,7 +237,7 @@ export class ProjectXHistorySyncService {
       ordersSeen,
       tradesSeen,
       eventsAppended,
-      status: this.evidence.historySyncStatus(this.syncKey),
+      status: await this.refreshStatus(),
     };
   }
 }

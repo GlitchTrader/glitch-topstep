@@ -51,13 +51,13 @@ function config(contract: (typeof contracts)[number], tradingMode: AppConfig["tr
 }
 
 for (const tradingMode of ["shadow", "armed"] as const) {
-  test(`TS-MULTI-01 simulated ${tradingMode} session matrix preserves exact MNQ, MES, and MCL/MCLE identity`, () => {
+  test(`TS-MULTI-01 simulated ${tradingMode} session matrix preserves exact MNQ, MES, and MCL/MCLE identity`, async () => {
     for (const contract of contracts) {
       const current = snapshot();
       current.contract = { ...current.contract, id: contract.id, name: contract.name, symbolId: contract.symbolId, tickSize: contract.tickSize, tickValue: contract.tickValue, description: contract.instrument === "MCL" ? "Micro Crude Oil" : contract.instrument };
       current.quote = { ...current.quote!, contractId: contract.id, symbol: contract.symbolId };
       const store = new SqliteExecutionStore(":memory:");
-      const packet = new DecisionPacketService(config(contract, tradingMode), () => current, store, healthyRecovery, () => Date.parse("2026-08-19T12:00:05Z")).current();
+      const packet = await new DecisionPacketService(config(contract, tradingMode), () => current, store, healthyRecovery, () => Date.parse("2026-08-19T12:00:05Z")).current();
       assert.equal(packet.contract.id, contract.id);
       assert.equal(packet.contract.symbol_id, contract.symbolId);
       assert.equal(packet.account_selection.selected_contract_id, contract.id);

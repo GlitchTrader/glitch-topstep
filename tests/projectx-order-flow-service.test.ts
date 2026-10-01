@@ -61,7 +61,11 @@ describe("ProjectX order-flow service", () => {
         currentVolume: 3,
       }));
 
-      const service = new ProjectXOrderFlowService(path, {
+      const service = new ProjectXOrderFlowService((input) => store.loadOrderFlowEvents(
+        input.contractId,
+        input.lookbackStartUtc,
+        input.limit,
+      ), {
         contractId: CONTRACT,
         tickSize: 0.25,
         maxEvents: 1_000,
@@ -87,7 +91,11 @@ describe("ProjectX order-flow service", () => {
     const path = join(directory, "projectx-evidence.sqlite");
     const store = new SqliteProviderEvidenceStore(path);
     store.append(marketEvent("2026-07-21T11:59:00Z", "quote", { marker: "coverage" }));
-    const service = new ProjectXOrderFlowService(path, {
+    const service = new ProjectXOrderFlowService((input) => store.loadOrderFlowEvents(
+      input.contractId,
+      input.lookbackStartUtc,
+      input.limit,
+    ), {
       contractId: CONTRACT,
       tickSize: 0.25,
       maxEvents: 1_000,

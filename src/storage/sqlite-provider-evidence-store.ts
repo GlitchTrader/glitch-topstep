@@ -564,6 +564,54 @@ export class SqliteProviderEvidenceStore {
     };
   }
 
+  /** Market-stream trades and depth for order-flow. Runs on the persistence worker in production. */
+  public loadOrderFlowEvents(
+    contractId: string,
+    lookbackStartUtc: string,
+    limit: number,
+  ): {
+    events: StoredProviderEvidenceEvent[];
+    truncated: boolean;
+    coverageStartUtc: string | null;
+  } {
+    const rows = this.database.prepare(`
+      SELECT
+        sequence,
+        received_utc,
+        provider_timestamp_utc,
+        source,
+        event_type,
+        generation,
+        account_id,
+        contract_id,
+        provider_entity_id,
+        related_provider_entity_id,
+        payload_hash,
+        raw_payload_json,
+        normalized_payload_json
+      FROM provider_events
+      WHERE source = 'projectx_market_stream'
+        AND contract_id = ?
+        AND event_type IN ('market_trade', 'depth')
+        AND received_utc >= ?
+      ORDER BY sequence ASC
+      LIMIT ?
+    `).all(contractId, lookbackStartUtc, limit + 1) as unknown as EvidenceRow[];
+    const truncated = rows.length > limit;
+    const selected = truncated ? rows.slice(0, limit) : rows;
+    const coverage = this.database.prepare(`
+      SELECT MIN(received_utc) AS earliest_received_utc
+      FROM provider_events
+      WHERE source = 'projectx_market_stream'
+        AND contract_id = ?
+    `).get(contractId) as { earliest_received_utc: string | null } | undefined;
+    return {
+      events: selected.map((row) => this.fromRow(row)),
+      truncated,
+      coverageStartUtc: coverage?.earliest_received_utc ?? null,
+    };
+  }
+
   private refreshCountsFromDb(): void {
     const row = this.database.prepare(`
       SELECT
