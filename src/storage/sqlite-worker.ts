@@ -109,26 +109,33 @@ port.on("message", (message: {
   method?: string;
   args?: unknown[];
   ms?: number;
+  enqueuedAtMs?: number;
 }) => {
+  const startedMs = Date.now();
+  const enqueuedAtMs = typeof message.enqueuedAtMs === "number" ? message.enqueuedAtMs : startedMs;
+  const timing = () => ({
+    queue_wait_ms: Math.max(0, startedMs - enqueuedAtMs),
+    exec_ms: Math.max(0, Date.now() - startedMs),
+  });
   try {
     if (message.op === "init") {
       if (!message.paths) {
         throw new Error("sqlite_worker_init_paths_required");
       }
       open(message.paths);
-      port.postMessage({ id: message.id, ok: true, result: null, caches: caches() });
+      port.postMessage({ id: message.id, ok: true, result: null, caches: caches(), timing: timing() });
       return;
     }
     if (message.op === "delay") {
       const ms = message.ms ?? 0;
       const slot = new Int32Array(new SharedArrayBuffer(4));
       Atomics.wait(slot, 0, 0, ms);
-      port.postMessage({ id: message.id, ok: true, result: null, caches: caches() });
+      port.postMessage({ id: message.id, ok: true, result: null, caches: caches(), timing: timing() });
       return;
     }
     if (message.op === "close") {
       closeAll();
-      port.postMessage({ id: message.id, ok: true, result: null, caches: null });
+      port.postMessage({ id: message.id, ok: true, result: null, caches: null, timing: timing() });
       return;
     }
     if (message.op === "call") {
@@ -140,7 +147,7 @@ port.on("message", (message: {
         throw new Error(`sqlite_worker_unknown_call:${storeName}.${method}`);
       }
       const result = fn.apply(target, message.args ?? []);
-      port.postMessage({ id: message.id, ok: true, result, caches: caches() });
+      port.postMessage({ id: message.id, ok: true, result, caches: caches(), timing: timing() });
       return;
     }
     throw new Error(`sqlite_worker_unknown_op:${message.op}`);
@@ -149,6 +156,7 @@ port.on("message", (message: {
       id: message.id,
       ok: false,
       error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      timing: timing(),
     });
   }
 });

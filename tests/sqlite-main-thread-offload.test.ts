@@ -32,6 +32,40 @@ describe("sqlite off the gateway main thread", () => {
     }
   });
 
+  it("splits worker queue wait from sqlite exec", async () => {
+    const persistence = new SqlitePersistence({
+      execution: ":memory:",
+      evidence: ":memory:",
+      control: ":memory:",
+      outcome: ":memory:",
+      ownership: null,
+    });
+    try {
+      await persistence.whenReady();
+      const blocking = persistence.delay(80);
+      const status = persistence.call("execution", "recoveryStatus", []);
+      await status;
+      const timing = persistence.queueTimingSnapshot({ reset: false });
+      assert.ok(
+        timing.reconcile.last_queue_wait_ms >= 40,
+        `queue wait ${timing.reconcile.last_queue_wait_ms}`,
+      );
+      assert.ok(
+        timing.reconcile.last_exec_ms < timing.reconcile.last_queue_wait_ms,
+        `exec ${timing.reconcile.last_exec_ms} wait ${timing.reconcile.last_queue_wait_ms}`,
+      );
+      const reset = persistence.queueTimingSnapshot({ reset: true });
+      assert.equal(reset.reconcile.count >= 1, true);
+      const cleared = persistence.queueTimingSnapshot({ reset: false });
+      assert.equal(cleared.reconcile.count, 0);
+      assert.equal(cleared.reconcile.max_queue_wait_ms, 0);
+      assert.equal(cleared.reconcile.last_queue_wait_ms, timing.reconcile.last_queue_wait_ms);
+      await blocking;
+    } finally {
+      await persistence.close();
+    }
+  });
+
   it("the gateway process does not construct DatabaseSync stores on the main thread", () => {
     const service = readFileSync(join(process.cwd(), "src", "service.ts"), "utf8");
     const worker = readFileSync(join(process.cwd(), "src", "storage", "sqlite-worker.ts"), "utf8");
