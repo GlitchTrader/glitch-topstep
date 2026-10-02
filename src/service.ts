@@ -83,7 +83,7 @@ import { LifecycleSupervisor, runShutdownFailureRecovery } from "./service/lifec
 import { RecoveryPipelineGate } from "./service/recovery-pipeline-gate.js";
 import { TaskScheduler } from "./service/task-scheduler.js";
 import { runReconciliationCycle } from "./service/reconciliation-service.js";
-import { RuntimeScopeLock } from "./service/runtime-lock.js";
+import { resolveProcessBootMs, RuntimeScopeLock } from "./service/runtime-lock.js";
 import { evaluateSafetySupervisor } from "./safety/safety-supervisor.js";
 import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { HealthAlertTracker } from "./observability/health-alerts.js";
@@ -188,7 +188,11 @@ export class GlitchTopstepService {
   public constructor(private readonly config: AppConfig) {
     this.runtimeTradingMode = config.tradingMode;
     this.state.setMaxQuoteAgeMs(config.risk.maxQuoteAgeMs);
-    this.runtimeLock = new RuntimeScopeLock(config.dataDir, config.scope.accountId);
+    this.runtimeLock = new RuntimeScopeLock(
+      config.dataDir,
+      config.scope.accountId,
+      resolveProcessBootMs,
+    );
     this.authManager = new ProjectXAuthManager({
       apiUrl: config.projectX.apiUrl,
       username: config.projectX.username,

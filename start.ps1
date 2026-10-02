@@ -85,13 +85,31 @@ function Assert-GatewayWatchdogReady {
 
 Assert-GatewayWatchdogReady
 
+function Write-StartupFailure {
+    param([string]$Cause)
+    $dir = Join-Path $PSScriptRoot "data"
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    Set-Content -Path (Join-Path $dir "gateway-startup-failure.txt") -Value $Cause -Encoding ascii
+}
+
 if (-not (Test-Path "node_modules")) {
     npm install
 }
 
 if ($SkipBuild) {
     if (-not (Test-Path "dist\src\index.js")) {
-        Write-Error "dist/src/index.js missing; run without -SkipBuild once to compile."
+        Write-StartupFailure "dist_index_missing"
+        throw "gateway_startup_failed: dist_index_missing"
+    }
+    $stampPath = Join-Path $PSScriptRoot "dist\BUILD_COMMIT"
+    if (-not (Test-Path $stampPath)) {
+        Write-StartupFailure "dist_commit_missing"
+        throw "gateway_startup_failed: dist_commit_missing. Run start.ps1 without -SkipBuild so the build stamps dist/BUILD_COMMIT."
+    }
+    $builtCommit = (Get-Content -Path $stampPath -Raw).Trim()
+    if ($builtCommit -ne $gatewayCommit) {
+        Write-StartupFailure "dist_commit_mismatch"
+        throw "gateway_startup_failed: dist_commit_mismatch built=$builtCommit HEAD=$gatewayCommit"
     }
 } else {
     npm run build
@@ -152,12 +170,34 @@ $stdoutLog = Join-Path $dataDir "gateway.stdout.log"
 $stderrLog = Join-Path $dataDir "gateway.stderr.log"
 
 # ponytail: npm.cmd no Windows abre janela cmd; invocar node directamente evita popup
-Start-Process -FilePath "node" `
+$nodeProc = Start-Process -FilePath "node" `
     -ArgumentList $nodeArgs `
     -WorkingDirectory $PSScriptRoot `
     -WindowStyle Hidden `
     -RedirectStandardOutput $stdoutLog `
-    -RedirectStandardError $stderrLog | Out-Null
+    -RedirectStandardError $stderrLog `
+    -PassThru
+
+$aliveUntil = (Get-Date).AddSeconds(3)
+while ((Get-Date) -lt $aliveUntil) {
+    if ($nodeProc.HasExited) { break }
+    Start-Sleep -Milliseconds 200
+}
+if ($nodeProc.HasExited) {
+    Start-Sleep -Milliseconds 300
+    $cause = "gateway_exited"
+    if (Test-Path $stderrLog) {
+        $errText = Get-Content -Path $stderrLog -Raw -ErrorAction SilentlyContinue
+        if ($errText -match "runtime_account_lock_held") {
+            $cause = "runtime_account_lock_held"
+        } elseif ($errText -match "(?m)^Error: (\S+)") {
+            $cause = ($Matches[1] -split ":")[0]
+        }
+    }
+    Write-StartupFailure $cause
+    throw "gateway_startup_failed: $cause"
+}
+Remove-Item -Path (Join-Path $dataDir "gateway-startup-failure.txt") -ErrorAction SilentlyContinue
 
 Write-Host "Gateway em background: $url" -ForegroundColor Cyan
 Write-Host "Logs: $stdoutLog"

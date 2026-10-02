@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { hostname } from "node:os";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { RuntimeScopeLock, writeRuntimeLockFixture } from "../src/service/runtime-lock.js";
+import { resolveProcessBootMs, RuntimeScopeLock, writeRuntimeLockFixture } from "../src/service/runtime-lock.js";
 
 test("runtime account lock prevents a second mutation owner and releases cleanly", async () => {
   const directory = await mkdtemp(join(tmpdir(), "runtime-lock-"));
@@ -74,6 +75,57 @@ test("runtime account lock does not remove a live owner with matching process bo
   try {
     await assert.rejects(() => rival.acquire(), /runtime_account_lock_held/);
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("real process boot resolver releases a recycled pid and holds a matching one", async (t) => {
+  if (process.platform !== "win32" && process.platform !== "linux") {
+    t.skip("process boot resolver is implemented for win32 and linux");
+    return;
+  }
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1 << 30)"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  const directory = await mkdtemp(join(tmpdir(), "runtime-lock-real-boot-"));
+  try {
+    if (!child.pid) {
+      await new Promise<void>((resolve, reject) => {
+        child.once("spawn", () => resolve());
+        child.once("error", reject);
+      });
+    }
+    const pid = child.pid;
+    assert.equal(typeof pid, "number");
+    let boot: number | null = null;
+    for (let attempt = 0; attempt < 8 && boot === null; attempt += 1) {
+      boot = await resolveProcessBootMs(pid as number);
+      if (boot === null) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+    }
+    assert.equal(typeof boot, "number");
+    assert.equal(await resolveProcessBootMs(pid as number), boot);
+    await writeRuntimeLockFixture(directory, 55, {
+      pid: pid as number,
+      hostname: hostname(),
+      process_boot_ms: (boot as number) + 60_000,
+      invocation_id: "recycled-pid",
+    });
+    const recycled = new RuntimeScopeLock(directory, 55, resolveProcessBootMs);
+    await recycled.acquire();
+    await recycled.release();
+    await writeRuntimeLockFixture(directory, 55, {
+      pid: pid as number,
+      hostname: hostname(),
+      process_boot_ms: boot as number,
+      invocation_id: "live-pid",
+    });
+    const live = new RuntimeScopeLock(directory, 55, resolveProcessBootMs);
+    await assert.rejects(() => live.acquire(), /runtime_account_lock_held/);
+  } finally {
+    child.kill();
     await rm(directory, { recursive: true, force: true });
   }
 });

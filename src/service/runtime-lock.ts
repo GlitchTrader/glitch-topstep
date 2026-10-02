@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { open, readFile, unlink, writeFile, type FileHandle } from "node:fs/promises";
@@ -14,6 +15,74 @@ interface RuntimeLockPayload {
 export type ResolveProcessBootMs = (pid: number) => Promise<number | null>;
 
 const defaultResolveProcessBootMs: ResolveProcessBootMs = async () => null;
+
+function execFileText(file: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, { windowsHide: true, timeout: 15_000 }, (error, stdout) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
+
+async function resolveWindowsProcessBootMs(pid: number): Promise<number | null> {
+  const script = [
+    `$p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}"`,
+    "if (-not $p) { exit 2 }",
+    "[DateTimeOffset]::new($p.CreationDate).ToUnixTimeMilliseconds()",
+  ].join("; ");
+  try {
+    const stdout = await execFileText("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      script,
+    ]);
+    const value = Number(stdout.trim());
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Linux CLK_TCK is 100 on the CI image. Both sides use this, so equality does not depend on the true tick. */
+async function resolveLinuxProcessBootMs(pid: number): Promise<number | null> {
+  try {
+    const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+    const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+    const startTicks = Number(fields[19]);
+    const procStat = await readFile("/proc/stat", "utf8");
+    const btimeLine = procStat.split("\n").find((line) => line.startsWith("btime "));
+    const btime = Number(btimeLine?.split(" ")[1]);
+    if (!Number.isFinite(startTicks) || !Number.isFinite(btime)) {
+      return null;
+    }
+    return Math.round(btime * 1000 + (startTicks * 1000) / 100);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * OS creation time of a live PID, in epoch ms.
+ * Same value on repeat calls so a lock written from this function matches a later check.
+ * null means unknown: the caller keeps the lock (fail closed).
+ */
+export async function resolveProcessBootMs(pid: number): Promise<number | null> {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return null;
+  }
+  if (process.platform === "win32") {
+    return resolveWindowsProcessBootMs(pid);
+  }
+  if (process.platform === "linux") {
+    return resolveLinuxProcessBootMs(pid);
+  }
+  return null;
+}
 
 export class RuntimeScopeLock {
   private handle: FileHandle | null = null;
@@ -44,12 +113,13 @@ export class RuntimeScopeLock {
       }
       this.handle = await open(this.path, "wx", 0o600);
     }
+    const resolvedBoot = await this.resolveProcessBootMs(process.pid);
     const payload: RuntimeLockPayload = {
       pid: process.pid,
       acquired_utc: new Date().toISOString(),
       hostname: hostname(),
       invocation_id: this.invocationId,
-      process_boot_ms: this.processBootMs,
+      process_boot_ms: resolvedBoot ?? this.processBootMs,
     };
     await this.handle.writeFile(JSON.stringify(payload), "utf8");
     await this.handle.sync();
