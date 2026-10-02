@@ -649,6 +649,7 @@ export class GlitchTopstepService {
           return {
             ...buildHealthLiveness(GATEWAY_COMPATIBILITY),
             event_loop_delay: this.eventLoopDelay.snapshot({ reset: false }),
+            apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: false }),
           };
         }
         const healthBuildStartMs = performance.now();
@@ -828,6 +829,7 @@ export class GlitchTopstepService {
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
           // Reset after auth sample so soak windows measure delay between polls.
           event_loop_delay: this.eventLoopDelay.snapshot({ reset: true }),
+          apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: true }),
           sqlite_write_latency: {
             execution: this.executionStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
             control: this.controlStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,

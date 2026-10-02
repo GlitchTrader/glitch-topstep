@@ -140,6 +140,77 @@ describe("provider evidence write queue", () => {
     assert.equal(queue.metrics().resume_cursor, 1);
   });
 
+  it("records apply lag from enqueue to onDurable without reordering the drain", async () => {
+    let now = 1_000_000;
+    const order: string[] = [];
+    const writer = {
+      appendBatch: (events: readonly ProviderEvidenceEvent[]) => {
+        order.push(`persist:${events.length}`);
+        return events.map((_event, offset) => ({ sequence: offset + 1 }));
+      },
+    };
+    const queue = new EvidenceWriteQueue(writer, {
+      now: () => now,
+      batchIntervalMs: 60_000,
+      batchSize: 32,
+    });
+    queue.submit(identityEvent("position", 1), () => {
+      order.push("apply:identity");
+    });
+    queue.submit(marketEvent("quote", CONTRACTS[0], 2), () => {
+      order.push("apply:quote");
+    });
+    queue.append(identityEvent("lifecycle", 3));
+    now += 180_000;
+    await queue.drain();
+
+    assert.deepEqual(order, ["persist:3", "apply:identity", "apply:quote"]);
+    const lag = queue.applyLagSnapshot({ reset: false });
+    assert.equal(lag.identity.count, 1);
+    assert.equal(lag.identity.min_ms, 180_000);
+    assert.equal(lag.identity.max_ms, 180_000);
+    assert.equal(lag.identity.p99_ms, 180_000);
+    assert.equal(lag.quote.count, 1);
+    assert.equal(lag.quote.max_ms, 180_000);
+    assert.equal(lag.quote.p99_ms, 180_000);
+    assert.equal(lag.quote.last_ms, 180_000);
+    assert.equal(lag.depth.count, 0);
+
+    const reset = queue.applyLagSnapshot({ reset: true });
+    assert.equal(reset.quote.count, 1);
+    const cleared = queue.applyLagSnapshot({ reset: false });
+    assert.equal(cleared.quote.count, 0);
+    assert.equal(cleared.quote.max_ms, 0);
+    assert.equal(cleared.identity.count, 0);
+  });
+
+  it("times a coalesced quote from its own enqueue, not the superseded one", async () => {
+    let now = 5_000;
+    const applied: string[] = [];
+    const writer = new RecordingWriter();
+    const queue = new EvidenceWriteQueue(writer, {
+      now: () => now,
+      batchIntervalMs: 60_000,
+      batchSize: 8,
+      highWaterMark: 50,
+      coalesceWatermark: 1,
+      lowWaterMark: 1,
+    });
+    queue.submit(marketEvent("quote", CONTRACTS[0], 1), () => {
+      applied.push("old");
+    });
+    now = 6_000;
+    queue.submit(marketEvent("quote", CONTRACTS[0], 2), () => {
+      applied.push("new");
+    });
+    now = 10_000;
+    await queue.drain();
+    assert.deepEqual(applied, ["new"]);
+    const lag = queue.applyLagSnapshot({ reset: false });
+    assert.equal(lag.quote.count, 1);
+    assert.equal(lag.quote.max_ms, 4_000);
+  });
+
   it("holds onDurable until a delayed appendBatch resolves while the event loop keeps ticking", async () => {
     let releaseCommit!: () => void;
     const committed = new Promise<void>((resolve) => {

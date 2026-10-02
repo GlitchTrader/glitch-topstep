@@ -1,4 +1,5 @@
 import type { ProviderEvidenceEvent } from "../domain/provider-evidence.js";
+import { ApplyLagTracker, type ApplyLagMetrics } from "../observability/apply-lag.js";
 
 /**
  * Bounded, priority-classed queue in front of the durable evidence store.
@@ -114,6 +115,7 @@ export class EvidenceWriteQueue {
   private incompleteShutdown = false;
   private readonly coalesced: Record<EvidenceQueueClass, number> = emptyCounters();
   private readonly dropped: Record<EvidenceQueueClass, number> = emptyCounters();
+  private readonly applyLag = new ApplyLagTracker();
 
   private readonly highWaterMark: number;
   private readonly coalesceWatermark: number;
@@ -219,6 +221,14 @@ export class EvidenceWriteQueue {
     }
     this.schedule();
     return "queued";
+  }
+
+  /**
+   * Lag from enqueue to onDurable. reset=true only from authenticated /health.
+   * Does not change drain order or persist-before-apply.
+   */
+  public applyLagSnapshot(options: { reset?: boolean } = {}): ApplyLagMetrics {
+    return this.applyLag.snapshot(options);
   }
 
   public metrics(): EvidenceQueueMetrics {
@@ -332,6 +342,7 @@ export class EvidenceWriteQueue {
         if (!entry.onDurable) {
           continue;
         }
+        this.applyLag.observe(entry.eventClass, this.now() - entry.enqueuedAtMs);
         try {
           entry.onDurable();
         } catch (error) {
