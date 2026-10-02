@@ -79,7 +79,24 @@ function Format-SqliteWriteLatency {
     $evidMax = $sw.evidence_queue.max_write_latency_ms
     $build = $Health.health_build_ms
     $eld = Format-EventLoopDelay $Health
-    return "health_build_ms=$build $eld exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax"
+    $apply = Format-ApplyLag $Health
+    return "health_build_ms=$build $eld exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax $apply"
+}
+
+function Format-ApplyLag {
+    param($Health)
+    if ($null -eq $Health -or $null -eq $Health.apply_lag) {
+        return "apply_lag=unavailable"
+    }
+    $quote = $Health.apply_lag.quote
+    $identity = $Health.apply_lag.identity
+    $quoteAge = "na"
+    $stateAge = "na"
+    if ($null -ne $Health.data_quality) {
+        $quoteAge = $Health.data_quality.quote_age_ms
+        $stateAge = $Health.data_quality.state_age_ms
+    }
+    return "quote_age_ms=$quoteAge state_age_ms=$stateAge apply_lag_quote_max_ms=$($quote.max_ms) apply_lag_quote_p99_ms=$($quote.p99_ms) apply_lag_quote_count=$($quote.count) apply_lag_identity_max_ms=$($identity.max_ms) apply_lag_identity_p99_ms=$($identity.p99_ms) apply_lag_identity_count=$($identity.count)"
 }
 
 function Write-HealthUnreachableProbe {
@@ -92,7 +109,8 @@ function Write-HealthUnreachableProbe {
     }
     # Auth /health already failed; liveness may still carry event_loop_delay (no reset) for Passo 1.
     $eld = Format-EventLoopDelay $liveness
-    Write-WatchdogLog "health_unreachable auth_health=timeout $livenessPart $eld sqlite_write_latency=unavailable note=telemetry_blocked_by_health_stall"
+    $apply = Format-ApplyLag $liveness
+    Write-WatchdogLog "health_unreachable auth_health=timeout $livenessPart $eld sqlite_write_latency=unavailable $apply note=telemetry_blocked_by_health_stall"
 }
 
 # Keep in sync with src/observability/gateway-watchdog-policy.ts (tests/gateway-watchdog-policy.test.ts).
