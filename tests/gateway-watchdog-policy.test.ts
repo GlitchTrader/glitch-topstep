@@ -6,6 +6,8 @@ import {
   isRecoveryProgressFresh,
   startupOutboxDrainDecision,
   parseStartupOutboxDrainLine,
+  recordStartupFailure,
+  startupFailureBlocksRestart,
 } from "../src/observability/gateway-watchdog-policy.js";
 
 describe("gateway watchdog recovery policy", () => {
@@ -196,6 +198,19 @@ describe("gateway watchdog recovery policy", () => {
       watchdogRestartCause(null, { previous: sample, current: sample }),
       "startup_outbox_drain_stalled",
     );
+  });
+
+  it("stops restarting after the same startup failure repeats", () => {
+    const first = recordStartupFailure({ cause: null, count: 0 }, "runtime_account_lock_held");
+    const second = recordStartupFailure(first, "runtime_account_lock_held");
+    const third = recordStartupFailure(second, "runtime_account_lock_held");
+    assert.equal(startupFailureBlocksRestart(first), false);
+    assert.equal(startupFailureBlocksRestart(second), false);
+    assert.equal(startupFailureBlocksRestart(third), true);
+    assert.deepEqual(third, { cause: "runtime_account_lock_held", count: 3 });
+    const changed = recordStartupFailure(third, "dist_commit_mismatch");
+    assert.deepEqual(changed, { cause: "dist_commit_mismatch", count: 1 });
+    assert.equal(startupFailureBlocksRestart(changed), false);
   });
 
   it("still treats unreachable health with no drain evidence as a restart", () => {

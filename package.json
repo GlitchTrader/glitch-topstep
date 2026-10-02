@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc --project tsconfig.json",
+    "build": "tsc --project tsconfig.json && node scripts/stamp-dist-commit.mjs",
     "test": "node --test dist/tests/*.test.js",
     "check": "npm run build && node scripts/validate-agent-paths.mjs && node scripts/assert-no-isolated-bar-wait.mjs && node scripts/orchestration-size-ratchet.mjs && npm test",
     "dev": "npm run build && npm start",

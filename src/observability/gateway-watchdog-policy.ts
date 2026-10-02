@@ -67,6 +67,32 @@ export interface StartupOutboxDrainObservation {
 
 export type StartupOutboxDrainDecision = "hold" | "stalled" | "absent";
 
+/** Stop automatic restart after this many identical startup failures in a row. */
+export const WATCHDOG_REPEATED_STARTUP_FAILURE_LIMIT = 3;
+
+export interface StartupFailureTracker {
+  cause: string | null;
+  count: number;
+}
+
+/** A new cause starts at 1. The same cause increments. Keep in sync with the watchdog script. */
+export function recordStartupFailure(
+  previous: StartupFailureTracker,
+  cause: string,
+): StartupFailureTracker {
+  if (previous.cause === cause) {
+    return { cause, count: previous.count + 1 };
+  }
+  return { cause, count: 1 };
+}
+
+export function startupFailureBlocksRestart(
+  tracker: StartupFailureTracker,
+  limit = WATCHDOG_REPEATED_STARTUP_FAILURE_LIMIT,
+): boolean {
+  return tracker.cause !== null && tracker.cause.length > 0 && tracker.count >= limit;
+}
+
 /**
  * Health is down because the process has not opened the port yet.
  * Hold while the startup outbox backlog is shrinking. Two samples with no progress are a real stall.

@@ -222,7 +222,25 @@ function Get-StartupOutboxDrainDecision {
     return "stalled"
 }
 
+function Assert-WatchdogDistIsMain {
+    $expected = (& git -C $RepoRoot rev-parse origin/main 2>$null).Trim()
+    $head = (& git -C $RepoRoot rev-parse HEAD 2>$null).Trim()
+    $stampPath = Join-Path $RepoRoot "dist\BUILD_COMMIT"
+    $built = ""
+    if (Test-Path $stampPath) {
+        $built = (Get-Content -Path $stampPath -Raw).Trim()
+    }
+    if (-not $expected -or $built -ne $expected -or $head -ne $expected) {
+        $failPath = Join-Path $RepoRoot "data\gateway-startup-failure.txt"
+        New-Item -ItemType Directory -Force -Path (Split-Path $failPath) | Out-Null
+        Set-Content -Path $failPath -Value "dist_commit_mismatch" -Encoding ascii
+        throw "gateway_startup_failed:dist_commit_mismatch built=$built HEAD=$head expected=$expected"
+    }
+}
+
 function Restart-GatewayProcess {
+    # Refuse before stopping the current process. A mismatched dist must not replace a live gateway.
+    Assert-WatchdogDistIsMain
     $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
     foreach ($listener in $listeners) {
         $procId = [int]$listener.OwningProcess
@@ -250,7 +268,42 @@ function Restart-GatewayProcess {
         -Wait
     Write-WatchdogLog "start.ps1 exit=$($proc.ExitCode)"
     if ($proc.ExitCode -ne 0) {
-        throw "start.ps1 failed with exit $($proc.ExitCode)"
+        $causePath = Join-Path $RepoRoot "data\gateway-startup-failure.txt"
+        $cause = "start_ps1_exit_$($proc.ExitCode)"
+        if (Test-Path $causePath) {
+            $cause = (Get-Content -Path $causePath -Raw).Trim()
+        }
+        throw "gateway_startup_failed:$cause"
+    }
+}
+
+# Same rule as recordStartupFailure / startupFailureBlocksRestart in gateway-watchdog-policy.ts.
+function Invoke-GuardedGatewayRestart {
+    param($State)
+    if ([int]$State.startup_failure_count -ge 3 -and $State.startup_failure_cause) {
+        Write-WatchdogLog "startup_failure_repeated cause=$($State.startup_failure_cause) count=$($State.startup_failure_count)"
+        return "repeated"
+    }
+    try {
+        Restart-GatewayProcess
+        $State.startup_failure_cause = $null
+        $State.startup_failure_count = 0
+        return "ok"
+    } catch {
+        $message = [string]$_.Exception.Message
+        $cause = if ($message -match "gateway_startup_failed:\s*(\S+)") { $Matches[1] } else { ($message -replace "\s+", "_") }
+        if ([string]$State.startup_failure_cause -eq $cause) {
+            $State.startup_failure_count = [int]$State.startup_failure_count + 1
+        } else {
+            $State.startup_failure_cause = $cause
+            $State.startup_failure_count = 1
+        }
+        if ([int]$State.startup_failure_count -ge 3) {
+            Write-WatchdogLog "startup_failure_repeated cause=$($State.startup_failure_cause) count=$($State.startup_failure_count)"
+            return "repeated"
+        }
+        Write-WatchdogLog "error: $message"
+        return "error"
     }
 }
 
@@ -276,12 +329,16 @@ try {
         startup_drain_pending = $null
         startup_drain_drained_so_far = $null
         startup_drain_pid = $null
+        startup_failure_cause = $null
+        startup_failure_count = 0
     }
     if (Test-Path $StatePath) {
         try {
             $loaded = Get-Content $StatePath -Raw | ConvertFrom-Json
             if ($loaded.first_dead_utc) { $state.first_dead_utc = [string]$loaded.first_dead_utc }
             if ($loaded.last_restart_utc) { $state.last_restart_utc = [string]$loaded.last_restart_utc }
+            if ($loaded.startup_failure_cause) { $state.startup_failure_cause = [string]$loaded.startup_failure_cause }
+            if ($null -ne $loaded.startup_failure_count) { $state.startup_failure_count = [int]$loaded.startup_failure_count }
             if ($null -ne $loaded.startup_drain_pending -and $null -ne $loaded.startup_drain_drained_so_far) {
                 $state.startup_drain_pending = [int]$loaded.startup_drain_pending
                 $state.startup_drain_drained_so_far = [int]$loaded.startup_drain_drained_so_far
@@ -323,6 +380,8 @@ try {
 
     if (-not $dead) {
         $state.first_dead_utc = $null
+        $state.startup_failure_cause = $null
+        $state.startup_failure_count = 0
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
         $status = if ($null -eq $health) { "unreachable" } else { [string]$health.status }
         $latency = Format-SqliteWriteLatency -Health $health
@@ -336,14 +395,19 @@ try {
 
     if ($cause -eq "startup_outbox_drain_stalled") {
         Write-WatchdogLog "restarting startup outbox drain stalled pending=$($currentDrain.pending) drained_so_far=$($currentDrain.drained_so_far)"
-        Restart-GatewayProcess
-        $state.first_dead_utc = $null
-        $state.startup_drain_pending = $null
-        $state.startup_drain_drained_so_far = $null
-        $state.startup_drain_pid = $null
-        $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
+        $restartResult = Invoke-GuardedGatewayRestart -State $state
+        if ($restartResult -eq "ok") {
+            $state.first_dead_utc = $null
+            $state.startup_drain_pending = $null
+            $state.startup_drain_drained_so_far = $null
+            $state.startup_drain_pid = $null
+            $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
+        }
         ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-        Write-WatchdogLog "restart complete"
+        if ($restartResult -eq "ok") {
+            Write-WatchdogLog "restart complete"
+        }
+        if ($restartResult -eq "error") { exit 1 }
         exit 0
     }
 
@@ -363,11 +427,16 @@ try {
     }
 
     Write-WatchdogLog ("restarting after {0:N1}m degraded cause={1}" -f $ageMinutes, $cause)
-    Restart-GatewayProcess
-    $state.first_dead_utc = $null
-    $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
+    $restartResult = Invoke-GuardedGatewayRestart -State $state
+    if ($restartResult -eq "ok") {
+        $state.first_dead_utc = $null
+        $state.last_restart_utc = [DateTimeOffset]::UtcNow.ToString("o")
+    }
     ($state | ConvertTo-Json -Compress) | Set-Content -Path $StatePath -Encoding utf8
-    Write-WatchdogLog "restart complete"
+    if ($restartResult -eq "ok") {
+        Write-WatchdogLog "restart complete"
+    }
+    if ($restartResult -eq "error") { exit 1 }
     exit 0
 } catch {
     Write-WatchdogLog "error: $($_.Exception.Message)"
