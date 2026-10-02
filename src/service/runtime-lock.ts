@@ -9,12 +9,15 @@ interface RuntimeLockPayload {
   acquired_utc: string;
   hostname: string;
   invocation_id: string;
-  process_boot_ms: number;
+  /** OS creation time, or null when that lookup failed. Never an in-process estimate. */
+  process_boot_ms: number | null;
 }
 
 export type ResolveProcessBootMs = (pid: number) => Promise<number | null>;
 
 const defaultResolveProcessBootMs: ResolveProcessBootMs = async () => null;
+const OWN_BOOT_ATTEMPTS = 3;
+const OWN_BOOT_RETRY_MS = 50;
 
 function execFileText(file: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -88,7 +91,6 @@ export class RuntimeScopeLock {
   private handle: FileHandle | null = null;
   private readonly path: string;
   private readonly invocationId = randomUUID();
-  private readonly processBootMs = Math.floor(Date.now() - process.uptime() * 1000);
 
   public constructor(
     dataDirectory: string,
@@ -113,13 +115,12 @@ export class RuntimeScopeLock {
       }
       this.handle = await open(this.path, "wx", 0o600);
     }
-    const resolvedBoot = await this.resolveProcessBootMs(process.pid);
     const payload: RuntimeLockPayload = {
       pid: process.pid,
       acquired_utc: new Date().toISOString(),
       hostname: hostname(),
       invocation_id: this.invocationId,
-      process_boot_ms: resolvedBoot ?? this.processBootMs,
+      process_boot_ms: await this.resolveOwnBootMs(),
     };
     await this.handle.writeFile(JSON.stringify(payload), "utf8");
     await this.handle.sync();
@@ -137,6 +138,23 @@ export class RuntimeScopeLock {
         throw error;
       }
     });
+  }
+
+  /**
+   * A new process should be visible to the OS immediately. Retry a transient miss,
+   * then store null. A null boot is not compared later, so it cannot look recycled.
+   */
+  private async resolveOwnBootMs(): Promise<number | null> {
+    for (let attempt = 0; attempt < OWN_BOOT_ATTEMPTS; attempt += 1) {
+      const resolved = await this.resolveProcessBootMs(process.pid);
+      if (resolved !== null) {
+        return resolved;
+      }
+      if (attempt + 1 < OWN_BOOT_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, OWN_BOOT_RETRY_MS));
+      }
+    }
+    return null;
   }
 
   private async removeIfStale(): Promise<boolean> {
@@ -192,7 +210,9 @@ export async function writeRuntimeLockFixture(
     acquired_utc: payload.acquired_utc ?? new Date().toISOString(),
     hostname: payload.hostname ?? hostname(),
     invocation_id: payload.invocation_id ?? randomUUID(),
-    process_boot_ms: payload.process_boot_ms ?? Math.floor(Date.now() - process.uptime() * 1000),
+    process_boot_ms: payload.process_boot_ms !== undefined
+      ? payload.process_boot_ms
+      : Math.floor(Date.now() - process.uptime() * 1000),
   };
   await writeFile(path, JSON.stringify(body), { encoding: "utf8", flag: "wx" });
   return path;
