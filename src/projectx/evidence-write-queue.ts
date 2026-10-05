@@ -38,16 +38,16 @@ export interface EvidenceWriteWindowMetrics {
 
 /**
  * Per authenticated /health window, per class.
- * `arrived` counts every submit/append that entered this method past the identity spill.
- * `coalesced` and `dropped` are the subset that did not stay as their own queue slot.
- * From a class depth of 0 at window start: arrived - coalesced - dropped = drained + depth_end.
- * A later window keeps live depth, so residual depth is not part of that window's arrived.
+ * `arrived` counts every submit/append past the identity spill.
+ * `depth_start` is the class depth at the previous authenticated reset.
+ * depth_end - depth_start = (arrived - dropped) - coalesced - drained.
  */
 export interface EvidenceFlowClassMetrics {
   arrived: number;
   coalesced: number;
   dropped: number;
   drained: number;
+  depth_start: number;
   depth_end: number;
 }
 
@@ -145,6 +145,8 @@ export class EvidenceWriteQueue {
   private readonly coalesced: Record<EvidenceQueueClass, number> = emptyCounters();
   private readonly dropped: Record<EvidenceQueueClass, number> = emptyCounters();
   private readonly classPending = emptyCounters();
+  /** Class depth captured at the previous authenticated reset. */
+  private readonly windowDepthStart = emptyCounters();
   private readonly windowArrived = emptyCounters();
   private readonly windowCoalesced = emptyCounters();
   private readonly windowDropped = emptyCounters();
@@ -282,6 +284,10 @@ export class EvidenceWriteQueue {
       print: this.flowClass("print"),
     };
     if (options.reset) {
+      this.windowDepthStart.identity = this.classPending.identity;
+      this.windowDepthStart.quote = this.classPending.quote;
+      this.windowDepthStart.depth = this.classPending.depth;
+      this.windowDepthStart.print = this.classPending.print;
       zeroCounters(this.windowArrived);
       zeroCounters(this.windowCoalesced);
       zeroCounters(this.windowDropped);
@@ -517,6 +523,7 @@ export class EvidenceWriteQueue {
       coalesced: this.windowCoalesced[eventClass],
       dropped: this.windowDropped[eventClass],
       drained: this.windowDrained[eventClass],
+      depth_start: this.windowDepthStart[eventClass],
       depth_end: this.classPending[eventClass],
     };
   }

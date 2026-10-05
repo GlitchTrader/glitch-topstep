@@ -89,6 +89,7 @@ import { buildInvariantMetrics } from "./observability/invariant-metrics.js";
 import { HealthAlertTracker } from "./observability/health-alerts.js";
 import { buildHealthLiveness } from "./observability/health-liveness.js";
 import { EventLoopDelayMonitor } from "./observability/event-loop-delay.js";
+import { ObservationWindow } from "./observability/observation-window.js";
 import {
   peekAuthenticatedHealthSqlite,
   refreshAuthenticatedHealthSqliteCaches,
@@ -169,6 +170,8 @@ export class GlitchTopstepService {
   private readonly healthAlerts = new HealthAlertTracker();
   /** Observe-only event-loop delay (Passo 1 before evidence-writer offload). */
   private readonly eventLoopDelay = new EventLoopDelayMonitor();
+  /** Shared by apply_lag, event_loop_delay, and evidence_flow. Auth poll moves it. */
+  private readonly observationWindow = new ObservationWindow();
   /** Coordinates the four periodic REST-bound timers below (TS-STREAM-RECOVERY-01 PR-F). */
   private readonly taskScheduler = new TaskScheduler({
     maxConcurrent: 2,
@@ -648,6 +651,7 @@ export class GlitchTopstepService {
           // delay window visible for watchdog correlation (Passo 1).
           return {
             ...buildHealthLiveness(GATEWAY_COMPATIBILITY),
+            observation_window: this.observationWindow.snapshot({ reset: false }),
             event_loop_delay: this.eventLoopDelay.snapshot({ reset: false }),
             apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: false }),
             evidence_flow: this.evidenceQueue.evidenceFlowSnapshot({ reset: false }),
@@ -727,6 +731,11 @@ export class GlitchTopstepService {
           now: recordedAt,
         });
         const evidenceQueueMetrics = this.evidenceQueue.metrics();
+        // One instant: the counters and the interval they cover reset together.
+        const observationWindow = this.observationWindow.snapshot({ reset: true });
+        const eventLoopDelay = this.eventLoopDelay.snapshot({ reset: true });
+        const applyLag = this.evidenceQueue.applyLagSnapshot({ reset: true });
+        const evidenceFlow = this.evidenceQueue.evidenceFlowSnapshot({ reset: true });
         const evidenceWriteWindow = this.evidenceQueue.writeLatencyWindowSnapshot({ reset: true });
         return {
           // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
@@ -830,10 +839,10 @@ export class GlitchTopstepService {
           persistence_bytes: this.persistenceSizeBytes(),
           heap_used_bytes: process.memoryUsage().heapUsed,
           health_build_ms: Math.round(performance.now() - healthBuildStartMs),
-          // Reset after auth sample so soak windows measure delay between polls.
-          event_loop_delay: this.eventLoopDelay.snapshot({ reset: true }),
-          apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: true }),
-          evidence_flow: this.evidenceQueue.evidenceFlowSnapshot({ reset: true }),
+          observation_window: observationWindow,
+          event_loop_delay: eventLoopDelay,
+          apply_lag: applyLag,
+          evidence_flow: evidenceFlow,
           sqlite_write_latency: {
             execution: this.executionStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
             control: this.controlStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,

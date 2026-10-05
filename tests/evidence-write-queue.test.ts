@@ -57,7 +57,11 @@ function marketEvent(
 function assertFlowConserved(flow: ReturnType<EvidenceWriteQueue["evidenceFlowSnapshot"]>): void {
   for (const eventClass of ["identity", "quote", "depth", "print"] as const) {
     const row = flow[eventClass];
-    assert.equal(row.arrived - row.coalesced - row.dropped, row.drained + row.depth_end, eventClass);
+    assert.equal(
+      row.depth_end - row.depth_start,
+      (row.arrived - row.dropped) - row.coalesced - row.drained,
+      eventClass,
+    );
   }
 }
 
@@ -260,18 +264,29 @@ describe("provider evidence write queue", () => {
       assert.equal(cleared[eventClass].coalesced, 0);
       assert.equal(cleared[eventClass].dropped, 0);
       assert.equal(cleared[eventClass].drained, 0);
+      assert.equal(cleared[eventClass].depth_start, flow[eventClass].depth_end);
       assert.equal(cleared[eventClass].depth_end, flow[eventClass].depth_end);
     }
 
+    queue.submit(marketEvent("quote", CONTRACTS[0], 7), () => applied.push("newer"));
+    queue.append(marketEvent("market_trade", CONTRACTS[0], 8));
+    const carried = queue.evidenceFlowSnapshot({ reset: false });
+    assertFlowConserved(carried);
+    assert.equal(carried.quote.depth_start, 1);
+    assert.equal(carried.quote.arrived, 1);
+    assert.equal(carried.quote.coalesced, 1);
+    assert.equal(carried.print.depth_start, 2);
+    assert.equal(carried.print.dropped, 1);
+
     await queue.drain();
-    assert.deepEqual(applied, ["new"]);
+    assert.deepEqual(applied, ["newer"]);
     const afterDrain = queue.evidenceFlowSnapshot({ reset: false });
+    assertFlowConserved(afterDrain);
     assert.equal(afterDrain.quote.drained, 1);
     assert.equal(afterDrain.quote.depth_end, 0);
     assert.equal(afterDrain.depth.drained, 1);
     assert.equal(afterDrain.print.drained, 2);
     assert.equal(afterDrain.print.depth_end, 0);
-    assert.equal(afterDrain.quote.arrived, 0);
   });
 
   it("times a coalesced quote from its own enqueue, not the superseded one", async () => {

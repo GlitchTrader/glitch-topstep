@@ -85,7 +85,20 @@ function Format-SqliteWriteLatency {
     $eld = Format-EventLoopDelay $Health
     $apply = Format-ApplyLag $Health
     $flow = Format-EvidenceFlow $Health
-    return "health_build_ms=$build $eld exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax evid_write_window_max_ms=$evidWindowMax evid_write_window_count=$evidWindowCount $apply $flow"
+    $window = Format-ObservationWindow $Health
+    return "health_build_ms=$build $eld exec_write_max_ms=$execMax control_write_max_ms=$ctrlMax outcome_write_max_ms=$outMax evid_write_max_ms=$evidMax evid_write_window_max_ms=$evidWindowMax evid_write_window_count=$evidWindowCount $apply $flow $window"
+}
+
+function Format-ObservationWindow {
+    param($Health)
+    if ($null -eq $Health -or $null -eq $Health.observation_window) {
+        return "window_start_utc=na window_ms=na"
+    }
+    $start = $Health.observation_window.window_start_utc
+    $span = $Health.observation_window.window_ms
+    if ($null -eq $start) { $start = "na" }
+    if ($null -eq $span) { $span = "na" }
+    return "window_start_utc=$start window_ms=$span"
 }
 
 function Format-EvidenceFlow {
@@ -96,7 +109,7 @@ function Format-EvidenceFlow {
     $parts = @()
     foreach ($class in @("identity", "quote", "depth", "print")) {
         $row = $Health.evidence_flow.$class
-        foreach ($field in @("arrived", "drained", "depth_end")) {
+        foreach ($field in @("arrived", "drained", "depth_start", "depth_end")) {
             $value = "na"
             if ($null -ne $row -and $null -ne $row.$field) {
                 $value = $row.$field
