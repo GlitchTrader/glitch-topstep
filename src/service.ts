@@ -650,6 +650,7 @@ export class GlitchTopstepService {
             ...buildHealthLiveness(GATEWAY_COMPATIBILITY),
             event_loop_delay: this.eventLoopDelay.snapshot({ reset: false }),
             apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: false }),
+            evidence_flow: this.evidenceQueue.evidenceFlowSnapshot({ reset: false }),
           };
         }
         const healthBuildStartMs = performance.now();
@@ -725,6 +726,8 @@ export class GlitchTopstepService {
           supervisorGateDivergence: !safetySupervisor.agrees_with_execution_gates,
           now: recordedAt,
         });
+        const evidenceQueueMetrics = this.evidenceQueue.metrics();
+        const evidenceWriteWindow = this.evidenceQueue.writeLatencyWindowSnapshot({ reset: true });
         return {
           // v3 (2026-08-31): health_alerts entries gained alert_id/dedup_key/recovery_state/
           // first_last_fired_utc/thresholds/runbook_url (alert_id replaces id); added
@@ -796,7 +799,7 @@ export class GlitchTopstepService {
             stale: healthSqlite.providerEvidenceHealthCacheStale,
           },
           provider_evidence: healthSqlite.providerEvidence,
-          provider_evidence_queue: this.evidenceQueue.metrics(),
+          provider_evidence_queue: evidenceQueueMetrics,
           provider_history: providerHistory,
           market_observation: marketObservation,
           order_flow: orderFlow,
@@ -830,14 +833,17 @@ export class GlitchTopstepService {
           // Reset after auth sample so soak windows measure delay between polls.
           event_loop_delay: this.eventLoopDelay.snapshot({ reset: true }),
           apply_lag: this.evidenceQueue.applyLagSnapshot({ reset: true }),
+          evidence_flow: this.evidenceQueue.evidenceFlowSnapshot({ reset: true }),
           sqlite_write_latency: {
             execution: this.executionStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
             control: this.controlStore.writeLatencyMetrics() as SqliteWriteLatencyMetrics,
             outcome_feed: this.tradeOutcomeStore.writeLatencyMetrics(),
             evidence_queue: {
-              last_write_latency_ms: this.evidenceQueue.metrics().last_write_latency_ms,
-              max_write_latency_ms: this.evidenceQueue.metrics().max_write_latency_ms,
-              write_count: this.evidenceQueue.metrics().persisted,
+              last_write_latency_ms: evidenceQueueMetrics.last_write_latency_ms,
+              max_write_latency_ms: evidenceQueueMetrics.max_write_latency_ms,
+              write_count: evidenceQueueMetrics.persisted,
+              window_max_write_latency_ms: evidenceWriteWindow.max_ms,
+              window_write_count: evidenceWriteWindow.count,
             },
           },
         };

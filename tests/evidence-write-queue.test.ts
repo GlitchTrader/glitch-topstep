@@ -54,6 +54,13 @@ function marketEvent(
   };
 }
 
+function assertFlowConserved(flow: ReturnType<EvidenceWriteQueue["evidenceFlowSnapshot"]>): void {
+  for (const eventClass of ["identity", "quote", "depth", "print"] as const) {
+    const row = flow[eventClass];
+    assert.equal(row.arrived - row.coalesced - row.dropped, row.drained + row.depth_end, eventClass);
+  }
+}
+
 function identityEvent(eventType: string, index: number): ProviderEvidenceEvent {
   return {
     receivedUtc: new Date(Date.UTC(2026, 7, 20, 15, 30, 0, 0) + index).toISOString(),
@@ -182,6 +189,89 @@ describe("provider evidence write queue", () => {
     assert.equal(cleared.quote.count, 0);
     assert.equal(cleared.quote.max_ms, 0);
     assert.equal(cleared.identity.count, 0);
+  });
+
+  it("windows appendBatch latency on the health reset without clearing the lifetime max", async () => {
+    let now = 1_000;
+    const writer = {
+      appendBatch: (events: readonly ProviderEvidenceEvent[]) => {
+        now += events[0]?.eventType === "position" ? 40 : 12;
+        return events.map((_event, offset) => ({ sequence: offset + 1 }));
+      },
+    };
+    const queue = new EvidenceWriteQueue(writer, {
+      now: () => now,
+      batchIntervalMs: 60_000,
+      batchSize: 1,
+    });
+    queue.append(identityEvent("position", 1));
+    await queue.drain();
+    queue.append(identityEvent("lifecycle", 2));
+    await queue.drain();
+
+    const window = queue.writeLatencyWindowSnapshot({ reset: false });
+    assert.equal(window.count, 2);
+    assert.equal(window.max_ms, 40);
+    assert.equal(window.last_ms, 12);
+    assert.equal(queue.metrics().max_write_latency_ms, 40);
+
+    const reset = queue.writeLatencyWindowSnapshot({ reset: true });
+    assert.equal(reset.count, 2);
+    assert.equal(reset.max_ms, 40);
+    const cleared = queue.writeLatencyWindowSnapshot({ reset: false });
+    assert.equal(cleared.count, 0);
+    assert.equal(cleared.max_ms, 0);
+    assert.equal(queue.metrics().max_write_latency_ms, 40);
+  });
+
+  it("conserves class flow through coalesce and drop, and resets only on the authenticated poll", async () => {
+    const applied: string[] = [];
+    const queue = new EvidenceWriteQueue(new RecordingWriter(), {
+      batchIntervalMs: 60_000,
+      batchSize: 8,
+      highWaterMark: 4,
+      coalesceWatermark: 1,
+      lowWaterMark: 1,
+    });
+    queue.submit(marketEvent("quote", CONTRACTS[0], 1), () => applied.push("old"));
+    queue.submit(marketEvent("quote", CONTRACTS[0], 2), () => applied.push("new"));
+    queue.append(marketEvent("depth", CONTRACTS[0], 3, { type: "bid", price: 1 }));
+    queue.append(marketEvent("market_trade", CONTRACTS[0], 4));
+    queue.append(marketEvent("market_trade", CONTRACTS[0], 5));
+    queue.append(marketEvent("market_trade", CONTRACTS[0], 6));
+
+    const flow = queue.evidenceFlowSnapshot({ reset: false });
+    assertFlowConserved(flow);
+    assert.equal(flow.quote.arrived, 2);
+    assert.equal(flow.quote.coalesced, 1);
+    assert.equal(flow.quote.depth_end, 1);
+    assert.equal(flow.depth.arrived, 1);
+    assert.equal(flow.depth.depth_end, 1);
+    assert.equal(flow.print.arrived, 3);
+    assert.equal(flow.print.dropped, 1);
+    assert.equal(flow.print.depth_end, 2);
+
+    assert.deepEqual(queue.evidenceFlowSnapshot({ reset: false }), flow);
+    const reset = queue.evidenceFlowSnapshot({ reset: true });
+    assert.deepEqual(reset, flow);
+    const cleared = queue.evidenceFlowSnapshot({ reset: false });
+    for (const eventClass of ["identity", "quote", "depth", "print"] as const) {
+      assert.equal(cleared[eventClass].arrived, 0);
+      assert.equal(cleared[eventClass].coalesced, 0);
+      assert.equal(cleared[eventClass].dropped, 0);
+      assert.equal(cleared[eventClass].drained, 0);
+      assert.equal(cleared[eventClass].depth_end, flow[eventClass].depth_end);
+    }
+
+    await queue.drain();
+    assert.deepEqual(applied, ["new"]);
+    const afterDrain = queue.evidenceFlowSnapshot({ reset: false });
+    assert.equal(afterDrain.quote.drained, 1);
+    assert.equal(afterDrain.quote.depth_end, 0);
+    assert.equal(afterDrain.depth.drained, 1);
+    assert.equal(afterDrain.print.drained, 2);
+    assert.equal(afterDrain.print.depth_end, 0);
+    assert.equal(afterDrain.quote.arrived, 0);
   });
 
   it("times a coalesced quote from its own enqueue, not the superseded one", async () => {
