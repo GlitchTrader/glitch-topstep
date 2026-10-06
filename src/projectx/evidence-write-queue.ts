@@ -29,6 +29,30 @@ export interface DurableEvidenceWriter {
 
 export type EvidenceSubmitOutcome = "queued" | "coalesced" | "dropped";
 
+/** Per authenticated /health window. count is appendBatch calls, not events. */
+export interface EvidenceWriteWindowMetrics {
+  max_ms: number;
+  last_ms: number;
+  count: number;
+}
+
+/**
+ * Per authenticated /health window, per class.
+ * `arrived` counts every submit/append past the identity spill.
+ * `depth_start` is the class depth at the previous authenticated reset.
+ * depth_end - depth_start = (arrived - dropped) - coalesced - drained.
+ */
+export interface EvidenceFlowClassMetrics {
+  arrived: number;
+  coalesced: number;
+  dropped: number;
+  drained: number;
+  depth_start: number;
+  depth_end: number;
+}
+
+export type EvidenceFlowMetrics = Record<EvidenceQueueClass, EvidenceFlowClassMetrics>;
+
 export interface EvidenceQueueMetrics {
   depth: number;
   physical_depth: number;
@@ -44,6 +68,7 @@ export interface EvidenceQueueMetrics {
   dropped: Record<EvidenceQueueClass, number>;
   last_batch_size: number;
   last_write_latency_ms: number;
+  /** Process lifetime. Not reset by /health. */
   max_write_latency_ms: number;
   write_failures: number;
   consecutive_write_failures: number;
@@ -108,6 +133,10 @@ export class EvidenceWriteQueue {
   private lastBatchSize = 0;
   private lastWriteLatencyMs = 0;
   private maxWriteLatencyMs = 0;
+  /** Max appendBatch duration since the last authenticated /health reset. */
+  private windowWriteMaxMs = 0;
+  private windowWriteLastMs = 0;
+  private windowWriteCount = 0;
   private writeFailures = 0;
   private consecutiveWriteFailures = 0;
   private applyFailures = 0;
@@ -115,6 +144,13 @@ export class EvidenceWriteQueue {
   private incompleteShutdown = false;
   private readonly coalesced: Record<EvidenceQueueClass, number> = emptyCounters();
   private readonly dropped: Record<EvidenceQueueClass, number> = emptyCounters();
+  private readonly classPending = emptyCounters();
+  /** Class depth captured at the previous authenticated reset. */
+  private readonly windowDepthStart = emptyCounters();
+  private readonly windowArrived = emptyCounters();
+  private readonly windowCoalesced = emptyCounters();
+  private readonly windowDropped = emptyCounters();
+  private readonly windowDrained = emptyCounters();
   private readonly applyLag = new ApplyLagTracker();
 
   private readonly highWaterMark: number;
@@ -181,6 +217,7 @@ export class EvidenceWriteQueue {
       // ponytail: identity spills via sqlite outbox when in-memory window is full (TS-REAUDIT-02).
       return "queued";
     }
+    this.windowArrived[eventClass] += 1;
     const coalesceKey = coalesceKeyFor(event, eventClass);
 
     if (eventClass !== "identity" && this.pending >= this.coalesceWatermark && coalesceKey !== null) {
@@ -188,13 +225,16 @@ export class EvidenceWriteQueue {
       if (superseded) {
         superseded.superseded = true;
         this.pending -= 1;
+        this.classPending[eventClass] -= 1;
         this.coalesced[eventClass] += 1;
+        this.windowCoalesced[eventClass] += 1;
         this.pendingByKey.delete(coalesceKey);
       }
     }
 
     if (eventClass !== "identity" && this.pending >= this.highWaterMark) {
       this.dropped[eventClass] += 1;
+      this.windowDropped[eventClass] += 1;
       this.raiseDegraded();
       return "dropped";
     }
@@ -210,6 +250,7 @@ export class EvidenceWriteQueue {
     this.entries.push(entry);
     this.pending += 1;
     this.enqueued += 1;
+    this.classPending[eventClass] += 1;
     if (eventClass === "identity") {
       this.identityPending += 1;
     }
@@ -229,6 +270,51 @@ export class EvidenceWriteQueue {
    */
   public applyLagSnapshot(options: { reset?: boolean } = {}): ApplyLagMetrics {
     return this.applyLag.snapshot(options);
+  }
+
+  /**
+   * Arrival, drain, and class depth since the last authenticated /health.
+   * reset=true only from that poll. Liveness reads with reset=false.
+   */
+  public evidenceFlowSnapshot(options: { reset?: boolean } = {}): EvidenceFlowMetrics {
+    const metrics: EvidenceFlowMetrics = {
+      identity: this.flowClass("identity"),
+      quote: this.flowClass("quote"),
+      depth: this.flowClass("depth"),
+      print: this.flowClass("print"),
+    };
+    if (options.reset) {
+      this.windowDepthStart.identity = this.classPending.identity;
+      this.windowDepthStart.quote = this.classPending.quote;
+      this.windowDepthStart.depth = this.classPending.depth;
+      this.windowDepthStart.print = this.classPending.print;
+      zeroCounters(this.windowArrived);
+      zeroCounters(this.windowCoalesced);
+      zeroCounters(this.windowDropped);
+      zeroCounters(this.windowDrained);
+    }
+    return metrics;
+  }
+
+  /**
+   * Duration of each appendBatch since the last authenticated /health.
+   * Same reset boundary as apply_lag, so one poll window can be compared.
+   * Lifetime max_write_latency_ms is unchanged.
+   */
+  public writeLatencyWindowSnapshot(options: { reset?: boolean } = {}): EvidenceWriteWindowMetrics {
+    const metrics: EvidenceWriteWindowMetrics = this.windowWriteCount === 0
+      ? { max_ms: 0, last_ms: 0, count: 0 }
+      : {
+          max_ms: this.windowWriteMaxMs,
+          last_ms: this.windowWriteLastMs,
+          count: this.windowWriteCount,
+        };
+    if (options.reset) {
+      this.windowWriteMaxMs = 0;
+      this.windowWriteLastMs = 0;
+      this.windowWriteCount = 0;
+    }
+    return metrics;
   }
 
   public metrics(): EvidenceQueueMetrics {
@@ -334,11 +420,18 @@ export class EvidenceWriteQueue {
       this.lastBatchSize = batch.length;
       this.lastWriteLatencyMs = latency;
       this.maxWriteLatencyMs = Math.max(this.maxWriteLatencyMs, latency);
+      const latencyMs = Math.max(0, Math.round(latency));
+      this.windowWriteCount += 1;
+      this.windowWriteLastMs = latencyMs;
+      if (latencyMs > this.windowWriteMaxMs) {
+        this.windowWriteMaxMs = latencyMs;
+      }
       const lastSequence = stored.at(-1)?.sequence;
       if (typeof lastSequence === "number") {
         this.resumeCursor = lastSequence;
       }
       for (const entry of batch) {
+        this.windowDrained[entry.eventClass] += 1;
         if (!entry.onDurable) {
           continue;
         }
@@ -370,6 +463,7 @@ export class EvidenceWriteQueue {
         this.pendingByKey.delete(entry.coalesceKey);
       }
       this.pending -= 1;
+      this.classPending[entry.eventClass] -= 1;
       if (entry.eventClass === "identity") {
         this.identityPending -= 1;
       }
@@ -382,6 +476,7 @@ export class EvidenceWriteQueue {
     this.head = startHead;
     for (const entry of batch) {
       this.pending += 1;
+      this.classPending[entry.eventClass] += 1;
       if (entry.eventClass === "identity") {
         this.identityPending += 1;
       }
@@ -420,6 +515,17 @@ export class EvidenceWriteQueue {
       this.entries.splice(0, this.head);
       this.head = 0;
     }
+  }
+
+  private flowClass(eventClass: EvidenceQueueClass): EvidenceFlowClassMetrics {
+    return {
+      arrived: this.windowArrived[eventClass],
+      coalesced: this.windowCoalesced[eventClass],
+      dropped: this.windowDropped[eventClass],
+      drained: this.windowDrained[eventClass],
+      depth_start: this.windowDepthStart[eventClass],
+      depth_end: this.classPending[eventClass],
+    };
   }
 
   private oldestAgeMs(): number {
@@ -487,6 +593,13 @@ function coalesceKeyFor(event: ProviderEvidenceEvent, eventClass: EvidenceQueueC
 
 function emptyCounters(): Record<EvidenceQueueClass, number> {
   return { identity: 0, quote: 0, depth: 0, print: 0 };
+}
+
+function zeroCounters(counters: Record<EvidenceQueueClass, number>): void {
+  counters.identity = 0;
+  counters.quote = 0;
+  counters.depth = 0;
+  counters.print = 0;
 }
 
 function yieldToEventLoop(): Promise<void> {
