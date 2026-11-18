@@ -21,7 +21,7 @@
     "reaudit:fault-matrix": "npm run build && node scripts/reaudit-fault-matrix-gate.mjs"
   },
   "dependencies": {
-    "@microsoft/signalr": "^10.0.11"
+    "@microsoft/signalr": "^11.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.5.1",
